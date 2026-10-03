@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>العهد — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="f"><label>بحث (رقم وظيفي / اسم / بند / تسلسلي)</label><input name="q" value="{{ q }}"></div>
+  <div class="f"><label>الحالة</label><select name="state">
+    <option value="open" {{ 'selected' if state=='open' }}>لدى الموظف</option><option value="returned" {{ 'selected' if state=='returned' }}>مُرجعة</option>
+    <option value="all" {{ 'selected' if state=='all' }}>الكل</option></select></div>
+  <button class="btn">بحث</button><span class="right"></span>
+  <a class="btn sec" href="/export/custody.xlsx?site={{ sel.id }}">تصدير Excel</a>
+  {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}">+ تسليم عهدة</a>{% endif %}
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الرقم الوظيفي</th><th>الموظف</th><th>النوع</th><th>البند</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>الإرجاع</th><th>مرفق</th></tr>
+{% for c in rows %}<tr><td><a href="/custody/employee/{{ c.employee_no }}?site={{ sel.id }}">{{ c.employee_no }}</a></td><td>{{ c.employee_name }}</td>
+<td>{{ c.category }}</td><td>{{ c.item_name }}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
+<td>{% if c.returned_at %}<span class="st st-approved">{{ c.returned_at }}</span>{% else %}<span class="st st-pending">لدى الموظف</span>{% endif %}</td>
+<td>{% if c.attachment %}<a href="/files/{{ c.attachment }}" target="_blank">عرض</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

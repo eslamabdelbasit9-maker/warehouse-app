@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>حسابي</h1>
+<form method="post" class="card" style="max-width:420px">
+  <p><b>{{ user.name }}</b><br><span class="muted" dir="ltr">{{ user.email }}</span></p>
+  {% if user.password_hash %}<div class="f"><label>كلمة المرور الحالية</label><input name="old" type="password" dir="ltr" required></div>{% endif %}
+  <div class="f" style="margin-top:8px"><label>كلمة المرور الجديدة (8 أحرف على الأقل)</label><input name="new" type="password" dir="ltr" required minlength="8"></div>
+  <div class="f" style="margin-top:8px"><label>تأكيد كلمة المرور</label><input name="new2" type="password" dir="ltr" required minlength="8"></div>
+  <button class="btn" style="margin-top:12px">تغيير كلمة المرور</button>
+</form>
+{% endblock %}

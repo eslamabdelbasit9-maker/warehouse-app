@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>المواقع والوحدات</h1>
+{% include "_admin_nav.html" %}
+<div class="grid g2">
+<form method="post" class="card row"><input type="hidden" name="act" value="site">
+  <div class="f"><label>كود الموقع (إنجليزي قصير، يظهر في رقم الطلب)</label><input name="code" dir="ltr" placeholder="NJR" required></div>
+  <div class="f"><label>اسم الموقع</label><input name="name" required></div><button class="btn">إضافة موقع</button></form>
+<form method="post" class="card row"><input type="hidden" name="act" value="unit">
+  <div class="f"><label>الموقع</label><select name="site_id">{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>اسم الوحدة</label><input name="name" required></div>
+  <div class="f"><label>النوع</label><select name="kind">{% for k, v in UNIT_KINDS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <button class="btn">إضافة وحدة</button></form>
+</div>
+{% for s in sites %}<div class="card">
+  <h2>{{ s.name }} <span class="muted">({{ s.code }})</span> {% if not s.active %}<span class="st st-rejected">موقوف</span>{% endif %}
+    <form method="post" style="display:inline"><input type="hidden" name="act" value="toggle_site"><input type="hidden" name="id" value="{{ s.id }}"><button class="btn sec sm">{{ 'إيقاف' if s.active else 'تفعيل' }}</button></form></h2>
+  <table class="t"><tr><th>الوحدة</th><th>النوع</th><th>الحالة</th><th></th></tr>
+  {% for u in s.units %}<tr><td>{{ u.name }}</td><td>{{ UNIT_KINDS[u.kind] }}</td><td>{{ 'نشطة' if u.active else 'موقوفة' }}</td>
+  <td><form method="post"><input type="hidden" name="act" value="toggle_unit"><input type="hidden" name="id" value="{{ u.id }}"><button class="btn sec sm">{{ 'إيقاف' if u.active else 'تفعيل' }}</button></form></td></tr>
+  {% else %}<tr><td colspan="4" class="muted">لا توجد وحدات</td></tr>{% endfor %}</table>
+</div>{% endfor %}
+{% endblock %}

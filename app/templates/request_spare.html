@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>طلب صرف قطع غيار</h1>
+<form method="post" class="card" id="frm">
+  <div class="meta">
+    <div class="f"><label>الموقع</label>
+      <select name="site_id" onchange="location='?site='+this.value">
+        {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>الوحدة *</label>
+      <select name="unit_id" required><option value="">— اختر —</option>
+        {% for u in units %}<option value="{{ u.id }}">{{ u.name }} ({{ UNIT_KINDS[u.kind] }})</option>{% endfor %}</select></div>
+    <div class="f"><label>التاريخ</label><input type="date" name="work_date" value="{{ today }}"></div>
+    <div class="f"><label>طالب الصرف</label><input value="{{ user.name }}" disabled></div>
+  </div>
+  <div class="f" style="margin-top:10px"><label>السبب *</label><textarea name="reason" required></textarea></div>
+
+  <h2 style="margin-top:16px">الأصناف</h2>
+  <datalist id="items"></datalist>
+  <div class="tw"><table class="t lines" id="lines">
+    <tr><th style="width:45%">الصنف (اكتب الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th style="width:130px">الكمية</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
+  <button class="btn">إرسال للاعتماد</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+let ITEMS = [], BY = {};
+fetch('/api/stock?site={{ sel.id }}').then(r => r.json()).then(d => {
+  ITEMS = d; const dl = document.getElementById('items');
+  d.forEach(i => { const k = i.code + ' — ' + i.name; BY[k] = i; const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
+});
+function addRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input list="items" class="it" placeholder="ابحث..." autocomplete="off"><input type="hidden" name="item_id"></td>
+    <td class="uom"></td><td class="n av"></td><td><input name="qty" type="number" step="any" min="0"></td>
+    <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
+  document.getElementById('lines').appendChild(tr);
+  tr.querySelector('.it').addEventListener('input', e => {
+    const i = BY[e.target.value]; const h = tr.querySelector('[name=item_id]');
+    h.value = i ? i.id : ''; tr.querySelector('.uom').textContent = i ? i.uom : '';
+    const av = tr.querySelector('.av'); av.textContent = i ? i.available : ''; av.className = 'n av' + (i && i.available <= 0 ? ' low' : '');
+  });
+}
+addRow(); addRow(); addRow();
+document.getElementById('frm').addEventListener('submit', e => {
+  for (const tr of document.querySelectorAll('#lines tr')) {
+    const t = tr.querySelector('.it'); if (!t) continue;
+    if (t.value && !tr.querySelector('[name=item_id]').value) { e.preventDefault(); alert('اختر الصنف من القائمة: ' + t.value); return; }
+  }
+});
+</script>
+{% endblock %}

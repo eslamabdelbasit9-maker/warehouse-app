@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الاعتمادات</h1>
+<div class="card"><h2>بانتظار اعتمادي ({{ rows|length }})</h2><div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>المرحلة</th><th>الموقع / الوحدة</th><th>التاريخ</th><th>طالب الصرف</th><th>الأصناف</th><th></th></tr>
+{% for r in rows %}<tr><td>{{ r.req_no }}</td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ STAGES[r.current_stage] }}</td>
+<td>{{ r.site.name }}{% if r.unit %} / {{ r.unit.name }}{% endif %}</td><td>{{ r.work_date }}</td><td>{{ r.requester_display }}</td>
+<td>{{ r.lines|selectattr('status','equalto','pending')|list|length }}</td><td><a class="btn sm" href="/approvals/{{ r.id }}">مراجعة واعتماد</a></td></tr>
+{% else %}<tr><td colspan="8" class="muted">لا توجد طلبات بانتظارك</td></tr>{% endfor %}
+</table></div></div>
+<div class="card"><h2>طلبات اعتمدتها سابقاً</h2><div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>التاريخ</th><th>الوحدة</th><th>الحالة</th></tr>
+{% for r in done %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.work_date }}</td>
+<td>{{ r.unit.name if r.unit else '-' }}</td><td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

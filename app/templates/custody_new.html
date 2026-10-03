@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>تسليم عهدة</h1>
+<form method="post" enctype="multipart/form-data" class="card">
+  <div class="meta">
+    <div class="f"><label>الموقع</label><select name="site_id">
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>الرقم الوظيفي *</label><input name="employee_no" value="{{ emp }}" required></div>
+    <div class="f"><label>اسم الموظف *</label><input name="employee_name" value="{{ emp_name }}" required></div>
+    <div class="f"><label>النوع *</label><select name="category">{% for c in CUSTODY_CATEGORIES %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="f"><label>تاريخ التسليم</label><input type="date" name="issued_at" value="{{ today }}"></div>
+    <div class="f"><label>مرفق (نموذج استلام موقّع)</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc"></div>
+  </div>
+  <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
+    <tr><th style="width:50%">البند</th><th style="width:110px">الكمية</th><th>الرقم التسلسلي</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ بند</button></p>
+  <div class="f"><label>ملاحظات</label><textarea name="notes"></textarea></div>
+  <button class="btn" style="margin-top:10px">حفظ</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+function addRow() { const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input name="item_name"></td><td><input name="qty" type="number" step="any" min="0" value="1"></td><td><input name="serial_no"></td>
+  <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
+  document.getElementById('lines').appendChild(tr); }
+addRow(); addRow();
+</script>
+{% endblock %}

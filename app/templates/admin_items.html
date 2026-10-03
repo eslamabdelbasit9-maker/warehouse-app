@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الأصناف</h1>
+{% if user.has('admin') %}{% include "_admin_nav.html" %}{% endif %}
+<form method="post" class="card row">
+  <input type="hidden" name="id" value="{{ e.id if e else '' }}">
+  <div class="f"><label>الكود</label><input name="code" value="{{ e.code if e else '' }}" required></div>
+  <div class="f" style="flex:1"><label>الاسم</label><input name="name" value="{{ e.name if e else '' }}" required></div>
+  <div class="f"><label>وحدة القياس</label><input name="uom" value="{{ e.uom if e else 'قطعة' }}"></div>
+  <div class="f"><label>التصنيف</label><select name="category"><option value="spare" {{ 'selected' if e and e.category=='spare' }}>قطع غيار</option>
+    <option value="raw" {{ 'selected' if e and e.category=='raw' }}>مواد خام</option></select></div>
+  <label style="align-self:center"><input type="checkbox" name="active" value="1" {{ 'checked' if not e or e.active }}> نشط</label>
+  <button class="btn">{{ 'حفظ التعديل' if e else 'إضافة' }}</button>{% if e %}<a class="btn sec" href="/admin/items">جديد</a>{% endif %}
+</form>
+<form class="filters card" method="get"><div class="f"><label>بحث</label><input name="q" value="{{ q }}"></div><button class="btn">بحث</button></form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الكود</th><th>الاسم</th><th>الوحدة</th><th>التصنيف</th><th>الحالة</th><th></th></tr>
+{% for i in items %}<tr><td>{{ i.code }}</td><td>{{ i.name }}</td><td>{{ i.uom }}</td><td>{{ 'مواد خام' if i.category=='raw' else 'قطع غيار' }}</td>
+<td>{{ 'نشط' if i.active else 'موقوف' }}</td><td><a href="?edit={{ i.id }}&q={{ q }}">تعديل</a></td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

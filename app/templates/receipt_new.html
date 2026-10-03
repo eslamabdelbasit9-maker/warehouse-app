@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>تسجيل وارد</h1>
+<form method="post" enctype="multipart/form-data" class="card" id="frm">
+  <div class="meta">
+    <div class="f"><label>الموقع</label><select name="site_id">
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+    <div class="f"><label>رقم الفاتورة</label><input name="invoice_no"></div>
+    <div class="f"><label>المورد</label><input name="supplier"></div>
+    <div class="f"><label>مرفق الفاتورة</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.docx,.doc"></div>
+  </div>
+  <datalist id="items">{% for i in items %}<option value="{{ i.code }} — {{ i.name }}" data-id="{{ i.id }}" data-uom="{{ i.uom }}">{% endfor %}</datalist>
+  <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
+    <tr><th style="width:45%">الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th class="n">الإجمالي</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
+  <button class="btn">حفظ الوارد</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const BY = {}; document.querySelectorAll('#items option').forEach(o => BY[o.value] = {id: o.dataset.id, uom: o.dataset.uom});
+function addRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input list="items" class="it" autocomplete="off"><input type="hidden" name="item_id"></td><td class="uom"></td>
+    <td><input name="qty" type="number" step="any" min="0"></td><td><input name="unit_price" type="number" step="any" min="0"></td>
+    <td class="n tot"></td><td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
+  document.getElementById('lines').appendChild(tr);
+  tr.querySelector('.it').addEventListener('input', e => { const i = BY[e.target.value];
+    tr.querySelector('[name=item_id]').value = i ? i.id : ''; tr.querySelector('.uom').textContent = i ? i.uom : ''; });
+  tr.addEventListener('input', () => { const q = +tr.querySelector('[name=qty]').value || 0, p = +tr.querySelector('[name=unit_price]').value || 0;
+    tr.querySelector('.tot').textContent = (q * p).toLocaleString('en', {maximumFractionDigits: 2}); });
+}
+addRow(); addRow();
+document.getElementById('frm').addEventListener('submit', e => {
+  for (const tr of document.querySelectorAll('#lines tr')) { const t = tr.querySelector('.it'); if (!t) continue;
+    if (t.value && !tr.querySelector('[name=item_id]').value) { e.preventDefault(); alert('اختر الصنف من القائمة: ' + t.value); return; } }
+});
+</script>
+{% endblock %}

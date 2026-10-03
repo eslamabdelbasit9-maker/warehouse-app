@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>وارد {{ r.invoice_no or '' }} — {{ r.date }}</h1>
+<div class="card">
+  <div class="meta">
+    <div><b>الموقع</b>{{ r.site.name }}</div><div><b>المورد</b>{{ r.supplier or '-' }}</div>
+    <div><b>رقم الفاتورة</b>{{ r.invoice_no or '-' }}</div><div><b>سجّله</b>{{ r.created_by.name if r.created_by else '-' }}</div>
+    <div><b>المرفق</b>{% if r.attachment %}<a href="/files/{{ r.attachment }}" target="_blank">عرض المرفق</a>{% else %}-{% endif %}</div>
+  </div>
+  <div class="tw" style="margin-top:10px"><table class="t">
+    <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th><th class="n">سعر الوحدة</th><th class="n">الإجمالي</th></tr>
+    {% for l in r.lines %}<tr><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
+    <td class="n">{{ fmt(l.unit_price) }}</td><td class="n">{{ fmt(l.total) }}</td></tr>{% endfor %}
+    <tr><td colspan="5"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(r.lines|sum(attribute='total')) }}</b></td></tr>
+  </table></div>
+</div>
+{% endblock %}

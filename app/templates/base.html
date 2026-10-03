@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<header class="top">
+  <a href="/"><img src="/static/logo.png" alt=""></a>
+  <span class="title">{{ APP_NAME }}</span>
+  <nav class="main">
+    {% macro nl(href, label, pre) %}<a href="{{ href }}" class="{{ 'on' if (path == href or (pre and path.startswith(pre))) else '' }}">{{ label }}</a>{% endmacro %}
+    {{ nl('/', 'لوحة المتابعة', '') }}
+    <a href="/approvals" class="{{ 'on' if path.startswith('/approvals') else '' }}">الاعتمادات{% if pending_n %}<span class="badge-n">{{ pending_n }}</span>{% endif %}</a>
+    {{ nl('/requests', 'الطلبات', '/requests') }}
+    {{ nl('/stock', 'الأرصدة', '/stock') }}
+    {{ nl('/receipts', 'الوارد', '/receipts') }}
+    {{ nl('/custody', 'العهد', '/custody') }}
+    {% if user.has('admin') %}{{ nl('/admin/users', 'الإدارة', '/admin') }}{% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', '/admin/items') }}{% endif %}
+  </nav>
+  <span class="who"><a href="/account">{{ user.name }}</a> · <a href="/logout">خروج</a></span>
+</header>
+{% endif %}
+<main>
+{% for k, m in flashes %}<div class="flash {{ k }}">{{ m }}</div>{% endfor %}
+{% block body %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

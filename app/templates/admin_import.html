@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>استيراد موقع من Excel</h1>
+{% include "_admin_nav.html" %}
+<form method="post" enctype="multipart/form-data" class="card">
+  <p class="muted">ارفع ملف «منظومة المستودعات» للموقع (فيه شيتات الرصيد والوارد والصرف). يُستورد: الأصناف والرصيد الافتتاحي، الوارد، وطلبات الصرف السابقة. يتم مرة واحدة لكل موقع.</p>
+  <div class="meta">
+    <div class="f"><label>ملف Excel</label><input type="file" name="file" accept=".xlsx" required></div>
+    <div class="f"><label>كود الموقع (إنجليزي قصير)</label><input name="site_code" dir="ltr" placeholder="NJR" required></div>
+    <div class="f"><label>اسم الموقع</label><input name="site_name" placeholder="نجران" required></div>
+  </div>
+  <button class="btn" style="margin-top:12px" onclick="this.textContent='جاري الاستيراد...'">استيراد</button>
+</form>
+{% endblock %}

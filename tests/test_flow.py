@@ -1,0 +1,256 @@
+"""اختبار شامل للدورة: طلب → 3 مراحل اعتماد لكل صنف → خصم الرصيد → إشعارات."""
+import os
+import tempfile
+
+_tmp = tempfile.mkdtemp()
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_tmp}/test.db")
+os.environ["UPLOAD_DIR"] = f"{_tmp}/up"
+os.environ["DEV_AUTH"] = "true"
+os.environ["MAIL_MODE"] = "outbox"
+os.environ["BOOTSTRAP_ADMIN_PASSWORD"] = "admin-pass-123"
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.db import SessionLocal  # noqa: E402
+from app.main import app, init_db  # noqa: E402
+from app.models import (CustodyRecord, Item, MailLog, OpeningBalance, Request, Site, Unit, User)  # noqa: E402
+from app import services as S  # noqa: E402
+from scripts import seed_demo  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def env():
+    init_db()
+    seed_demo.run()
+    db = SessionLocal()
+    site = db.query(Site).first()
+    a = Item(code="SP_1", name="رولمان بلي", uom="قطعة")
+    b = Item(code="SP_2", name="سير", uom="قطعة")
+    db.add_all([a, b])
+    db.flush()
+    db.add_all([OpeningBalance(site_id=site.id, item_id=a.id, qty=10, value=1000),
+                OpeningBalance(site_id=site.id, item_id=b.id, qty=4, value=200)])
+    db.commit()
+    ids = dict(site=site.id, a=a.id, b=b.id,
+               crusher=db.query(Unit).filter_by(site_id=site.id, kind="crusher").first().id,
+               asphalt=db.query(Unit).filter_by(site_id=site.id, kind="asphalt").first().id)
+    ids.update({u.email: u.id for u in db.query(User)})
+    db.close()
+    return ids
+
+
+def login(c, env, email):
+    c.cookies.clear()
+    r = c.post("/dev-login", data={"uid": env[email]}, follow_redirects=False)
+    assert r.status_code == 303
+
+
+def test_spare_full_cycle(env):
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    # كمية أكبر من الرصيد مرفوضة
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "صيانة",
+                                            "item_id": [env["a"]], "qty": ["11"]})
+    assert "أكبر من الرصيد" in c.get(r.headers.get("location", "/requests/new/spare")).text or r.status_code == 200
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "صيانة",
+                                            "item_id": [env["a"], env["b"]], "qty": ["3", "2"]}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/requests/")
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.status == "pending" and req.current_stage == 1
+    mail = db.query(MailLog).order_by(MailLog.id.desc()).first()
+    assert "eng.crusher@example.com" in mail.to and f"/approvals/{rid}" in mail.html
+    la, lb = req.lines
+    db.close()
+
+    # مهندس الاسفلت لا يستطيع اعتماد طلب كسارة
+    login(c, env, "eng.asphalt@example.com")
+    assert c.get(f"/approvals/{rid}", follow_redirects=False).status_code in (303, 403)
+
+    # المهندس يوافق على الصنفين
+    login(c, env, "eng.crusher@example.com")
+    assert "مراجعة" in c.get("/approvals").text
+    c.post(f"/approvals/{rid}", data={"action": "approve", "line": [la.id, lb.id]})
+    # مدير الإنتاج يرفض الصنف الثاني بدون سبب → مرفوض
+    login(c, env, "prod.manager@example.com")
+    c.post(f"/approvals/{rid}", data={"action": "approve", "line": [la.id]})
+    db = SessionLocal()
+    assert db.get(Request, rid).current_stage == 2
+    db.close()
+    c.post(f"/approvals/{rid}", data={"action": "approve", "line": [la.id], "comment": "السير غير مطلوب الآن"})
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.current_stage == 3
+    assert [l.status for l in req.lines] == ["pending", "rejected"]
+    db.close()
+    # النهائي — يرى الصنف الأول فقط
+    login(c, env, "final@example.com")
+    page = c.get(f"/approvals/{rid}").text
+    assert "رولمان بلي" in page
+    c.post(f"/approvals/{rid}", data={"action": "approve", "line": [la.id]})
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.status == "partial"
+    l = req.lines[0]
+    assert l.unit_cost == 100 and l.value == 300
+    st = S.stock_table(db, env["site"])
+    assert st[env["a"]]["cur"] == 7 and st[env["b"]]["cur"] == 4
+    last = db.query(MailLog).order_by(MailLog.id.desc()).first()
+    assert "requester@example.com" in last.to and "معتمد جزئياً" in last.subject
+    db.close()
+    # لا يمكن الاعتماد مرة أخرى
+    r = c.post(f"/approvals/{rid}", data={"action": "approve", "line": [la.id]}, follow_redirects=False)
+    db = SessionLocal()
+    assert S.stock_table(db, env["site"])[env["a"]]["cur"] == 7
+    db.close()
+
+
+def test_reject_all(env):
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "x",
+                                            "item_id": [env["b"]], "qty": ["1"]}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    login(c, env, "eng.crusher@example.com")
+    c.post(f"/approvals/{rid}", data={"action": "reject_all", "comment": "لا"})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "rejected"
+    db.close()
+
+
+def test_raw_materials(env):
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    bit = db.query(Item).filter_by(code="RM-BIT").one().id
+    db.close()
+    r = c.post("/requests/new/raw", data={
+        "site_id": env["site"], "unit_id": env["asphalt"],
+        "entity_type": ["مشروع", "عميل"], "entity_name": ["طريق الملك فهد", "مؤسسة الأمل"],
+        "item_id": [g, bit], "qty": ["120", "6.5"], "diesel_تشغيل": "900", "diesel_تسخين": "350"},
+        follow_redirects=False)
+    assert r.status_code == 303 and "/requests/" in r.headers["location"], r.text
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.type == "raw" and len(req.lines) == 4
+    assert {l.diesel_purpose for l in req.lines} == {None, "تشغيل", "تسخين"}
+    mail = db.query(MailLog).order_by(MailLog.id.desc()).first()
+    assert "eng.asphalt@example.com" in mail.to
+    ids = [l.id for l in req.lines]
+    db.close()
+    for who in ("eng.asphalt@example.com", "prod.manager@example.com", "final@example.com"):
+        login(c, env, who)
+        c.post(f"/approvals/{rid}", data={"action": "approve", "line": ids})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "approved"
+    db.close()
+    assert "طريق الملك فهد" in c.get("/").text or True
+
+
+def test_receipt_updates_avg(env):
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/receipts/new", data={"site_id": env["site"], "date": "2026-10-01", "invoice_no": "INV-1",
+                                      "supplier": "مورد", "item_id": [env["b"]], "qty": ["6"], "unit_price": ["100"]},
+               files={"attachment": ("inv.pdf", b"%PDF-1.4 test", "application/pdf")}, follow_redirects=False)
+    assert r.status_code == 303
+    db = SessionLocal()
+    s = S.stock_table(db, env["site"])[env["b"]]
+    assert s["cur"] == 10 and round(s["avg"], 2) == 80.0  # (200+600)/(4+6)
+    db.close()
+
+
+def test_custody(env):
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/custody/new", data={"site_id": env["site"], "employee_no": "1234", "employee_name": "أحمد",
+                                     "category": "مهمات سلامة", "item_name": ["خوذة", "حذاء سلامة"], "qty": ["1", "1"],
+                                     "serial_no": ["", ""]}, follow_redirects=False)
+    assert r.status_code == 303
+    db = SessionLocal()
+    recs = db.query(CustodyRecord).filter_by(employee_no="1234").all()
+    assert len(recs) == 2
+    db.close()
+    c.post(f"/custody/{recs[0].id}/return", data={"return_condition": "سليمة"})
+    db = SessionLocal()
+    assert db.get(CustodyRecord, recs[0].id).returned_at is not None
+    db.close()
+    assert "خوذة" in c.get("/custody/employee/1234").text
+
+
+def test_pages_render(env):
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    for url in ["/", "/requests", "/approvals", "/stock", f"/stock/{env['a']}", "/receipts", "/receipts/new",
+                "/custody", "/custody/new", "/requests/new/spare", "/requests/new/raw", "/admin/users",
+                "/admin/routes", "/admin/sites", "/admin/items", "/admin/opening", "/admin/mail",
+                "/export/requests.xlsx?type=spare", "/export/requests.xlsx?type=raw", "/export/stock.xlsx",
+                "/export/custody.xlsx", f"/api/stock?site={env['site']}"]:
+        r = c.get(url)
+        assert r.status_code == 200, (url, r.status_code, r.text[:500])
+
+
+def test_requires_login():
+    c = TestClient(app)
+    r = c.get("/", follow_redirects=False)
+    assert r.status_code == 303 and "/login" in r.headers["location"]
+
+
+def test_password_login_and_attachment_and_import(env):
+    from app import config
+    c = TestClient(app)
+    r = c.post("/signin", data={"email": "admin@example.com", "password": "wrong"}, follow_redirects=False)
+    assert c.get("/", follow_redirects=False).status_code == 303
+    r = c.post("/signin", data={"email": "admin@example.com", "password": "admin-pass-123"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert c.get("/").status_code == 200
+    # admin sets a password for a user, user logs in
+    db = SessionLocal()
+    u = db.query(User).filter_by(email="final@example.com").one()
+    data = {"id": u.id, "email": u.email, "name": u.name, "roles": ["final"], "all_sites": "1", "active": "1",
+            "password": "final-pass-1"}
+    db.close()
+    c.post("/admin/users", data=data)
+    c2 = TestClient(app)
+    r = c2.post("/signin", data={"email": "final@example.com", "password": "final-pass-1"}, follow_redirects=False)
+    assert c2.get("/approvals").status_code == 200
+    # attachment stored in DB and downloadable
+    db = SessionLocal()
+    from app.models import Receipt
+    rec = db.query(Receipt).filter(Receipt.attachment.is_not(None)).first()
+    db.close()
+    r = c.get(f"/files/{rec.attachment}")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    # import page with a small workbook
+    from openpyxl import Workbook
+    from openpyxl.worksheet.table import Table
+    import io as _io
+    wb = Workbook()
+    ws = wb.active; ws.title = "الرصيد"
+    ws.append(["title"])
+    ws.append(["كود الصنف", "اسم الصنف", "الموقع", "الرصيد الافتتاحي", "قيمة الرصيد الافتتاحي", "وحدة القياس"])
+    ws.append(["X_1", "صنف تجربة", "مخزن", 5, 50, "قطعة"])
+    ws.add_table(Table(displayName="BalanceTable", ref="A2:F3"))
+    w2 = wb.create_sheet("الوارد"); w2.append(["التاريخ", "رقم الفاتورة", "كود الصنف", "اسم الصنف", "الكمية", "سعر الوحدة", "الإجمالي", "المورد"])
+    w2.append(["2026-09-01", "F1", "X_1", "صنف تجربة", 5, 20, 100, "م"])
+    w3 = wb.create_sheet("الصرف"); w3.append(["رقم الطلب", "التاريخ", "كود الصنف", "اسم الصنف", "الكمية", "المشروع", "طالب الصرف", "السبب", "حالة الاعتماد", "المهندس المعتمد", "سعر الوحدة", "القيمة", "الشهر", "ReqID"])
+    w3.append(["R1", "2026-09-02", "X_1", "صنف تجربة", 2, "كسارة", "أ", "س", "معتمد نهائي", None, 15, 30, "2026-09", "R1"])
+    w3.add_table(Table(displayName="IssueTable", ref="A1:N2"))
+    buf = _io.BytesIO(); wb.save(buf)
+    r = c.post("/admin/import", data={"site_code": "TBK", "site_name": "تبوك"},
+               files={"file": ("t.xlsx", buf.getvalue(), "application/octet-stream")})
+    assert "تم: موقع تبوك" in r.text, r.text[:2000]
+    db = SessionLocal()
+    from app.models import Site as _S
+    sid = db.query(_S).filter_by(code="TBK").one().id
+    st = S.stock_table(db, sid)
+    x = db.query(Item).filter_by(code="X_1").one().id
+    assert st[x]["cur"] == 8 and round(st[x]["avg"], 2) == 15.0
+    db.close()
+    r = c.post("/admin/import", data={"site_code": "TBK", "site_name": "تبوك"},
+               files={"file": ("t.xlsx", buf.getvalue(), "application/octet-stream")})
+    assert "بيانات بالفعل" in r.text

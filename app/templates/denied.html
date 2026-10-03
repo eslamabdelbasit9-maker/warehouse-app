@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:520px;margin:60px auto;text-align:center">
+  <h1>غير مسموح بالدخول</h1>
+  <p>الحساب <b dir="ltr">{{ email }}</b> غير مسجل في النظام أو موقوف.</p>
+  <p class="muted">تواصل مع مدير النظام لإضافتك وتحديد صلاحياتك.</p>
+  <a class="btn sec" href="/logout">رجوع</a>
+</div>
+{% endblock %}
