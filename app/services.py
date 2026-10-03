@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime
 from html import escape
 
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -188,6 +189,25 @@ def decide(db: Session, req: Request, user: User, approved_line_ids: set, commen
     return req
 
 
+# ---------------- روابط الاعتماد من الإيميل ----------------
+# رابط موقّع لكل معتمد: يسمح له بالبت في هذا الطلب في هذه المرحلة فقط بدون تسجيل دخول.
+APPROVAL_LINK_DAYS = 14
+_signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="approval-link")
+
+
+def approval_token(req: Request, user: User) -> str:
+    return _signer.dumps({"r": req.id, "s": req.current_stage, "u": user.id})
+
+
+def read_approval_token(token: str):
+    """يرجع (request_id, stage, user_id) أو None إذا كان الرابط غير صالح أو منتهي."""
+    try:
+        d = _signer.loads(token, max_age=APPROVAL_LINK_DAYS * 86400)
+        return int(d["r"]), int(d["s"]), int(d["u"])
+    except (BadSignature, KeyError, TypeError, ValueError):
+        return None
+
+
 # ---------------- الإيميلات ----------------
 def _lines_table(req: Request, only_pending=False):
     rows = []
@@ -229,13 +249,20 @@ def _req_header(req: Request):
 
 
 def notify_approvers(db: Session, req: Request):
-    users = approvers_for(db, req, req.current_stage)
-    link = f"{settings.BASE_URL}/approvals/{req.id}"
-    btn = (f"<p><a href='{link}' style='background:#0B2A5B;color:#fff;padding:10px 22px;"
-           f"text-decoration:none;border-radius:4px;display:inline-block'>مراجعة واعتماد</a></p>")
-    html = _wrap(f"طلب بانتظار اعتمادك — مرحلة {STAGES[req.current_stage]}",
-                 _req_header(req) + _lines_table(req, only_pending=True) + btn)
-    send_mail([u.email for u in users], f"طلب اعتماد {req.req_no} — {req.site.name}", html)
+    """إيميل منفصل لكل معتمد فيه رابطه الخاص — يفتحه من Outlook ويعتمد مباشرة."""
+    title = f"طلب بانتظار اعتمادك — مرحلة {STAGES[req.current_stage]}"
+    body = _req_header(req) + _lines_table(req, only_pending=True)
+    btn = ("padding:10px 22px;text-decoration:none;border-radius:4px;display:inline-block;"
+           "color:#fff;font-weight:bold;margin-left:8px")
+    for u in approvers_for(db, req, req.current_stage):
+        link = f"{settings.BASE_URL}/a/{approval_token(req, u)}"
+        buttons = (f"<p><a href='{link}?do=approve' style='background:#1e7d32;{btn}'>✔ موافقة</a>"
+                   f"<a href='{link}?do=reject' style='background:#b3261e;{btn}'>✖ رفض</a>"
+                   f"<a href='{link}' style='background:#0B2A5B;{btn}'>مراجعة الأصناف</a></p>"
+                   f"<p style='color:#666;font-size:12px'>الرابط خاص بك ({escape(u.email)}) وصالح {APPROVAL_LINK_DAYS} يوماً "
+                   f"ولا يحتاج كلمة مرور — لا تعِد توجيه هذه الرسالة. "
+                   f"أو <a href='{settings.BASE_URL}/approvals/{req.id}'>افتح الطلب داخل النظام</a>.</p>")
+        send_mail([u.email], f"طلب اعتماد {req.req_no} — {req.site.name}", _wrap(title, body + buttons))
 
 
 def notify_requester(db: Session, req: Request):

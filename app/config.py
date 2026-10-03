@@ -24,7 +24,8 @@ def _bool(name, default=False):
 
 class Settings:
     APP_NAME = os.getenv("APP_NAME", "منظومة المستودعات")
-    BASE_URL = os.getenv("BASE_URL", "http://localhost:8000").rstrip("/")
+    # على Render يُؤخذ العنوان تلقائياً من RENDER_EXTERNAL_URL إذا لم يُحدَّد BASE_URL
+    BASE_URL = (os.getenv("BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://localhost:8000").rstrip("/")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'app.db'}")
     for _p in ("postgres://", "postgresql://"):

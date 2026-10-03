@@ -25,6 +25,7 @@
   </nav>
   <span class="who"><a href="/account">{{ user.name }}</a> · <a href="/logout">خروج</a></span>
 </header>
+{% elif approver %}{% include "_link_head.html" %}
 {% endif %}
 <main>
 {% for k, m in flashes %}<div class="flash {{ k }}">{{ m }}</div>{% endfor %}

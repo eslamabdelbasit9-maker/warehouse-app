@@ -459,30 +459,79 @@ def approval_page(rid: int, request: Request, db: Session = Depends(get_db), use
     return render(request, "approval.html", user, r=req, st=st)
 
 
+def _apply_decision(request, db, req, user, form):
+    """يرجع (True, رسالة) عند النجاح أو (False, رسالة الخطأ)."""
+    action = form.get("action")
+    ids = set() if action == "reject_all" else {int(x) for x in form.getlist("line") if str(x).isdigit()}
+    comment = form.get("comment")
+    if action != "reject_all" and not ids:
+        return False, "لم تحدد أي صنف للموافقة — لرفض الطلب كاملاً استخدم زر «رفض الكل»"
+    has_rejects = any(l.status == "pending" and l.id not in ids for l in req.lines)
+    if has_rejects and not (comment or "").strip():
+        return False, "اكتب سبب الرفض في الملاحظات"
+    try:
+        S.decide(db, req, user, ids, comment)
+    except S.BusinessError as e:
+        db.rollback()
+        return False, str(e)
+    return True, f"تم تسجيل قرارك على الطلب {req.req_no}"
+
+
 @app.post("/approvals/{rid}")
 async def approval_post(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
     req = db.get(Req, rid)
     if not req:
         raise Forbidden()
+    ok, msg = _apply_decision(request, db, req, user, await request.form())
+    flash(request, msg, "ok" if ok else "err")
+    return back("/approvals" if ok else f"/approvals/{rid}")
+
+
+# ---------------- الاعتماد من رابط الإيميل (بدون تسجيل دخول) ----------------
+def _token_ctx(db, token):
+    """يرجع (req, approver, رسالة خطأ)."""
+    data = S.read_approval_token(token)
+    if not data:
+        return None, None, "الرابط غير صالح أو انتهت صلاحيته — افتح النظام وادخل من «الاعتمادات»"
+    rid, stage, uid = data
+    req, approver = db.get(Req, rid), db.get(User, uid)
+    if not req or not approver or not approver.active:
+        return None, None, "الرابط غير صالح"
+    if req.status != "pending" or req.current_stage != stage or not S.can_approve(db, approver, req):
+        return req, approver, f"تم البت في الطلب {req.req_no} في هذه المرحلة — الحالة الحالية: {REQ_STATUS[req.status]}"
+    return req, approver, None
+
+
+def _token_page(request, db, req, approver, token, do="", msg=None, kind="ok"):
+    if msg:
+        return render(request, "approval_done.html", None, r=req, approver=approver, msg=msg, kind=kind)
+    st = S.stock_table(db, req.site_id, [l.item_id for l in req.lines]) if req.type == "spare" else {}
+    return render(request, "approval.html", None, r=req, st=st, approver=approver, token=token, do=do)
+
+
+@app.get("/a/{token}", response_class=HTMLResponse)
+def approval_link(token: str, request: Request, do: str = "", db: Session = Depends(get_db)):
+    # GET لا يغيّر شيئاً (برامج فحص الروابط في Outlook تفتح الروابط تلقائياً) — القرار بزر في الصفحة
+    req, approver, err = _token_ctx(db, token)
+    if err:
+        return _token_page(request, db, req, approver, token, msg=err, kind="err")
+    return _token_page(request, db, req, approver, token, do=do)
+
+
+@app.post("/a/{token}", response_class=HTMLResponse)
+async def approval_link_post(token: str, request: Request, db: Session = Depends(get_db)):
+    req, approver, err = _token_ctx(db, token)
+    if err:
+        return _token_page(request, db, req, approver, token, msg=err, kind="err")
     form = await request.form()
-    action = form.get("action")
-    ids = set() if action == "reject_all" else {int(x) for x in form.getlist("line") if str(x).isdigit()}
-    comment = form.get("comment")
-    if action != "reject_all" and not ids:
-        flash(request, "لم تحدد أي صنف للموافقة — لرفض الطلب كاملاً استخدم زر «رفض الكل»", "err")
-        return back(f"/approvals/{rid}")
-    has_rejects = any(l.status == "pending" and l.id not in ids for l in req.lines)
-    if has_rejects and not (comment or "").strip():
-        flash(request, "اكتب سبب الرفض في الملاحظات", "err")
-        return back(f"/approvals/{rid}")
-    try:
-        S.decide(db, req, user, ids, comment)
-    except S.BusinessError as e:
-        db.rollback()
-        flash(request, str(e), "err")
-        return back(f"/approvals/{rid}")
-    flash(request, f"تم تسجيل قرارك على الطلب {req.req_no}")
-    return back("/approvals")
+    ok, msg = _apply_decision(request, db, req, approver, form)
+    if not ok:
+        flash(request, msg, "err")
+        return _token_page(request, db, req, approver, token, do=form.get("action", ""))
+    db.refresh(req)
+    nxt = (f" — انتقل إلى مرحلة {STAGES[req.current_stage]}" if req.status == "pending"
+           else f" — الحالة: {REQ_STATUS[req.status]}")
+    return _token_page(request, db, req, approver, token, msg=msg + nxt)
 
 
 # ---------------- الأرصدة ----------------

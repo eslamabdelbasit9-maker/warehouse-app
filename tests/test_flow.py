@@ -254,3 +254,49 @@ def test_password_login_and_attachment_and_import(env):
     r = c.post("/admin/import", data={"site_code": "TBK", "site_name": "تبوك"},
                files={"file": ("t.xlsx", buf.getvalue(), "application/octet-stream")})
     assert "بيانات بالفعل" in r.text
+
+
+def _link_from_mail(to):
+    import re
+    db = SessionLocal()
+    m = db.query(MailLog).filter(MailLog.to == to).order_by(MailLog.id.desc()).first()
+    db.close()
+    return re.search(r"(/a/[^'?]+)", m.html).group(1)
+
+
+def test_approve_from_email_link(env):
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "من الإيميل",
+                                            "item_id": [env["a"]], "qty": ["1"]}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    lid = db.get(Request, rid).lines[0].id
+    db.close()
+    c.cookies.clear()  # المعتمد غير مسجل دخول — يفتح الرابط من Outlook
+    link = _link_from_mail("eng.crusher@example.com")
+    # فتح الرابط (أو فحصه تلقائياً من Outlook) لا يعتمد شيئاً
+    page = c.get(link + "?do=approve")
+    assert page.status_code == 200 and "رولمان بلي" in page.text and "مهندس الكسارة" in page.text
+    db = SessionLocal()
+    assert db.get(Request, rid).current_stage == 1
+    db.close()
+    # رابط معدّل مرفوض
+    assert "غير صالح" in c.post(link + "x", data={"action": "approve", "line": [lid]}).text
+    # الموافقة بزر الصفحة
+    res = c.post(link, data={"action": "approve", "line": [lid]})
+    assert "تم تسجيل قرارك" in res.text
+    db = SessionLocal()
+    assert db.get(Request, rid).current_stage == 2
+    db.close()
+    # نفس الرابط لا يُستخدم مرتين
+    assert "تم البت" in c.post(link, data={"action": "approve", "line": [lid]}).text
+    # مدير الإنتاج يرفض من رابطه — الملاحظة إجبارية
+    link2 = _link_from_mail("prod.manager@example.com")
+    assert "لم تحدد أي صنف" in c.post(link2, data={"action": "approve"}).text
+    assert "اكتب سبب الرفض" in c.post(link2, data={"action": "reject_all"}).text
+    res = c.post(link2, data={"action": "reject_all", "comment": "غير مطلوب"})
+    assert "تم تسجيل قرارك" in res.text
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "rejected"
+    db.close()
