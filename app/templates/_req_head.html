@@ -1,0 +1,23 @@
+<div class="meta">
+  <div><b>رقم الطلب</b>{{ r.req_no }}</div>
+  <div><b>النوع</b>{{ REQ_TYPES[r.type] }}</div>
+  <div><b>الموقع</b>{{ r.site.name }}</div>
+  <div><b>الوحدة</b>{{ r.unit.name if r.unit else '-' }}</div>
+  <div><b>التاريخ</b>{{ r.work_date }}</div>
+  <div><b>طالب الصرف</b>{{ r.requester_display }}</div>
+  <div><b>الحالة</b><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}</span></div>
+  <div><b>أُنشئ في</b>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+</div>
+{% if r.reason %}<p><b class="muted">{{ 'السبب' if r.type=='spare' else 'ملاحظات' }}:</b> {{ r.reason }}</p>{% endif %}
+{% if not r.imported %}
+<div class="steps">
+  {% for s, name in STAGES.items() %}
+  {% set stage_dec = r.decisions|selectattr('stage','equalto',s)|list %}
+  {% if stage_dec %}
+    {% set ok = stage_dec|selectattr('decision','equalto','approved')|list %}
+    <span class="{{ 'done' if ok else 'no' }}">{{ name }}: {{ stage_dec[0].user.name }} — {{ stage_dec[0].at.strftime('%Y-%m-%d %H:%M') }}</span>
+  {% elif r.status=='pending' and r.current_stage==s %}<span class="cur">{{ name }}: بانتظار الاعتماد</span>
+  {% else %}<span>{{ name }}</span>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الطلبات</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>النوع</label><select name="type"><option value="">الكل</option>
+    {% for k,v in REQ_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if f.type==k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الحالة</label><select name="status"><option value="">الكل</option>
+    {% for k,v in REQ_STATUS.items() %}<option value="{{ k }}" {{ 'selected' if f.status==k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الموقع</label><select name="site"><option value="">الكل</option>
+    {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if f.site==s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>بحث (رقم/صنف/سبب)</label><input name="q" value="{{ f.q }}"></div>
+  <label style="align-self:center"><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }}> طلباتي فقط</label>
+  <button class="btn">بحث</button>
+  <span class="right"></span>
+  <a class="btn sec" href="/export/requests.xlsx?type=spare&site={{ f.site }}">تصدير قطع الغيار Excel</a>
+  <a class="btn sec" href="/export/requests.xlsx?type=raw&site={{ f.site }}">تصدير المواد الخام Excel</a>
+</form>
+<div class="card"><div class="muted">{{ total }} طلب</div><div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>التاريخ</th><th>الموقع</th><th>الوحدة</th><th>طالب الصرف</th><th>الأصناف</th><th class="n">القيمة</th><th>الحالة</th></tr>
+{% for r in rows %}<tr>
+<td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.work_date }}</td><td>{{ r.site.name }}</td>
+<td>{{ r.unit.name if r.unit else '-' }}</td><td>{{ r.requester_display }}</td>
+<td>{% for l in r.lines[:2] %}{{ l.item.name }}{{ '، ' if not loop.last }}{% endfor %}{% if r.lines|length > 2 %} +{{ r.lines|length - 2 }}{% endif %}</td>
+<td class="n">{{ fmt(r.total_value) if r.type=='spare' and r.status in ('approved','partial') else '' }}</td>
+<td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>
+{% else %}<tr><td colspan="9" class="muted">لا توجد طلبات</td></tr>{% endfor %}
+</table></div>
+{% if pages > 1 %}<div class="pager">{% for p in range(1, pages+1) %}{% if p == page %}<b>{{ p }}</b>{% else %}<a href="?type={{ f.type }}&status={{ f.status }}&site={{ f.site }}&q={{ f.q }}&mine={{ f.mine }}&page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}</div>{% endif %}
+</div>
+{% endblock %}

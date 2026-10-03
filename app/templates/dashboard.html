@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block body %}
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الموقع</label>
+    <select name="site"><option value="">كل المواقع</option>
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}
+    </select></div>
+  <div class="f"><label>الشهر</label><input type="month" name="month" value="{{ month }}"></div>
+  <button class="btn">عرض</button>
+  <span class="right"></span>
+  {% if user.has('requester','storekeeper') %}
+  <a class="btn green" href="/requests/new/spare">+ طلب صرف قطع غيار</a>
+  <a class="btn green" href="/requests/new/raw">+ صرف مواد خام</a>
+  {% endif %}
+</form>
+
+<div class="grid g4">
+  <div class="card kpi"><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(month_spend) }}</div><div class="l">قيمة صرف قطع الغيار المعتمد — {{ month }}</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(stock_value, 0) }}</div><div class="l">قيمة الرصيد الحالي</div></div>
+  <div class="card kpi"><div class="v">{{ month_reqs }}</div><div class="l">عدد الطلبات في الشهر</div></div>
+  <div class="card kpi"><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد: المهندس / مدير الإنتاج / النهائي</div></div>
+  <div class="card kpi"><div class="v">{{ open_custody }}</div><div class="l">بنود عهد لم تُرجع</div></div>
+</div>
+
+{% if my_pending %}
+<div class="card"><h2>بانتظار اعتمادي</h2><div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>الموقع / الوحدة</th><th>التاريخ</th><th>طالب الصرف</th><th>الأصناف</th><th></th></tr>
+{% for r in my_pending %}<tr><td>{{ r.req_no }}</td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.site.name }}{% if r.unit %} / {{ r.unit.name }}{% endif %}</td>
+<td>{{ r.work_date }}</td><td>{{ r.requester_display }}</td><td>{{ r.lines|selectattr('status','equalto','pending')|list|length }}</td>
+<td><a class="btn sm" href="/approvals/{{ r.id }}">مراجعة واعتماد</a></td></tr>{% endfor %}
+</table></div></div>
+{% endif %}
+
+<div class="grid g2">
+  <div class="card"><h2>صرف قطع الغيار حسب الوحدة — {{ month }}</h2><div class="tw"><table class="t">
+    <tr><th>الموقع</th><th>الوحدة</th><th class="n">عدد الطلبات</th><th class="n">القيمة</th></tr>
+    {% for s, u, v, c in spend_rows %}<tr><td>{{ s }}</td><td>{{ u or '-' }}</td><td class="n">{{ c }}</td><td class="n">{{ fmt(v) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في هذا الشهر</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="card"><h2>المواد الخام المصروفة — {{ month }}</h2><div class="tw"><table class="t">
+    <tr><th>المادة</th><th class="n">الكمية</th><th>الوحدة</th></tr>
+    {% for n, uom, p, q in raw_rows %}<tr><td>{{ n }}{% if p %} — {{ p }}{% endif %}</td><td class="n">{{ fmt(q) }}</td><td>{{ uom }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">لا يوجد</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="card"><h2>أعلى 10 أصناف صرفاً — {{ month }}</h2><div class="tw"><table class="t">
+    <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
+    {% for c, n, uom, q, v in top_items %}<tr><td>{{ c }}</td><td>{{ n }}</td><td class="n">{{ fmt(q) }} {{ uom }}</td><td class="n">{{ fmt(v) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">لا يوجد</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="card"><h2>آخر الطلبات</h2><div class="tw"><table class="t">
+    <tr><th>رقم الطلب</th><th>التاريخ</th><th>الوحدة</th><th>الحالة</th></tr>
+    {% for r in recent %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ r.work_date }}</td><td>{{ r.unit.name if r.unit else '-' }}</td>
+    <td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>{% endfor %}
+  </table></div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+# تشغيل على Render بضغطة: New ← Blueprint ← اختر هذا المستودع، ثم املأ القيم المطلوبة.
+services:
+  - type: web
+    name: warehouse-app
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL          # رابط Neon
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_NAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: MAIL_MODE
+        value: brevo
+      - key: MAIL_SENDER           # الإيميل المؤكَّد في Brevo
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false

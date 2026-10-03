@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>مسار الاعتماد</h1>
+{% include "_admin_nav.html" %}
+<div class="card muted">المرحلة 1 (المهندس) تُحدد حسب نوع الوحدة. المرحلتان 2 و3 لكل الوحدات. اترك الموقع فارغاً ليسري على كل المواقع.
+إذا عُرّف أكثر من شخص لنفس المرحلة يصلهم الإيميل جميعاً وأول من يعتمد يُنفّذ قراره.</div>
+<form method="post" class="card row">
+  <div class="f"><label>المرحلة</label><select name="stage">{% for k, v in STAGES.items() %}<option value="{{ k }}">{{ k }} — {{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>نوع الوحدة (للمرحلة 1)</label><select name="unit_kind"><option value="">الكل</option>
+    {% for k, v in UNIT_KINDS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الموقع</label><select name="site_id"><option value="">كل المواقع</option>
+    {% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>المعتمد</label><select name="user_id">{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></div>
+  <button class="btn">إضافة</button>
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>المرحلة</th><th>نوع الوحدة</th><th>الموقع</th><th>المعتمد</th><th>الإيميل</th><th></th></tr>
+{% for r in routes %}<tr><td>{{ STAGES[r.stage] }}</td><td>{{ UNIT_KINDS[r.unit_kind] if r.unit_kind else 'الكل' }}</td>
+<td>{{ r.site.name if r.site else 'كل المواقع' }}</td><td>{{ r.user.name }}</td><td dir="ltr" style="text-align:right">{{ r.user.email }}</td>
+<td><form method="post" onsubmit="return confirm('حذف؟')"><input type="hidden" name="act" value="delete"><input type="hidden" name="id" value="{{ r.id }}"><button class="btn red sm">حذف</button></form></td></tr>
+{% else %}<tr><td colspan="6" class="muted">لم يُعرّف مسار بعد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

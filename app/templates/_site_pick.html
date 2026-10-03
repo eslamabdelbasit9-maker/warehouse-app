@@ -1,0 +1,4 @@
+<div class="f"><label>الموقع</label>
+  <select name="site" onchange="this.form.submit()">
+    {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}
+  </select></div>

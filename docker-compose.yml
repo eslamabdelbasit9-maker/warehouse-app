@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: warehouse
+      POSTGRES_USER: warehouse
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me}
+    volumes: [pgdata:/var/lib/postgresql/data]
+  app:
+    build: .
+    restart: always
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://warehouse:${DB_PASSWORD:-change-me}@db:5432/warehouse
+    volumes: [uploads:/app/data/uploads]
+    ports: ["8000:8000"]
+    depends_on: [db]
+volumes:
+  pgdata:
+  uploads:

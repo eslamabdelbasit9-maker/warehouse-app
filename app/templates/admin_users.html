@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>المستخدمون والصلاحيات</h1>
+{% include "_admin_nav.html" %}
+<form method="post" class="card">
+  <h2>{{ 'تعديل مستخدم' if e else 'إضافة مستخدم' }}</h2>
+  <input type="hidden" name="id" value="{{ e.id if e else '' }}">
+  <div class="meta">
+    <div class="f"><label>الإيميل *</label><input name="email" dir="ltr" value="{{ e.email if e else '' }}" required></div>
+    <div class="f"><label>الاسم *</label><input name="name" value="{{ e.name if e else '' }}" required></div>
+    <div class="f"><label>الرقم الوظيفي</label><input name="employee_no" value="{{ e.employee_no or '' if e else '' }}"></div>
+    <div class="f"><label>{{ 'كلمة مرور جديدة (اتركها فارغة بدون تغيير)' if e else 'كلمة المرور (8 أحرف على الأقل)' }}</label><input name="password" type="text" dir="ltr" autocomplete="new-password" {{ '' if e else 'required minlength=8' }}></div>
+  </div>
+  <p><b class="muted">الصلاحيات:</b>
+    {% for k, v in ROLES.items() %}<label style="display:inline;margin-left:14px"><input type="checkbox" name="roles" value="{{ k }}" {{ 'checked' if e and k in e.role_list }}> {{ v }}</label>{% endfor %}</p>
+  <p><b class="muted">المواقع:</b>
+    <label style="display:inline;margin-left:14px"><input type="checkbox" name="all_sites" value="1" {{ 'checked' if e and e.all_sites }}> كل المواقع</label>
+    {% for s in sites %}<label style="display:inline;margin-left:14px"><input type="checkbox" name="sites" value="{{ s.id }}" {{ 'checked' if e and s in e.sites }}> {{ s.name }}</label>{% endfor %}</p>
+  <p><label style="display:inline"><input type="checkbox" name="active" value="1" {{ 'checked' if not e or e.active }}> نشط</label></p>
+  <button class="btn">حفظ</button> {% if e %}<a class="btn sec" href="/admin/users">جديد</a>{% endif %}
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الاسم</th><th>الإيميل</th><th>الرقم الوظيفي</th><th>الصلاحيات</th><th>المواقع</th><th>الحالة</th><th></th></tr>
+{% for u in users %}<tr><td>{{ u.name }}</td><td dir="ltr" style="text-align:right">{{ u.email }}</td><td>{{ u.employee_no or '' }}</td>
+<td>{% for r in u.role_list %}{{ ROLES.get(r, r) }}{{ '، ' if not loop.last }}{% endfor %}</td>
+<td>{% if u.all_sites %}الكل{% else %}{% for s in u.sites %}{{ s.name }}{{ '، ' if not loop.last }}{% endfor %}{% endif %}</td>
+<td>{{ 'نشط' if u.active else 'موقوف' }}</td><td><a href="?edit={{ u.id }}">تعديل</a></td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

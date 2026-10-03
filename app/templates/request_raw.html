@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>صرف مواد خام — خلاطة الاسفلت</h1>
+<form method="post" class="card">
+  <div class="meta">
+    <div class="f"><label>الموقع</label>
+      <select name="site_id" onchange="location='?site='+this.value">
+        {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>الخلاطة *</label>
+      <select name="unit_id" required>
+        {% if units|length != 1 %}<option value="">— اختر —</option>{% endif %}
+        {% for u in units %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+      {% if not units %}<span class="low">لا توجد خلاطة اسفلت مسجلة في هذا الموقع</span>{% endif %}</div>
+    <div class="f"><label>تاريخ اليوم</label><input type="date" name="work_date" value="{{ today }}"></div>
+    <div class="f"><label>طالب الصرف</label><input value="{{ user.name }}" disabled></div>
+  </div>
+
+  <h2 style="margin-top:16px">المواد حسب الجهة</h2>
+  <div class="tw"><table class="t lines" id="lines">
+    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
+
+  <h2>الديزل (إجمالي اليوم) — لتر</h2>
+  <div class="row" style="display:flex;gap:14px">
+    {% for p in DIESEL_PURPOSES %}<div class="f"><label>ديزل {{ p }}</label><input type="number" step="any" min="0" name="diesel_{{ p }}"></div>{% endfor %}
+  </div>
+  <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="reason"></textarea></div>
+  <button class="btn" style="margin-top:10px">إرسال للاعتماد</button>
+</form>
+<template id="tpl"><tr>
+  <td><select name="entity_type">{% for t in ENTITY_TYPES %}<option>{{ t }}</option>{% endfor %}</select></td>
+  <td><input name="entity_name" class="en"></td>
+  <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
+  <td><input name="qty" type="number" step="any" min="0"></td>
+  <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>
+</tr></template>
+{% endblock %}
+{% block scripts %}
+<script>
+function addRow() {
+  const tb = document.getElementById('lines'); const prev = tb.querySelectorAll('tr'); const last = prev[prev.length - 1];
+  const tr = document.getElementById('tpl').content.firstElementChild.cloneNode(true);
+  if (last && last.querySelector('.en')) { // نفس الجهة للسطر الجديد لتسهيل الإدخال
+    tr.querySelector('[name=entity_type]').value = last.querySelector('[name=entity_type]').value;
+    tr.querySelector('.en').value = last.querySelector('.en').value;
+  }
+  tb.appendChild(tr);
+}
+addRow();
+</script>
+{% endblock %}

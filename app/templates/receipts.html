@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الوارد — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}<span class="right"></span>
+  {% if user.has('storekeeper') %}<a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th>الأصناف</th><th class="n">الإجمالي</th><th>المرفق</th></tr>
+{% for r in rows %}<tr><td><a href="/receipts/{{ r.id }}">{{ r.date }}</a></td><td>{{ r.invoice_no or '' }}</td><td>{{ r.supplier or '' }}</td>
+<td>{% for l in r.lines[:2] %}{{ l.item.name }}{{ '، ' if not loop.last }}{% endfor %}{% if r.lines|length > 2 %} +{{ r.lines|length - 2 }}{% endif %}</td>
+<td class="n">{{ fmt(r.lines|sum(attribute='total')) }}</td><td>{% if r.attachment %}<a href="/files/{{ r.attachment }}" target="_blank">عرض</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

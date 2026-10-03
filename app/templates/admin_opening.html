@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الأرصدة الافتتاحية — {{ sel.name }}</h1>
+{% include "_admin_nav.html" %}
+<form class="filters card" method="get">{% include "_site_pick.html" %}</form>
+<form method="post" class="card row"><input type="hidden" name="site_id" value="{{ sel.id }}">
+  <div class="f" style="flex:1"><label>الصنف</label><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.code }} — {{ i.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الموقع بالمستودع</label><input name="location"></div>
+  <div class="f"><label>الكمية</label><input name="qty" type="number" step="any" required></div>
+  <div class="f"><label>القيمة الإجمالية</label><input name="value" type="number" step="any" required></div>
+  <button class="btn">حفظ</button>
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الكود</th><th>الصنف</th><th>الموقع</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
+{% for o in rows %}<tr><td>{{ o.item.code }}</td><td>{{ o.item.name }}</td><td>{{ o.location or '' }}</td><td class="n">{{ fmt(o.qty) }}</td><td class="n">{{ fmt(o.value) }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>اعتماد الطلب {{ r.req_no }} — {{ STAGES[r.current_stage] }}</h1>
+<form method="post" class="card" id="frm">
+  {% include "_req_head.html" %}
+  <p class="muted">علّم على الأصناف التي توافق عليها. الأصناف غير المعلَّمة تُرفض.{% if r.current_stage < 3 %} الأصناف الموافق عليها تنتقل للمرحلة التالية.{% endif %}</p>
+  <div class="tw"><table class="t">
+    <tr><th><input type="checkbox" id="all" {{ '' if do=='reject' else 'checked' }}></th><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>
+      {% if r.type=='raw' %}<th>نوع الجهة</th><th>الجهة / الغرض</th>{% else %}<th class="n">الرصيد الحالي</th><th class="n">متوسط السعر</th><th class="n">القيمة التقديرية</th>{% endif %}
+      <th>قرارات سابقة</th></tr>
+    {% for l in r.lines if l.status=='pending' %}<tr>
+      <td><input type="checkbox" name="line" value="{{ l.id }}" class="ln" {{ '' if do=='reject' else 'checked' }}></td>
+      <td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
+      {% if r.type=='raw' %}<td>{{ l.entity_type or ('ديزل' if l.diesel_purpose else '') }}</td><td>{{ l.entity_name or l.diesel_purpose or '' }}</td>
+      {% else %}{% set s = st.get(l.item_id) %}
+        <td class="n {{ 'low' if s and s.cur < l.qty }}">{{ fmt(s.cur if s else 0) }}</td><td class="n">{{ fmt(s.avg if s else 0) }}</td><td class="n">{{ fmt((s.avg if s else 0) * l.qty) }}</td>{% endif %}
+      <td class="muted">{% for d in r.decisions if d.line_id==l.id %}{{ STAGES[d.stage] }} ✓{{ '، ' if not loop.last }}{% endfor %}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% set rej = r.lines|selectattr('status','equalto','rejected')|list %}
+  {% if rej %}<p class="muted">أصناف رُفضت سابقاً: {% for l in rej %}{{ l.item.name }} ({{ STAGES[l.rejected_stage] }}){{ '، ' if not loop.last }}{% endfor %}</p>{% endif %}
+  <div class="f" style="margin-top:10px"><label>ملاحظات (إجبارية عند رفض أي صنف)</label><textarea name="comment" id="comment"></textarea></div>
+  <div style="display:flex;gap:8px;margin-top:10px">
+    <button class="btn green" name="action" value="approve">موافقة على المحدد</button>
+    <button class="btn red" name="action" value="reject_all" onclick="return confirm('رفض الطلب بالكامل؟')">رفض الكل</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+{% if do=='reject' %}document.getElementById('comment').focus();{% endif %}
+document.getElementById('all').addEventListener('change', e => document.querySelectorAll('.ln').forEach(c => c.checked = e.target.checked));
+</script>
+{% endblock %}

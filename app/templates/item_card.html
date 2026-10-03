@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>كرت الصنف: {{ item.code }} — {{ item.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}</form>
+<div class="grid g4">
+  <div class="card kpi"><div class="v">{{ fmt(st.cur if st else 0) }} {{ item.uom }}</div><div class="l">الرصيد الحالي</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.avg if st else 0) }}</div><div class="l">متوسط السعر المرجح</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.value if st else 0) }}</div><div class="l">قيمة الرصيد</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.pending_qty if st else 0) }}</div><div class="l">قيد الاعتماد</div></div>
+</div>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>الحركة</th><th>المرجع</th><th>المورد / الوحدة</th><th class="n">وارد</th><th class="n">منصرف</th><th class="n">السعر</th><th class="n">الرصيد</th></tr>
+{% for m in moves %}<tr><td>{{ m.d or '' }}</td><td>{{ m.kind }}</td><td>{% if m.link %}<a href="{{ m.link }}">{{ m.ref }}</a>{% else %}{{ m.ref }}{% endif %}</td>
+<td>{{ m.who }}</td><td class="n">{{ fmt(m.inq) if m.inq else '' }}</td><td class="n">{{ fmt(m.outq) if m.outq else '' }}</td>
+<td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.bal) }}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">لا توجد حركات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

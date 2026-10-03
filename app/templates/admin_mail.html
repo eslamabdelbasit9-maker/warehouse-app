@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>سجل الإيميلات</h1>
+{% include "_admin_nav.html" %}
+{% if cur %}<div class="card"><h2>{{ cur.subject }}</h2><p class="muted" dir="ltr" style="text-align:right">{{ cur.to }}</p>
+  <iframe srcdoc="{{ cur.html }}" style="width:100%;height:480px;border:1px solid #ddd;border-radius:6px;background:#fff"></iframe></div>{% endif %}
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الوقت</th><th>إلى</th><th>الموضوع</th><th>الحالة</th><th>الخطأ</th></tr>
+{% for m in rows %}<tr><td>{{ m.at.strftime('%Y-%m-%d %H:%M') }}</td><td dir="ltr" style="text-align:right">{{ m.to }}</td>
+<td><a href="?show={{ m.id }}">{{ m.subject }}</a></td>
+<td><span class="st st-{{ {'sent':'approved','outbox':'partial','failed':'rejected'}.get(m.status,'pending') }}">{{ {'sent':'أُرسل','outbox':'تجريبي (لم يُرسل)','failed':'فشل','queued':'في الانتظار'}.get(m.status, m.status) }}</span></td>
+<td class="muted">{{ m.error or '' }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

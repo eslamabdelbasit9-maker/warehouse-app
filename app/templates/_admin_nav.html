@@ -1,0 +1,4 @@
+<div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+  {% for href, label in [('/admin/users','المستخدمون والصلاحيات'),('/admin/routes','مسار الاعتماد'),('/admin/sites','المواقع والوحدات'),('/admin/items','الأصناف'),('/admin/opening','الأرصدة الافتتاحية'),('/admin/import','استيراد من Excel'),('/admin/mail','سجل الإيميلات')] %}
+  <a class="btn {{ '' if path==href else 'sec' }} sm" href="{{ href }}">{{ label }}</a>{% endfor %}
+</div>
