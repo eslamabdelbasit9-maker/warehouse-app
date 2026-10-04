@@ -40,8 +40,8 @@ function addRow() {
     const i = BY[e.target.value]; const h = tr.querySelector('[name=item_id]');
     h.value = i ? i.id : ''; tr.querySelector('.uom').textContent = i ? i.uom : '';
     const av = tr.querySelector('.av'); av.textContent = i ? i.available : ''; av.className = 'n av' + (i && i.available <= 0 ? ' low' : '');
-    tr.querySelector('.mq').textContent = i ? `${i.m_qty} (${i.m_n} طلب)` : '';
-    tr.querySelector('.yq').textContent = i ? `${i.y_qty} (${i.y_n} طلب)` : '';
+    tr.querySelector('.mq').textContent = i ? i.m_qty : '';
+    tr.querySelector('.yq').textContent = i ? i.y_qty : '';
   });
 }
 addRow(); addRow(); addRow();

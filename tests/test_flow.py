@@ -340,7 +340,7 @@ def test_issued_month_year_shown(env):
     assert (s["m_qty"], s["m_n"], s["y_qty"], s["y_n"]) == (3, 1, 5, 2)
     login(c, env, "eng.crusher@example.com")
     page = c.get(f"/approvals/{rid}").text
-    assert "منصرف الشهر" in page and "منصرف السنة" in page and "(2 طلب)" in page
+    assert "منصرف الشهر" in page and "منصرف السنة" in page and "طلب)" not in page
     login(c, env, "requester@example.com")
     assert "منصرف السنة" in c.get(f"/requests/{rid}").text
     api = {i["id"]: i for i in c.get(f"/api/stock?site={env['site']}").json()}[iid]
