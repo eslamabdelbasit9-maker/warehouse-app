@@ -129,6 +129,17 @@ def run(path, site_code, site_name):
             db.flush()
         statuses = {clean(r.get("حالة الاعتماد")) for r in rows}
         approved_any = any(s == "معتمد نهائي" for s in statuses)
+        if not approved_any and not any((s or "").startswith("مرفوض") for s in statuses):
+            # طلب لسه تحت الاعتماد — يدخل النظام كطلب معلّق في المرحلة الأولى
+            req = Request(req_no=f"{site_code}-{rid}", type="spare", site_id=site.id, unit_id=units[uname].id,
+                          requester_name=clean(f.get("طالب الصرف")), work_date=to_date(f.get("التاريخ")),
+                          reason=clean(f.get("السبب")), status="pending", current_stage=1, imported=True)
+            for r in rows:
+                it = item_for(r["كود الصنف"], r.get("اسم الصنف"))
+                req.lines.append(RequestLine(item_id=it.id, qty=num(r.get("الكمية")), status="pending"))
+            db.add(req)
+            n_req += 1
+            continue
         req = Request(req_no=f"{site_code}-{rid}", type="spare", site_id=site.id, unit_id=units[uname].id,
                       requester_name=clean(f.get("طالب الصرف")), work_date=to_date(f.get("التاريخ")),
                       reason=clean(f.get("السبب")), status="approved" if approved_any else "rejected",
