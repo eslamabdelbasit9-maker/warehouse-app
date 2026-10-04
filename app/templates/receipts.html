@@ -4,7 +4,7 @@
 <form class="filters card noprint" method="get">{% include "_site_pick.html" %}
   <div class="f"><label>بحث (فاتورة/مورد/صنف/كود)</label><input name="q" value="{{ q }}" data-live="#rtbl"></div>
   <button class="btn">بحث</button><span class="right"></span>
-  {% if user.has('storekeeper') %}<a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
+  {% if user.has('storekeeper') %}<a class="btn sec" href="/admin/invoices">رفع الفواتير</a> <a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
 <div class="card"><div class="tw"><table class="t" id="rtbl">
 <tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th>الأصناف</th><th class="n">الإجمالي</th><th>المرفق</th></tr>
 {% for r in rows %}<tr><td><a href="/receipts/{{ r.id }}">{{ r.date }}</a></td><td>{{ r.invoice_no or '' }}</td><td>{{ r.supplier or '' }}</td>
