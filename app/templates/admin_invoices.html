@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>رفع الفواتير</h1>
+{% if user.has('admin') %}{% include "_admin_nav.html" %}{% endif %}
+<form method="post" enctype="multipart/form-data" class="card">
+  <p class="muted">اختار الموقع، وبعدين حدد كل ملفات الفواتير (PDF أو صور) مرة واحدة. البرنامج بيربط كل ملف بالفاتورة اللي رقمها مكتوب في اسم الملف، والفاتورة بتتخزن جوه البرنامج نفسه وتفتح لأي حد داخل البرنامج.</p>
+  <div class="meta">
+    <div class="f"><label>الموقع</label><select name="site">{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if result and result.site.id == s.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>ملفات الفواتير</label><input type="file" name="files" accept=".pdf,.jpg,.jpeg,.png" multiple required></div>
+  </div>
+  <button class="btn" style="margin-top:12px" onclick="this.textContent='جاري الرفع...'">رفع وربط</button>
+</form>
+{% if result %}
+<div class="card">
+  <h3>النتيجة — {{ result.site.name }}</h3>
+  <p>اتربط <b>{{ result.matched|length }}</b> ملف{% if result.unmatched %}، و<b>{{ result.unmatched|length }}</b> ما لقيناش رقم فاتورتهم{% endif %}.</p>
+  {% if result.matched %}<div class="tw"><table class="t"><tr><th>الملف</th><th>رقم الفاتورة</th></tr>
+  {% for f, inv, n in result.matched %}<tr><td>{{ f }}</td><td>{{ inv }}</td></tr>{% endfor %}</table></div>{% endif %}
+  {% if result.unmatched %}<p class="muted" style="margin-top:10px">ملفات ما اتربطتش (اتأكد إن رقم الفاتورة مكتوب في اسم الملف زي ما هو في الوارد، أو ارفعها من صفحة الفاتورة نفسها):</p>
+  <ul>{% for f in result.unmatched %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+  {% if result.errors %}<ul>{% for e in result.errors %}<li class="low">{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}
+<div class="card"><div class="tw"><table class="t"><tr><th>الموقع</th><th class="n">فواتير الوارد</th><th class="n">متخزنة جوه البرنامج</th></tr>
+{% for s, total, inside in stats %}<tr><td>{{ s.name }}</td><td class="n">{{ total }}</td><td class="n">{{ inside }}</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}
