@@ -8,11 +8,22 @@
   <div class="card kpi"><div class="v">{{ fmt(st.value if st else 0) }}</div><div class="l">قيمة الرصيد</div></div>
   <div class="card kpi"><div class="v">{{ fmt(st.pending_qty if st else 0) }}</div><div class="l">قيد الاعتماد</div></div>
 </div>
-<div class="card"><div class="tw"><table class="t">
-<tr><th>التاريخ</th><th>الحركة</th><th>المرجع</th><th>المورد / الوحدة</th><th class="n">وارد</th><th class="n">منصرف</th><th class="n">السعر</th><th class="n">الرصيد</th></tr>
+{% set ins = moves|selectattr('kind', 'equalto', 'وارد')|list %}
+{% if ins %}
+<div class="card"><h3 style="margin-top:0">الوارد بالفواتير</h3><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th class="n">الكمية المستلمة</th><th class="n">سعر الوحدة</th><th class="n">المبلغ</th><th>الفاتورة</th></tr>
+{% for m in ins %}<tr><td>{{ m.d or '' }}</td><td><a href="{{ m.link }}">{{ m.ref or '-' }}</a></td><td>{{ m.who }}</td>
+<td class="n"><b>{{ fmt(m.inq) }}</b> {{ item.uom }}</td><td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.value) }}</td>
+<td>{% if m.att %}<a href="{{ att_url(m.att) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% else %}<span class="muted">مفيش ملف</span>{% endif %}</td></tr>{% endfor %}
+<tr><td colspan="3"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(ins|sum(attribute='inq')) }}</b> {{ item.uom }}</td><td></td><td class="n"><b>{{ fmt(ins|sum(attribute='value')) }}</b></td><td></td></tr>
+</table></div></div>
+{% endif %}
+<div class="card"><h3 style="margin-top:0">كل الحركات</h3><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>الحركة</th><th>المرجع</th><th>المورد / الوحدة</th><th class="n">وارد</th><th class="n">منصرف</th><th class="n">السعر</th><th class="n">المبلغ</th><th class="n">الرصيد</th><th>الفاتورة</th></tr>
 {% for m in moves %}<tr><td>{{ m.d or '' }}</td><td>{{ m.kind }}</td><td>{% if m.link %}<a href="{{ m.link }}">{{ m.ref }}</a>{% else %}{{ m.ref }}{% endif %}</td>
 <td>{{ m.who }}</td><td class="n">{{ fmt(m.inq) if m.inq else '' }}</td><td class="n">{{ fmt(m.outq) if m.outq else '' }}</td>
-<td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.bal) }}</td></tr>
-{% else %}<tr><td colspan="8" class="muted">لا توجد حركات</td></tr>{% endfor %}
+<td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.value) if m.value else '' }}</td><td class="n">{{ fmt(m.bal) }}</td>
+<td>{% if m.att %}<a href="{{ att_url(m.att) }}" target="_blank" rel="noopener">عرض</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="10" class="muted">لا توجد حركات</td></tr>{% endfor %}
 </table></div></div>
 {% endblock %}
