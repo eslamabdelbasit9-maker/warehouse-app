@@ -6,9 +6,9 @@
   <button class="btn">بحث</button><span class="right"></span>
   {% if user.has('storekeeper') %}<a class="btn sec" href="/admin/invoices">رفع الفواتير</a> <a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
 <div class="card"><div class="tw"><table class="t" id="rtbl">
-<tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th>الأصناف</th><th class="n">الإجمالي</th><th>المرفق</th></tr>
+<tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">الإجمالي</th><th>المرفق</th></tr>
 {% for r in rows %}<tr><td><a href="/receipts/{{ r.id }}">{{ r.date }}</a></td><td>{{ r.invoice_no or '' }}</td><td>{{ r.supplier or '' }}</td>
-<td>{% for l in r.lines[:2] %}{{ l.item.code }} {{ l.item.name }}{{ '، ' if not loop.last }}{% endfor %}{% if r.lines|length > 2 %} +{{ r.lines|length - 2 }}{% endif %}</td>
+<td><table style="border-collapse:collapse;width:100%">{% for l in r.lines %}<tr><td style="border:0;padding:2px 6px;font-family:monospace;font-size:12px;color:#6b7280;direction:ltr;white-space:nowrap">{{ l.item.code }}</td><td style="border:0;padding:2px 6px">{{ l.item.name }}</td><td style="border:0;padding:2px 6px;white-space:nowrap;text-align:left"><b>{{ fmt(l.qty) }}</b> {{ l.item.uom or '' }}</td></tr>{% endfor %}</table></td>
 <td class="n">{{ fmt(r.lines|sum(attribute='total')) }}</td><td>{% if r.attachment %}<a href="{{ att_url(r.attachment) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">لا يوجد</td></tr>{% endfor %}
 </table></div></div>
