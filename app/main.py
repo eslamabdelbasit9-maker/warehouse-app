@@ -41,6 +41,12 @@ T.env.globals.update(fmt=S.fmt, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES)
 
+def _att_url(a):
+    return a if a and a.startswith("http") else f"/files/{a}"
+
+
+T.env.globals["att_url"] = _att_url
+
 ALLOWED_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".xlsx", ".xls", ".docx", ".doc"}
 DIESEL_CODE = "RM-DSL"
 
@@ -322,8 +328,8 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
         qry = qry.filter(Req.requester_id == user.id)
     if q.strip():
         like = f"%{q.strip()}%"
-        qry = qry.filter(or_(Req.req_no.like(like), Req.reason.like(like), Req.requester_name.like(like),
-                             Req.lines.any(RequestLine.item.has(or_(Item.name.like(like), Item.code.like(like))))))
+        qry = qry.filter(or_(Req.req_no.ilike(like), Req.reason.ilike(like), Req.requester_name.ilike(like),
+                             Req.lines.any(RequestLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
     total = qry.count()
     per = 50
     rows = qry.order_by(Req.work_date.desc(), Req.id.desc()).offset((page - 1) * per).limit(per).all()
@@ -546,7 +552,7 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
         it = items.get(iid)
         if not it or it.category != "spare":
             continue
-        if q and q not in it.name and q.lower() not in it.code.lower():
+        if q and q.strip().lower() not in it.name.lower() and q.strip().lower() not in it.code.lower():
             continue
         if only == "zero" and r["cur"] > 0:
             continue
@@ -588,11 +594,37 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
 
 # ---------------- الوارد ----------------
 @app.get("/receipts", response_class=HTMLResponse)
-def receipts(request: Request, site: str | None = None, db: Session = Depends(get_db),
+def receipts(request: Request, site: str | None = None, q: str = "", db: Session = Depends(get_db),
              user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
-    rows = db.query(Receipt).filter(Receipt.site_id == sel.id).order_by(Receipt.date.desc(), Receipt.id.desc()).limit(300).all()
-    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows)
+    qry = db.query(Receipt).filter(Receipt.site_id == sel.id)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(Receipt.invoice_no.ilike(like), Receipt.supplier.ilike(like),
+                             Receipt.lines.any(ReceiptLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
+    rows = qry.order_by(Receipt.date.desc(), Receipt.id.desc()).limit(500).all()
+    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q)
+
+
+@app.post("/receipts/{rid}/attach")
+async def receipt_attach(rid: int, request: Request, db: Session = Depends(get_db),
+                         user: User = Depends(require("storekeeper"))):
+    rec = db.get(Receipt, rid)
+    if not rec or rec.site_id not in user.site_ids(db):
+        raise Forbidden()
+    form = await request.form()
+    try:
+        key = save_upload(db, form.get("file"))
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/receipts/{rid}")
+    if not key:
+        flash(request, "اختر ملف الفاتورة", "err")
+        return back(f"/receipts/{rid}")
+    rec.attachment = key
+    db.commit()
+    flash(request, "تم رفع الفاتورة")
+    return back(f"/receipts/{rid}")
 
 
 @app.get("/receipts/new", response_class=HTMLResponse)
