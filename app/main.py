@@ -950,6 +950,78 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
     return back("/admin/import")
 
 
+# ---------------- رفع الفواتير بالجملة ----------------
+def _inv_norm(x):
+    import re as _re
+    return _re.sub(r"[^0-9a-z\u0600-\u06ff]", "", str(x or "").lower()).lstrip("0")
+
+
+def _inv_tokens(name):
+    import re as _re
+    stem = Path(name).stem
+    return {_inv_norm(t) for t in _re.split(r"[\s_\-–—]+", stem) if _inv_norm(t)} | {_inv_norm(stem)}
+
+
+@app.get("/admin/invoices", response_class=HTMLResponse)
+def admin_invoices(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    sites = user_sites(db, user)
+    stats = []
+    for s in sites:
+        total = db.query(Receipt).filter(Receipt.site_id == s.id).count()
+        inside = db.query(Receipt).filter(Receipt.site_id == s.id, Receipt.attachment.isnot(None),
+                                          ~Receipt.attachment.like("http%")).count()
+        stats.append((s, total, inside))
+    return render(request, "admin_invoices.html", user, sites=sites, stats=stats, result=None)
+
+
+@app.post("/admin/invoices", response_class=HTMLResponse)
+async def admin_invoices_post(request: Request, db: Session = Depends(get_db),
+                              user: User = Depends(require("storekeeper"))):
+    form = await request.form()
+    sites = user_sites(db, user)
+    try:
+        sid = int(form.get("site") or 0)
+    except ValueError:
+        sid = 0
+    site = next((s for s in sites if s.id == sid), None)
+    if not site:
+        raise Forbidden()
+    recs = [r for r in db.query(Receipt).filter(Receipt.site_id == site.id).all() if r.invoice_no]
+    by_inv = {}
+    for r in recs:
+        by_inv.setdefault(_inv_norm(r.invoice_no), []).append(r)
+    matched, unmatched, errors = [], [], []
+    for f in form.getlist("files"):
+        if not getattr(f, "filename", ""):
+            continue
+        toks = _inv_tokens(f.filename)
+        hits = [k for k in by_inv if k and k in toks]
+        if not hits:  # أرقام طويلة موجودة جوه اسم الملف
+            flat = _inv_norm(Path(f.filename).stem)
+            hits = [k for k in by_inv if len(k) >= 6 and k in flat]
+        if not hits:
+            unmatched.append(f.filename)
+            continue
+        key = max(hits, key=len)
+        try:
+            att = save_upload(db, f)
+        except S.BusinessError as e:
+            errors.append(f"{f.filename}: {e}")
+            continue
+        for r in by_inv[key]:
+            r.attachment = att
+        matched.append((f.filename, by_inv[key][0].invoice_no, len(by_inv[key])))
+    db.commit()
+    stats = []
+    for s in sites:
+        total = db.query(Receipt).filter(Receipt.site_id == s.id).count()
+        inside = db.query(Receipt).filter(Receipt.site_id == s.id, Receipt.attachment.isnot(None),
+                                          ~Receipt.attachment.like("http%")).count()
+        stats.append((s, total, inside))
+    return render(request, "admin_invoices.html", user, sites=sites, stats=stats,
+                  result=dict(site=site, matched=matched, unmatched=unmatched, errors=errors))
+
+
 @app.get("/admin/mail", response_class=HTMLResponse)
 def admin_mail(request: Request, show: int | None = None, db: Session = Depends(get_db),
                user: User = Depends(require("admin"))):
