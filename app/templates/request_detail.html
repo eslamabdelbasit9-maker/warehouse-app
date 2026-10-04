@@ -1,20 +1,21 @@
 {% extends "base.html" %}
+{% from "_issued.html" import issued_th, issued_td %}
 {% block body %}
 <h1>الطلب {{ r.req_no }}</h1>
 <div class="card">
   {% include "_req_head.html" %}
   {% if r.status=='pending' %}<p class="muted">المعتمد الحالي: {% for u in approvers %}{{ u.name }}{{ '، ' if not loop.last }}{% endfor %}</p>{% endif %}
   <div class="tw"><table class="t">
-    <tr><th>#</th><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th>
-      {% if r.type=='raw' %}<th>نوع الجهة</th><th>الجهة / الغرض</th>{% else %}<th class="n">سعر الوحدة</th><th class="n">القيمة</th>{% endif %}
+    <tr><th>#</th><th>الكود</th><th>الصنف</th><th class="n">الكمية المطلوبة</th><th>الوحدة</th>
+      {% if r.type=='raw' %}<th>نوع الجهة</th><th>الجهة / الغرض</th>{% else %}{{ issued_th() }}<th class="n">سعر الوحدة</th><th class="n">القيمة</th>{% endif %}
       <th>الحالة</th></tr>
     {% for l in r.lines %}<tr>
       <td>{{ loop.index }}</td><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
       {% if r.type=='raw' %}<td>{{ l.entity_type or ('ديزل' if l.diesel_purpose else '') }}</td><td>{{ l.entity_name or l.diesel_purpose or '' }}</td>
-      {% else %}<td class="n">{{ fmt(l.unit_cost) }}</td><td class="n">{{ fmt(l.value) }}</td>{% endif %}
+      {% else %}{{ issued_td(l, st, iss) }}<td class="n">{{ fmt(l.unit_cost) }}</td><td class="n">{{ fmt(l.value) }}</td>{% endif %}
       <td><span class="st st-{{ l.status }}">{{ LINE_STATUS[l.status] }}{% if l.rejected_stage %} ({{ STAGES[l.rejected_stage] }}){% endif %}</span></td></tr>
     {% endfor %}
-    {% if r.type=='spare' and r.status in ('approved','partial') %}<tr><td colspan="6"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(r.total_value) }}</b></td><td></td></tr>{% endif %}
+    {% if r.type=='spare' and r.status in ('approved','partial') %}<tr><td colspan="9"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(r.total_value) }}</b></td><td></td></tr>{% endif %}
   </table></div>
   {% set notes = r.decisions|selectattr('comment')|list %}
   {% if notes %}<h2 style="margin-top:14px">ملاحظات المعتمدين</h2><ul>

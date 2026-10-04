@@ -70,6 +70,32 @@ def stock_table(db: Session, site_id: int, item_ids=None):
     return t
 
 
+def issued_summary(db: Session, site_id: int, item_ids, ref_date, exclude_request_id=None):
+    """المنصرف المعتمد من كل صنف في الموقع خلال شهر وسنة ref_date.
+    يرجع dict[item_id] = {m_qty, m_n, y_qty, y_n} (n = عدد الطلبات)."""
+    from datetime import date as _date
+    out = defaultdict(lambda: dict(m_qty=0.0, m_n=0, y_qty=0.0, y_n=0))
+    item_ids = list(item_ids or [])
+    if not item_ids:
+        return out
+    q = (db.query(RequestLine.item_id, RequestLine.qty, Request.id, Request.work_date).join(Request)
+         .filter(Request.site_id == site_id, Request.type == "spare", Request.status.in_(["approved", "partial"]),
+                 RequestLine.status == "approved", RequestLine.item_id.in_(item_ids),
+                 Request.work_date >= _date(ref_date.year, 1, 1), Request.work_date <= _date(ref_date.year, 12, 31)))
+    if exclude_request_id:
+        q = q.filter(Request.id != exclude_request_id)
+    m_reqs, y_reqs = defaultdict(set), defaultdict(set)
+    for iid, qty, rid, d in q:
+        out[iid]["y_qty"] += qty or 0
+        y_reqs[iid].add(rid)
+        if d.month == ref_date.month:
+            out[iid]["m_qty"] += qty or 0
+            m_reqs[iid].add(rid)
+    for iid in out:
+        out[iid]["m_n"], out[iid]["y_n"] = len(m_reqs[iid]), len(y_reqs[iid])
+    return out
+
+
 # ---------------- الطلبات ----------------
 def next_req_no(db: Session, rtype: str, site: Site, year: int):
     prefix = f"{'SP' if rtype == 'spare' else 'RM'}-{site.code}-{year}-"

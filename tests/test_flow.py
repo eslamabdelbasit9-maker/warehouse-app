@@ -300,3 +300,48 @@ def test_approve_from_email_link(env):
     db = SessionLocal()
     assert db.get(Request, rid).status == "rejected"
     db.close()
+
+
+def test_issued_month_year_shown(env):
+    from datetime import date
+    db = SessionLocal()
+    site = db.get(Site, env["site"])
+    it = Item(code="SP_ISS", name="فلتر هواء", uom="قطعة")
+    db.add(it)
+    db.flush()
+    db.add(OpeningBalance(site_id=site.id, item_id=it.id, qty=20, value=200))
+    db.commit()
+    iid = it.id
+    db.close()
+    c = TestClient(app)
+
+    def new_req(qty, d):
+        login(c, env, "requester@example.com")
+        r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "x",
+                                                "work_date": d, "item_id": [iid], "qty": [qty]}, follow_redirects=False)
+        return int(r.headers["location"].rsplit("/", 1)[1])
+
+    def approve_all(rid):
+        for who in ("eng.crusher@example.com", "prod.manager@example.com", "final@example.com"):
+            login(c, env, who)
+            db = SessionLocal()
+            lid = db.get(Request, rid).lines[0].id
+            db.close()
+            c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
+
+    today = date.today()
+    other_month = date(today.year, 1 if today.month != 1 else 2, 1)
+    approve_all(new_req("3", today.isoformat()))
+    approve_all(new_req("2", other_month.isoformat()))
+    rid = new_req("1", today.isoformat())
+    db = SessionLocal()
+    s = S.issued_summary(db, env["site"], [iid], today, exclude_request_id=rid)[iid]
+    db.close()
+    assert (s["m_qty"], s["m_n"], s["y_qty"], s["y_n"]) == (3, 1, 5, 2)
+    login(c, env, "eng.crusher@example.com")
+    page = c.get(f"/approvals/{rid}").text
+    assert "منصرف الشهر" in page and "منصرف السنة" in page and "(2 طلب)" in page
+    login(c, env, "requester@example.com")
+    assert "منصرف السنة" in c.get(f"/requests/{rid}").text
+    api = {i["id"]: i for i in c.get(f"/api/stock?site={env['site']}").json()}[iid]
+    assert api["y_qty"] == 5 and api["m_qty"] == 3

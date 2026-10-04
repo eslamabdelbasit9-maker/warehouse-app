@@ -17,7 +17,7 @@
   <h2 style="margin-top:16px">الأصناف</h2>
   <datalist id="items"></datalist>
   <div class="tw"><table class="t lines" id="lines">
-    <tr><th style="width:45%">الصنف (اكتب الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th style="width:130px">الكمية</th><th></th></tr>
+    <tr><th style="width:38%">الصنف (اكتب الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th>منصرف الشهر</th><th>منصرف السنة</th><th style="width:120px">الكمية المطلوبة</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
   <button class="btn">إرسال للاعتماد</button>
@@ -33,13 +33,15 @@ fetch('/api/stock?site={{ sel.id }}').then(r => r.json()).then(d => {
 function addRow() {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td><input list="items" class="it" placeholder="ابحث..." autocomplete="off"><input type="hidden" name="item_id"></td>
-    <td class="uom"></td><td class="n av"></td><td><input name="qty" type="number" step="any" min="0"></td>
+    <td class="uom"></td><td class="n av"></td><td class="mq" style="white-space:nowrap"></td><td class="yq" style="white-space:nowrap"></td><td><input name="qty" type="number" step="any" min="0"></td>
     <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
   document.getElementById('lines').appendChild(tr);
   tr.querySelector('.it').addEventListener('input', e => {
     const i = BY[e.target.value]; const h = tr.querySelector('[name=item_id]');
     h.value = i ? i.id : ''; tr.querySelector('.uom').textContent = i ? i.uom : '';
     const av = tr.querySelector('.av'); av.textContent = i ? i.available : ''; av.className = 'n av' + (i && i.available <= 0 ? ' low' : '');
+    tr.querySelector('.mq').textContent = i ? `${i.m_qty} (${i.m_n} طلب)` : '';
+    tr.querySelector('.yq').textContent = i ? `${i.y_qty} (${i.y_n} طلب)` : '';
   });
 }
 addRow(); addRow(); addRow();

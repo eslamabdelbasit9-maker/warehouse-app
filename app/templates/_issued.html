@@ -1,0 +1,6 @@
+{# أعمدة الرصيد والمنصرف خلال الشهر/السنة لصنف في طلب قطع غيار #}
+{% macro issued_th() %}<th class="n">الرصيد الحالي</th><th>منصرف الشهر</th><th>منصرف السنة</th>{% endmacro %}
+{% macro issued_td(l, st, iss) %}{% set s = st.get(l.item_id) %}{% set i = iss.get(l.item_id) %}
+<td class="n {{ 'low' if (s.cur if s else 0) < l.qty and l.status == 'pending' }}">{{ fmt(s.cur if s else 0) }}</td>
+<td style="white-space:nowrap">{{ fmt(i.m_qty if i else 0) }} <span class="muted">({{ i.m_n if i else 0 }} طلب)</span></td>
+<td style="white-space:nowrap">{{ fmt(i.y_qty if i else 0) }} <span class="muted">({{ i.y_n if i else 0 }} طلب)</span></td>{% endmacro %}

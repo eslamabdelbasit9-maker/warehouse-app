@@ -308,8 +308,14 @@ def api_stock(site: int, db: Session = Depends(get_db), user: User = Depends(cur
         raise Forbidden()
     st = S.stock_table(db, site)
     items = db.query(Item).filter(Item.category == "spare", Item.active.is_(True)).order_by(Item.code).all()
+    iss = S.issued_summary(db, site, [i.id for i in items], date.today())
     return JSONResponse([{"id": i.id, "code": i.code, "name": i.name, "uom": i.uom,
-                          "available": round(st[i.id]["available"], 3) if i.id in st else 0} for i in items])
+                          "available": round(st[i.id]["available"], 3) if i.id in st else 0,
+                          "cur": round(st[i.id]["cur"], 3) if i.id in st else 0,
+                          "m_qty": round(iss[i.id]["m_qty"], 3) if i.id in iss else 0,
+                          "m_n": iss[i.id]["m_n"] if i.id in iss else 0,
+                          "y_qty": round(iss[i.id]["y_qty"], 3) if i.id in iss else 0,
+                          "y_n": iss[i.id]["y_n"] if i.id in iss else 0} for i in items])
 
 
 # ---------------- الطلبات ----------------
@@ -426,7 +432,8 @@ def request_detail(rid: int, request: Request, db: Session = Depends(get_db), us
     if not req or not can_view_request(db, user, req):
         raise Forbidden()
     approvers = S.approvers_for(db, req, req.current_stage) if req.status == "pending" else []
-    return render(request, "request_detail.html", user, r=req, approvers=approvers,
+    st, iss = _spare_ctx(db, req)
+    return render(request, "request_detail.html", user, r=req, approvers=approvers, st=st, iss=iss,
                   can_approve=S.can_approve(db, user, req),
                   can_cancel=req.status == "pending" and req.requester_id == user.id and not req.decisions)
 
@@ -442,6 +449,15 @@ def request_cancel(rid: int, request: Request, db: Session = Depends(get_db), us
 
 
 # ---------------- الاعتماد ----------------
+def _spare_ctx(db, req):
+    """الرصيد + المنصرف خلال شهر وسنة الطلب لكل صنف (لطلبات قطع الغيار)."""
+    if req.type != "spare":
+        return {}, {}
+    ids = [l.item_id for l in req.lines]
+    return (S.stock_table(db, req.site_id, ids),
+            S.issued_summary(db, req.site_id, ids, req.work_date or date.today(), exclude_request_id=req.id))
+
+
 @app.get("/approvals", response_class=HTMLResponse)
 def approvals(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
     rows = [r for r in db.query(Req).filter(Req.status == "pending").order_by(Req.created_at).all()
@@ -461,8 +477,8 @@ def approval_page(rid: int, request: Request, db: Session = Depends(get_db), use
             flash(request, "هذا الطلب ليس بانتظار اعتمادك الآن (تم البت فيه أو في مرحلة أخرى)", "err")
             return back(f"/requests/{rid}")
         raise Forbidden()
-    st = S.stock_table(db, req.site_id, [l.item_id for l in req.lines]) if req.type == "spare" else {}
-    return render(request, "approval.html", user, r=req, st=st)
+    st, iss = _spare_ctx(db, req)
+    return render(request, "approval.html", user, r=req, st=st, iss=iss)
 
 
 def _apply_decision(request, db, req, user, form):
@@ -511,8 +527,8 @@ def _token_ctx(db, token):
 def _token_page(request, db, req, approver, token, do="", msg=None, kind="ok"):
     if msg:
         return render(request, "approval_done.html", None, r=req, approver=approver, msg=msg, kind=kind)
-    st = S.stock_table(db, req.site_id, [l.item_id for l in req.lines]) if req.type == "spare" else {}
-    return render(request, "approval.html", None, r=req, st=st, approver=approver, token=token, do=do)
+    st, iss = _spare_ctx(db, req)
+    return render(request, "approval.html", None, r=req, st=st, iss=iss, approver=approver, token=token, do=do)
 
 
 @app.get("/a/{token}", response_class=HTMLResponse)
