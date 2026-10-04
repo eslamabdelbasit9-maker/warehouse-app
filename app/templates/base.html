@@ -32,5 +32,15 @@
 {% block body %}{% endblock %}
 </main>
 {% block scripts %}{% endblock %}
+<script>
+document.querySelectorAll('input[data-live]').forEach(function(inp){
+  var t=document.querySelector(inp.dataset.live); if(!t) return;
+  var norm=function(x){return (x||'').toLowerCase().replace(/[\u200e\u200f\u202a-\u202e]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');};
+  inp.addEventListener('input',function(){
+    var q=norm(inp.value.trim());
+    t.querySelectorAll('tr').forEach(function(tr,i){ if(tr.querySelector('th')) return; tr.hidden = q && norm(tr.textContent).indexOf(q)<0; });
+  });
+});
+</script>
 </body>
 </html>
