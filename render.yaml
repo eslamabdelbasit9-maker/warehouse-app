@@ -21,6 +21,8 @@ services:
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
         sync: false
+      - key: EXPORT_KEY            # مفتاح روابط Power BI
+        generateValue: true
       - key: MAIL_MODE
         value: brevo
       - key: MAIL_SENDER           # الإيميل المؤكَّد في Brevo
