@@ -5,7 +5,7 @@
   <div class="meta">
     <div><b>الموقع</b>{{ r.site.name }}</div><div><b>المورد</b>{{ r.supplier or '-' }}</div>
     <div><b>رقم الفاتورة</b>{{ r.invoice_no or '-' }}</div><div><b>سجّله</b>{{ r.created_by.name if r.created_by else '-' }}</div>
-    <div><b>المرفق</b>{% if r.attachment %}<a href="/files/{{ r.attachment }}" target="_blank">عرض المرفق</a>{% else %}-{% endif %}</div>
+    <div><b>الفاتورة</b>{% if r.attachment %}<a href="{{ att_url(r.attachment) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% else %}-{% endif %}</div>
   </div>
   <div class="tw" style="margin-top:10px"><table class="t">
     <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th><th class="n">سعر الوحدة</th><th class="n">الإجمالي</th></tr>
@@ -14,4 +14,10 @@
     <tr><td colspan="5"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(r.lines|sum(attribute='total')) }}</b></td></tr>
   </table></div>
 </div>
+{% if user.has('storekeeper') %}
+<form class="card noprint" method="post" action="/receipts/{{ r.id }}/attach" enctype="multipart/form-data">
+  <div class="meta"><div class="f"><label>{{ 'استبدال الفاتورة' if r.attachment else 'رفع الفاتورة' }} (PDF أو صورة — حتى 10 ميجا)</label>
+  <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required></div></div>
+  <button class="btn" style="margin-top:10px">رفع</button>
+</form>{% endif %}
 {% endblock %}
