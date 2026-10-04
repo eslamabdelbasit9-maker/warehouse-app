@@ -1006,3 +1006,69 @@ def export_custody(site: str | None = None, db: Session = Depends(get_db), user:
     h = ["الرقم الوظيفي", "اسم الموظف", "النوع", "البند", "الكمية", "الرقم التسلسلي", "تاريخ التسليم", "سلّمها",
          "تاريخ الإرجاع", "الحالة عند الإرجاع", "ملاحظات"]
     return _send_xlsx(_xlsx(h, rows, "العهد"), f"عهد_{sel.name}.xlsx")
+
+
+# ---------------- روابط Power BI (CSV) ----------------
+import csv as _csv
+import hmac as _hmac
+
+
+def _csv_response(head, rows, name):
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    w = _csv.writer(buf)
+    w.writerow(head)
+    w.writerows(rows)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition": f'inline; filename="{name}.csv"'})
+
+
+@app.get("/export/{table}.csv")
+def export_csv(table: str, key: str = "", db: Session = Depends(get_db)):
+    if not settings.EXPORT_KEY or not _hmac.compare_digest(key, settings.EXPORT_KEY):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    st_req = {"pending": "قيد الاعتماد", "approved": "معتمد نهائي", "partial": "معتمد جزئياً",
+              "rejected": "مرفوض", "cancelled": "ملغي"}
+    st_line = {"pending": "قيد الاعتماد", "approved": "معتمد نهائي", "rejected": "مرفوض"}
+    if table == "issues":
+        q = (db.query(RequestLine, Req).join(Req, RequestLine.request_id == Req.id)
+             .order_by(Req.work_date, Req.id, RequestLine.id))
+        rows = []
+        for l, r in q:
+            rows.append([r.site.name, r.req_no, "قطع غيار" if r.type == "spare" else "مواد خام",
+                         r.work_date.isoformat() if r.work_date else "", r.unit.name if r.unit else "",
+                         l.item.code, l.item.name, l.item.uom or "", l.qty, l.entity_type or "", l.entity_name or "",
+                         l.diesel_purpose or "", r.requester_display, r.reason or "",
+                         st_line.get(l.status, l.status), st_req.get(r.status, r.status), r.current_stage,
+                         l.unit_cost if l.unit_cost is not None else "", l.value if l.value is not None else ""])
+        head = ["المستودع", "رقم الطلب", "نوع الطلب", "التاريخ", "الوحدة", "كود الصنف", "اسم الصنف", "وحدة القياس",
+                "الكمية", "نوع الجهة", "الجهة", "بند الديزل", "طالب الصرف", "السبب", "حالة الصنف", "حالة الطلب",
+                "المرحلة", "سعر الوحدة", "القيمة"]
+        return _csv_response(head, rows, "issues")
+    if table == "stock":
+        rows = []
+        items = {i.id: i for i in db.query(Item)}
+        for site in db.query(Site).order_by(Site.id):
+            last = dict(db.query(RequestLine.item_id, func.max(Req.work_date)).join(Req)
+                        .filter(Req.site_id == site.id, RequestLine.status == "approved", Req.type == "spare")
+                        .group_by(RequestLine.item_id).all())
+            for iid, t in S.stock_table(db, site.id).items():
+                it = items.get(iid)
+                if not it:
+                    continue
+                rows.append([site.name, it.code, it.name, it.uom or "", round(t["open_qty"], 4), round(t["in_qty"], 4),
+                             round(t["out_qty"], 4), round(t["pending_qty"], 4), round(t["cur"], 4),
+                             round(t["avg"], 4), round(t["value"], 2),
+                             last[iid].isoformat() if last.get(iid) else ""])
+        head = ["المستودع", "كود الصنف", "اسم الصنف", "وحدة القياس", "الرصيد الافتتاحي", "إجمالي الوارد",
+                "المنصرف المعتمد", "تحت الاعتماد", "الرصيد الحالي", "متوسط السعر", "قيمة الرصيد", "آخر تاريخ صرف"]
+        return _csv_response(head, rows, "stock")
+    if table == "receipts":
+        q = db.query(ReceiptLine, Receipt).join(Receipt).order_by(Receipt.date, Receipt.id)
+        rows = [[r.site.name, r.date.isoformat() if r.date else "", r.invoice_no or "", r.supplier or "",
+                 l.item.code, l.item.name, l.qty, l.unit_price, round((l.qty or 0) * (l.unit_price or 0), 2)]
+                for l, r in q]
+        head = ["المستودع", "التاريخ", "رقم الفاتورة", "المورد", "كود الصنف", "اسم الصنف", "الكمية", "سعر الوحدة",
+                "الإجمالي"]
+        return _csv_response(head, rows, "receipts")
+    return JSONResponse({"error": "unknown table"}, status_code=404)
