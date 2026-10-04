@@ -3,19 +3,63 @@
 <h1>أرصدة قطع الغيار — {{ sel.name }}</h1>
 <form class="filters card noprint" method="get">
   {% include "_site_pick.html" %}
-  <div class="f"><label>بحث بالصنف أو الكود</label><input name="q" value="{{ q }}" data-live="#stbl" placeholder="اكتب جزء من الاسم أو الكود"></div>
-  <div class="f"><label>عرض</label><select name="only"><option value="">الكل</option>
-    <option value="has" {{ 'selected' if only=='has' }}>له رصيد</option><option value="zero" {{ 'selected' if only=='zero' }}>رصيده صفر</option></select></div>
-  <button class="btn">بحث</button><span class="right"></span>
-  <a class="btn sec" href="/export/stock.xlsx?site={{ sel.id }}">تصدير Excel</a>
 </form>
-<div class="card"><div class="muted">{{ rows|length }} صنف — قيمة الرصيد: <b>{{ fmt(total_value) }}</b></div><div class="tw"><table class="t" id="stbl">
-<tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الموقع</th><th class="n">افتتاحي</th><th class="n">وارد</th><th class="n">منصرف</th>
-<th class="n">الرصيد الحالي</th><th class="n">قيد الاعتماد</th><th class="n">متوسط السعر</th><th class="n">قيمة الرصيد</th></tr>
-{% for it, r in rows %}<tr><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.code }}</a></td><td>{{ it.name }}</td><td>{{ it.uom }}</td><td>{{ r.location or '' }}</td>
-<td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{{ fmt(r.out_qty) }}</td>
-<td class="n {{ 'low' if r.cur <= 0 }}">{{ fmt(r.cur) }}</td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
-<td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
-{% else %}<tr><td colspan="11" class="muted">لا يوجد</td></tr>{% endfor %}
-</table></div></div>
+<div class="card">
+  <div class="filters" style="margin-bottom:8px">
+    <div class="muted"><span id="st-n">{{ rows|length }}</span> صنف — قيمة الرصيد: <b id="st-v">{{ fmt(total_value) }}</b></div>
+    <span class="right"></span>
+    <a class="btn sec sm noprint" href="#" id="st-clear" hidden>مسح البحث</a>
+    <a class="btn sec sm noprint" href="/export/stock.xlsx?site={{ sel.id }}">تصدير Excel</a>
+  </div>
+  <div class="tw sticky"><table class="t" id="stbl">
+  <thead>
+  <tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الموقع</th><th class="n">افتتاحي</th><th class="n">وارد</th><th class="n">منصرف</th>
+  <th class="n">الرصيد الحالي</th><th class="n">قيد الاعتماد</th><th class="n">متوسط السعر</th><th class="n">قيمة الرصيد</th></tr>
+  <tr class="colf noprint">
+    <th><input data-col="0" placeholder="بحث بالكود"></th>
+    <th><input data-col="1" placeholder="بحث بالصنف"></th>
+    <th><input data-col="2" placeholder="الوحدة"></th>
+    <th><input data-col="3" placeholder="الموقع"></th>
+    <th></th><th></th><th></th>
+    <th><select id="st-only"><option value="">الكل</option>
+      <option value="has" {{ 'selected' if only=='has' }}>له رصيد</option><option value="zero" {{ 'selected' if only=='zero' }}>رصيده صفر</option></select></th>
+    <th></th><th></th><th></th>
+  </tr>
+  </thead>
+  <tbody>
+  {% for it, r in rows %}<tr data-cur="{{ r.cur }}" data-val="{{ r.value }}"><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.code }}</a></td><td>{{ it.name }}</td><td>{{ it.uom }}</td><td>{{ r.location or '' }}</td>
+  <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{{ fmt(r.out_qty) }}</td>
+  <td class="n {{ 'low' if r.cur <= 0 }}">{{ fmt(r.cur) }}</td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
+  <td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
+  {% else %}<tr><td colspan="11" class="muted">لا يوجد</td></tr>{% endfor %}
+  </tbody>
+  </table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var tbl=document.getElementById('stbl'), inputs=tbl.querySelectorAll('[data-col]'), only=document.getElementById('st-only');
+  var clear=document.getElementById('st-clear');
+  var norm=function(x){return (x||'').toLowerCase().replace(/[‎‏‪-‮]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').trim();};
+  var fmt=function(n){return n.toLocaleString('en-US',{maximumFractionDigits:2});};
+  function apply(){
+    var fs=[].map.call(inputs,function(i){return [+i.dataset.col, norm(i.value)];}).filter(function(f){return f[1];});
+    var o=only.value, n=0, v=0;
+    tbl.querySelectorAll('tbody tr[data-cur]').forEach(function(tr){
+      var c=tr.children, cur=+tr.dataset.cur;
+      var ok=fs.every(function(f){return norm(c[f[0]].textContent).indexOf(f[1])>=0;})
+        && !(o==='has' && cur<=0) && !(o==='zero' && cur>0);
+      tr.hidden=!ok; if(ok){n++; v+=+tr.dataset.val;}
+    });
+    document.getElementById('st-n').textContent=n;
+    document.getElementById('st-v').textContent=fmt(v);
+    clear.hidden=!(fs.length||o);
+  }
+  inputs.forEach(function(i){i.addEventListener('input',apply);});
+  only.addEventListener('change',apply);
+  clear.addEventListener('click',function(e){e.preventDefault(); inputs.forEach(function(i){i.value='';}); only.value=''; apply();});
+  apply();
+})();
+</script>
 {% endblock %}

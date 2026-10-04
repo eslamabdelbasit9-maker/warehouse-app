@@ -1,5 +1,6 @@
 :root{--navy:#0B2A5B;--navy2:#163d7a;--bg:#f3f5f9;--card:#fff;--line:#dfe3ea;--muted:#6b7280;--ok:#0f7b3f;--okbg:#e5f5ec;--err:#b42318;--errbg:#fdecea;--warn:#a15c00;--warnbg:#fff4e0}
 *{box-sizing:border-box}
+[hidden]{display:none !important}
 body{margin:0;font-family:"Tajawal",Tahoma,Arial,sans-serif;background:var(--bg);color:#1f2937;font-size:15px}
 a{color:var(--navy2);text-decoration:none}a:hover{text-decoration:underline}
 header.top{background:var(--navy);color:#fff;display:flex;align-items:center;gap:18px;padding:0 18px;min-height:60px;flex-wrap:wrap}
@@ -45,3 +46,9 @@ textarea{width:100%;min-height:60px}
 .pager{display:flex;gap:6px;margin-top:10px}
 @media (max-width:700px){.g2{grid-template-columns:1fr}header.top{padding:8px 12px}main{padding:0 10px}}
 @media print{header.top,.noprint{display:none}body{background:#fff}.card{border:0}}
+/* جدول برأس ثابت وبحث في رأس كل عمود */
+.tw.sticky{overflow:auto;max-height:calc(100vh - 120px)}
+.tw.sticky thead{position:sticky;top:0;z-index:2}
+table.t tr.colf th{background:#e8edf6;padding:4px}
+table.t tr.colf input,table.t tr.colf select{width:100%;min-width:70px;padding:4px 6px;font-size:13px}
+@media print{.tw.sticky{max-height:none;overflow:visible}}
