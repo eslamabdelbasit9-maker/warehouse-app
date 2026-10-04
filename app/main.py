@@ -577,12 +577,14 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
         moves.append(dict(d=None, kind="رصيد افتتاحي", ref="", inq=ob.qty, outq=0, price=(ob.value / ob.qty) if ob.qty else 0, who=""))
     for rl in (db.query(ReceiptLine).join(Receipt).filter(Receipt.site_id == sel.id, ReceiptLine.item_id == item_id)):
         moves.append(dict(d=rl.receipt.date, kind="وارد", ref=rl.receipt.invoice_no or "", inq=rl.qty, outq=0,
-                          price=rl.unit_price, who=rl.receipt.supplier or "", link=f"/receipts/{rl.receipt_id}"))
+                          price=rl.unit_price, who=rl.receipt.supplier or "", link=f"/receipts/{rl.receipt_id}",
+                          att=rl.receipt.attachment, value=(rl.qty or 0) * (rl.unit_price or 0)))
     for l in (db.query(RequestLine).join(Req).filter(Req.site_id == sel.id, RequestLine.item_id == item_id,
                                                       RequestLine.status == "approved",
                                                       Req.status.in_(["approved", "partial"]))):
         moves.append(dict(d=l.request.work_date, kind="صرف", ref=l.request.req_no, inq=0, outq=l.qty, price=l.unit_cost,
-                          who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}"))
+                          who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}",
+                          value=l.value))
     moves.sort(key=lambda m: (m["d"] is not None, m["d"] or date.min))
     bal = 0
     for m in moves:
