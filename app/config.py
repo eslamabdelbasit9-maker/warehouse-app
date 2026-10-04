@@ -31,6 +31,8 @@ class Settings:
     for _p in ("postgres://", "postgresql://"):
         if DATABASE_URL.startswith(_p):
             DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_p):]
+    # مفتاح روابط Power BI (/export/...csv?key=...) — اتركه فارغاً لإيقاف الروابط
+    EXPORT_KEY = os.getenv("EXPORT_KEY", "")
     UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")))
 
     # تسجيل دخول تجريبي (للتطوير فقط) — يجب أن يكون false في التشغيل الفعلي
