@@ -19,7 +19,7 @@ from app.main import init_db
 from app.models import Item, OpeningBalance, Receipt, ReceiptLine, Request, RequestLine, Site, Unit
 
 UNIT_KIND_GUESS = {"كسارة": "crusher", "خلاطة اسفلت": "asphalt", "خلاطة أسفلت": "asphalt", "خرسانة": "concrete"}
-_MARKS = re.compile("[‎‏‪-‮]")
+_MARKS = re.compile("[\u200e\u200f\u202a-\u202e]")
 
 
 def clean(s):
@@ -99,13 +99,24 @@ def run(path, site_code, site_name):
 
     # 2) الوارد — تجميع حسب (التاريخ، رقم الفاتورة، المورد)
     groups = OrderedDict()
-    for r in table_rows(wb["الوارد"]):
+    links = {}
+    ws_in = wb["الوارد"]
+    head_in = [c.value for c in ws_in[1]]
+    link_col = head_in.index("مرفق الفاتورة") if "مرفق الفاتورة" in head_in else None
+    for cells in ws_in.iter_rows(min_row=2):
+        r = dict(zip(head_in, [c.value for c in cells]))
         if not r.get("كود الصنف"):
             continue
         key = (to_date(r.get("التاريخ")), clean(r.get("رقم الفاتورة")), clean(r.get("المورد")))
         groups.setdefault(key, []).append(r)
+        if link_col is not None and key not in links:
+            c = cells[link_col]
+            url = c.hyperlink.target if c.hyperlink and c.hyperlink.target else c.value
+            if isinstance(url, str) and url.startswith("http"):
+                links[key] = url[:300]
     for (d, inv, sup), rows in groups.items():
-        rec = Receipt(site_id=site.id, date=d or date.today(), invoice_no=inv, supplier=sup)
+        rec = Receipt(site_id=site.id, date=d or date.today(), invoice_no=inv, supplier=sup,
+                      attachment=links.get((d, inv, sup)))
         for r in rows:
             it = item_for(r["كود الصنف"], r.get("اسم الصنف"))
             rec.lines.append(ReceiptLine(item_id=it.id, qty=num(r.get("الكمية")), unit_price=num(r.get("سعر الوحدة"))))
