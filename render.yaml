@@ -23,9 +23,5 @@ services:
         sync: false
       - key: EXPORT_KEY            # مفتاح روابط Power BI
         generateValue: true
-      - key: MAIL_MODE
-        value: brevo
-      - key: MAIL_SENDER           # الإيميل المؤكَّد في Brevo
-        sync: false
-      - key: BREVO_API_KEY
-        sync: false
+      - key: MAIL_MODE             # outbox = الاعتماد من جوه البرنامج والإيميلات تتسجل في سجل الإيميلات بس
+        value: outbox
