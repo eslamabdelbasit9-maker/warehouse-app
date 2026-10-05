@@ -17,7 +17,7 @@ from .auth import (Forbidden, LoginRequired, check_password, current_user, hash_
                    router as auth_router)
 from .config import settings
 from .db import Base, engine, get_db, SessionLocal
-from .models import (CUSTODY_CATEGORIES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
+from .models import (CUSTODY_CATEGORIES, CUSTODY_OLD_NAMES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
                      Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
                      TRANSFER_STATUS, Transfer, TransferLine)
@@ -68,6 +68,8 @@ def init_db():
         for code, name in raw:
             if not db.query(Item).filter(Item.code == code).first():
                 db.add(Item(code=code, name=name, uom="طن", category="raw"))
+        for old_name, new_name in CUSTODY_OLD_NAMES.items():
+            db.query(CustodyRecord).filter(CustodyRecord.category == old_name).update({"category": new_name})
         if not db.query(Item).filter(Item.code == DIESEL_CODE).first():
             db.add(Item(code=DIESEL_CODE, name="ديزل", uom="لتر", category="raw"))
         db.commit()
@@ -806,10 +808,16 @@ def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), u
 
 # ---------------- العهد ----------------
 @app.get("/custody", response_class=HTMLResponse)
-def custody(request: Request, site: str | None = None, q: str = "", state: str = "open",
+def custody(request: Request, site: str | None = None, q: str = "", state: str = "open", cat: str = "",
             db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     qry = db.query(CustodyRecord).filter(CustodyRecord.site_id == sel.id)
+    if cat not in CUSTODY_CATEGORIES:
+        cat = ""
+    counts = dict(db.query(CustodyRecord.category, func.count()).filter(
+        CustodyRecord.site_id == sel.id, CustodyRecord.returned_at.is_(None)).group_by(CustodyRecord.category).all())
+    if cat:
+        qry = qry.filter(CustodyRecord.category == cat)
     if state == "open":
         qry = qry.filter(CustodyRecord.returned_at.is_(None))
     elif state == "returned":
@@ -819,18 +827,20 @@ def custody(request: Request, site: str | None = None, q: str = "", state: str =
         qry = qry.filter(or_(CustodyRecord.employee_no.like(like), CustodyRecord.employee_name.like(like),
                              CustodyRecord.item_name.like(like), CustodyRecord.serial_no.like(like)))
     rows = qry.order_by(CustodyRecord.issued_at.desc(), CustodyRecord.id.desc()).limit(500).all()
-    return render(request, "custody.html", user, sites=sites, sel=sel, rows=rows, q=q, state=state)
+    return render(request, "custody.html", user, sites=sites, sel=sel, rows=rows, q=q, state=state, cat=cat,
+                  counts=counts)
 
 
 @app.get("/custody/new", response_class=HTMLResponse)
-def custody_new(request: Request, site: str | None = None, emp: str = "", db: Session = Depends(get_db),
+def custody_new(request: Request, site: str | None = None, emp: str = "", cat: str = "", db: Session = Depends(get_db),
                 user: User = Depends(require("storekeeper"))):
     sites, sel = pick_site(db, user, site)
     name = ""
     if emp:
         last = db.query(CustodyRecord).filter_by(employee_no=emp).order_by(CustodyRecord.id.desc()).first()
         name = last.employee_name if last else ""
-    return render(request, "custody_new.html", user, sites=sites, sel=sel, today=date.today(), emp=emp, emp_name=name)
+    return render(request, "custody_new.html", user, sites=sites, sel=sel, today=date.today(), emp=emp, emp_name=name,
+                  cat=cat)
 
 
 @app.post("/custody/new")

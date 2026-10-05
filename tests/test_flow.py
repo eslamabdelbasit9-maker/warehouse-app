@@ -169,7 +169,7 @@ def test_custody(env):
     c = TestClient(app)
     login(c, env, "storekeeper@example.com")
     r = c.post("/custody/new", data={"site_id": env["site"], "employee_no": "1234", "employee_name": "أحمد",
-                                     "category": "مهمات سلامة", "item_name": ["خوذة", "حذاء سلامة"], "qty": ["1", "1"],
+                                     "category": "أدوات السلامة", "item_name": ["خوذة", "حذاء سلامة"], "qty": ["1", "1"],
                                      "serial_no": ["", ""]}, follow_redirects=False)
     assert r.status_code == 303
     db = SessionLocal()
@@ -434,3 +434,27 @@ def test_transfer_between_sites(env):
     assert db.get(Transfer, tid2).status == "cancelled"
     assert S.stock_table(db, ids["a"])[ids["it"]]["cur"] == 7
     db.close()
+
+
+def test_custody_categories(env):
+    from datetime import date
+    from app.main import init_db
+    db = SessionLocal()
+    db.add(CustodyRecord(site_id=env["site"], employee_no="E77", employee_name="قديم", category="مهمات سلامة",
+                         item_name="نظارة", qty=1, issued_at=date.today()))
+    db.add(CustodyRecord(site_id=env["site"], employee_no="E78", employee_name="أصل", category="أصول",
+                         item_name="لابتوب", qty=1, issued_at=date.today()))
+    db.commit()
+    db.close()
+    init_db()  # الأسماء القديمة بتتحدّث
+    db = SessionLocal()
+    assert {c.category for c in db.query(CustodyRecord).filter(CustodyRecord.employee_no.in_(["E77", "E78"]))} == \
+        {"أدوات السلامة", "الأصول"}
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    safety = c.get(f"/custody?site={env['site']}&cat=أدوات السلامة").text
+    assert "نظارة" in safety and "لابتوب" not in safety
+    assets = c.get(f"/custody?site={env['site']}&cat=الأصول").text
+    assert "لابتوب" in assets and "نظارة" not in assets
+    assert "selected>أدوات السلامة" in c.get(f"/custody/new?site={env['site']}&cat=أدوات السلامة").text

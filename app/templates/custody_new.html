@@ -7,7 +7,7 @@
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
     <div class="f"><label>الرقم الوظيفي *</label><input name="employee_no" value="{{ emp }}" required></div>
     <div class="f"><label>اسم الموظف *</label><input name="employee_name" value="{{ emp_name }}" required></div>
-    <div class="f"><label>النوع *</label><select name="category">{% for c in CUSTODY_CATEGORIES %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="f"><label>النوع *</label><select name="category">{% for c in CUSTODY_CATEGORIES %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}</select></div>
     <div class="f"><label>تاريخ التسليم</label><input type="date" name="issued_at" value="{{ today }}"></div>
     <div class="f"><label>مرفق (نموذج استلام موقّع)</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc"></div>
   </div>

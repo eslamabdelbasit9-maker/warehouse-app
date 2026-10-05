@@ -36,7 +36,8 @@ REQ_STATUS = {
 LINE_STATUS = {"pending": "قيد الاعتماد", "approved": "معتمد", "rejected": "مرفوض"}
 ENTITY_TYPES = ["مشروع", "عميل"]
 DIESEL_PURPOSES = ["تشغيل", "تسخين"]
-CUSTODY_CATEGORIES = ["أصول", "مهمات سلامة"]
+CUSTODY_CATEGORIES = ["الأصول", "أدوات السلامة"]
+CUSTODY_OLD_NAMES = {"أصول": "الأصول", "مهمات سلامة": "أدوات السلامة"}  # أسماء قديمة تتحدّث تلقائياً
 TRANSFER_STATUS = {"in_transit": "في الطريق", "received": "تم الاستلام", "cancelled": "ملغي"}
 
 
