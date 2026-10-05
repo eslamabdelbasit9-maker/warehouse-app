@@ -713,23 +713,25 @@ def receipt_detail(rid: int, request: Request, db: Session = Depends(get_db), us
 # ---------------- التحويل بين المواقع ----------------
 @app.get("/transfers", response_class=HTMLResponse)
 def transfers(request: Request, site: str | None = None, db: Session = Depends(get_db),
-              user: User = Depends(require("storekeeper"))):
+              user: User = Depends(require("storekeeper", "transfer"))):
     sites, sel = pick_site(db, user, site)
     rows = (db.query(Transfer).filter(or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))
             .order_by((Transfer.status == "in_transit").desc(), Transfer.date.desc(), Transfer.id.desc()).limit(500).all())
     return render(request, "transfers.html", user, sites=sites, sel=sel, rows=rows)
 
 
+# إنشاء التحويل: صلاحية «تحويل بين الفروع» + الربط بالموقع المرسِل فقط (مش لازم الربط بالموقع المستلِم).
+# تأكيد الاستلام: أمين مستودع مربوط بالموقع المستلِم.
 @app.get("/transfers/new", response_class=HTMLResponse)
 def transfer_new(request: Request, site: str | None = None, db: Session = Depends(get_db),
-                 user: User = Depends(require("storekeeper"))):
+                 user: User = Depends(require("transfer"))):
     sites, sel = pick_site(db, user, site)
     targets = db.query(Site).filter(Site.active.is_(True), Site.id != sel.id).order_by(Site.name).all()
     return render(request, "transfer_new.html", user, sites=sites, sel=sel, targets=targets, today=date.today())
 
 
 @app.post("/transfers/new")
-async def transfer_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+async def transfer_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("transfer"))):
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("from_site_id"))
     try:
@@ -763,11 +765,11 @@ def _transfer_for(db, user, tid):
 
 
 @app.get("/transfers/{tid}", response_class=HTMLResponse)
-def transfer_detail(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+def transfer_detail(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper", "transfer"))):
     tr, ids = _transfer_for(db, user, tid)
     return render(request, "transfer_detail.html", user, t=tr,
-                  can_receive=tr.status == "in_transit" and tr.to_site_id in ids,
-                  can_cancel=tr.status == "in_transit" and tr.from_site_id in ids)
+                  can_receive=tr.status == "in_transit" and tr.to_site_id in ids and user.has("storekeeper"),
+                  can_cancel=tr.status == "in_transit" and tr.from_site_id in ids and user.has("transfer"))
 
 
 @app.post("/transfers/{tid}/receive")
@@ -788,7 +790,7 @@ async def transfer_receive(tid: int, request: Request, db: Session = Depends(get
 
 
 @app.post("/transfers/{tid}/cancel")
-def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("transfer"))):
     tr, ids = _transfer_for(db, user, tid)
     if tr.from_site_id not in ids:
         raise Forbidden()

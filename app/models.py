@@ -10,6 +10,7 @@ from .db import Base
 ROLES = {
     "admin": "مدير النظام",
     "storekeeper": "أمين مستودع",
+    "transfer": "تحويل بين الفروع",
     "requester": "طالب صرف",
     "engineer": "مهندس معتمد",
     "manager": "مدير الإنتاج",

@@ -371,6 +371,26 @@ def test_transfer_between_sites(env):
 
     login(c, env, "requester@example.com")
     assert c.get("/transfers", follow_redirects=False).status_code == 403
+    # أمين مستودع من غير صلاحية «تحويل بين الفروع»: يأكد الاستلام بس، ما يعملش تحويل
+    login(c, env, "sk2@example.com")
+    assert c.get("/transfers").status_code == 200
+    assert c.get("/transfers/new", follow_redirects=False).status_code == 403
+    # صلاحية التحويل من غير ما يكون أمين مستودع ولا مربوط بالموقع المستلِم
+    db = SessionLocal()
+    tu = User(email="trf@example.com", name="محوّل", roles="transfer")
+    tu.sites = [db.get(Site, ids["a"])]
+    db.add(tu)
+    db.commit()
+    env["trf@example.com"] = tu.id
+    db.close()
+    login(c, env, "trf@example.com")
+    r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],
+                                       "qty": ["1"]}, follow_redirects=False)
+    tid0 = int(r.headers["location"].rsplit("/", 1)[1])
+    page = c.get(f"/transfers/{tid0}").text
+    assert "إلغاء التحويل" in page and "recv_" not in page   # ما يقدرش يستلم في الموقع التاني
+    assert c.post(f"/transfers/{tid0}/receive", data={}, follow_redirects=False).status_code == 403
+    c.post(f"/transfers/{tid0}/cancel")
 
     login(c, env, "storekeeper@example.com")
     r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],

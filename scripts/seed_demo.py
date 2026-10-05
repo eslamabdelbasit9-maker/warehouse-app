@@ -5,7 +5,7 @@ from app.main import init_db
 from app.models import ApprovalRoute, Site, Unit, User
 
 DEMO = [
-    ("storekeeper@example.com", "أمين المستودع", "storekeeper,requester"),
+    ("storekeeper@example.com", "أمين المستودع", "storekeeper,requester,transfer"),
     ("requester@example.com", "طالب صرف", "requester"),
     ("eng.crusher@example.com", "مهندس الكسارة", "engineer"),
     ("eng.asphalt@example.com", "مهندس الاسفلت", "engineer"),
