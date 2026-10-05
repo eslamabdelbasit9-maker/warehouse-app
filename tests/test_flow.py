@@ -14,7 +14,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.db import SessionLocal  # noqa: E402
 from app.main import app, init_db  # noqa: E402
-from app.models import (CustodyRecord, Item, MailLog, OpeningBalance, Request, Site, Unit, User)  # noqa: E402
+from app.models import (CustodyRecord, Item, MailLog, OpeningBalance, Receipt, ReceiptLine, Request, Site, Transfer, Unit,  # noqa: E402
+                        User)
 from app import services as S  # noqa: E402
 from scripts import seed_demo  # noqa: E402
 
@@ -345,3 +346,71 @@ def test_issued_month_year_shown(env):
     assert "منصرف السنة" in c.get(f"/requests/{rid}").text
     api = {i["id"]: i for i in c.get(f"/api/stock?site={env['site']}").json()}[iid]
     assert api["y_qty"] == 5 and api["m_qty"] == 3
+
+
+def test_transfer_between_sites(env):
+    from datetime import date
+    db = SessionLocal()
+    a = db.get(Site, env["site"])
+    b = Site(code="TB2", name="موقع تجريبي 2")
+    it = Item(code="SP_TRF", name="طرمبة مياه", uom="قطعة")
+    db.add_all([b, it])
+    db.flush()
+    db.add(OpeningBalance(site_id=a.id, item_id=it.id, qty=10, value=1000))  # متوسط 100
+    rec = Receipt(site_id=b.id, date=date.today(), invoice_no="B-1")
+    rec.lines = [ReceiptLine(item_id=it.id, qty=5, unit_price=40)]          # متوسط 40
+    db.add(rec)
+    sk2 = User(email="sk2@example.com", name="أمين موقع 2", roles="storekeeper")
+    sk2.sites = [b]
+    db.add(sk2)
+    db.commit()
+    ids = dict(a=a.id, b=b.id, it=it.id, sk2=sk2.id)
+    db.close()
+    env["sk2@example.com"] = ids["sk2"]
+    c = TestClient(app)
+
+    login(c, env, "requester@example.com")
+    assert c.get("/transfers", follow_redirects=False).status_code == 403
+
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],
+                                       "qty": ["11"]}, follow_redirects=True)
+    assert "أكبر من الرصيد المتاح" in r.text
+    r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],
+                                       "qty": ["4"], "note": "نقص في مكة"}, follow_redirects=False)
+    tid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    t = db.get(Transfer, tid)
+    assert t.status == "in_transit" and t.lines[0].unit_cost == 100 and t.tr_no.startswith("TR-")
+    lid = t.lines[0].id
+    assert S.stock_table(db, ids["a"])[ids["it"]]["cur"] == 6
+    assert S.stock_table(db, ids["b"])[ids["it"]]["cur"] == 5   # لسه ما اتستلمش
+    assert "sk2@example.com" in db.query(MailLog).order_by(MailLog.id.desc()).first().to
+    db.close()
+
+    # أمين الموقع التاني: يشوف التحويل ويأكد الاستلام، وما يقدرش يلغيه
+    login(c, env, "sk2@example.com")
+    assert "تأكيد الاستلام" in c.get("/transfers").text
+    assert c.post(f"/transfers/{tid}/cancel", follow_redirects=False).status_code == 403
+    r = c.post(f"/transfers/{tid}/receive", data={f"recv_{lid}": "3"}, follow_redirects=True)
+    assert "اكتب السبب" in r.text
+    c.post(f"/transfers/{tid}/receive", data={f"recv_{lid}": "3", "note": "قطعة مكسورة"})
+    db = SessionLocal()
+    assert db.get(Transfer, tid).status == "received"
+    sa, sb = S.stock_table(db, ids["a"])[ids["it"]], S.stock_table(db, ids["b"])[ids["it"]]
+    assert sa["cur"] == 7 and sa["avg"] == 100            # الفرق رجع للمرسِل
+    assert sb["cur"] == 8 and sb["avg"] == 62.5           # (5×40 + 3×100) ÷ 8
+    db.close()
+    assert "تحويل وارد" in c.get(f"/stock/{ids['it']}?site={ids['b']}").text
+
+    # الإلغاء قبل الاستلام يرجّع الرصيد
+    login(c, env, "storekeeper@example.com")
+    assert "اتقفل" in c.post(f"/transfers/{tid}/cancel", follow_redirects=True).text
+    r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],
+                                       "qty": ["2"]}, follow_redirects=False)
+    tid2 = int(r.headers["location"].rsplit("/", 1)[1])
+    c.post(f"/transfers/{tid2}/cancel")
+    db = SessionLocal()
+    assert db.get(Transfer, tid2).status == "cancelled"
+    assert S.stock_table(db, ids["a"])[ids["it"]]["cur"] == 7
+    db.close()

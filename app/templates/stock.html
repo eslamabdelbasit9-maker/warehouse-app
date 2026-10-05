@@ -13,14 +13,14 @@
   </div>
   <div class="tw sticky"><table class="t" id="stbl">
   <thead>
-  <tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الموقع</th><th class="n">افتتاحي</th><th class="n">وارد</th><th class="n">منصرف</th>
+  <tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th>الموقع</th><th class="n">افتتاحي</th><th class="n">وارد</th><th class="n">تحويلات</th><th class="n">منصرف</th>
   <th class="n">الرصيد الحالي</th><th class="n">قيد الاعتماد</th><th class="n">متوسط السعر</th><th class="n">قيمة الرصيد</th></tr>
   <tr class="colf noprint">
     <th><input data-col="0" placeholder="بحث بالكود"></th>
     <th><input data-col="1" placeholder="بحث بالصنف"></th>
     <th><input data-col="2" placeholder="الوحدة"></th>
     <th><input data-col="3" placeholder="الموقع"></th>
-    <th></th><th></th><th></th>
+    <th></th><th></th><th></th><th></th>
     <th><select id="st-only"><option value="">الكل</option>
       <option value="has" {{ 'selected' if only=='has' }}>له رصيد</option><option value="zero" {{ 'selected' if only=='zero' }}>رصيده صفر</option></select></th>
     <th></th><th></th><th></th>
@@ -28,10 +28,10 @@
   </thead>
   <tbody>
   {% for it, r in rows %}<tr data-cur="{{ r.cur }}" data-val="{{ r.value }}"><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.code }}</a></td><td>{{ it.name }}</td><td>{{ it.uom }}</td><td>{{ r.location or '' }}</td>
-  <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{{ fmt(r.out_qty) }}</td>
+  <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{% set net = r.tr_in_qty - r.tr_out_qty %}{{ ('+' if net > 0 else '') ~ fmt(net) if net else '' }}</td><td class="n">{{ fmt(r.out_qty) }}</td>
   <td class="n {{ 'low' if r.cur <= 0 }}">{{ fmt(r.cur) }}</td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
   <td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
-  {% else %}<tr><td colspan="11" class="muted">لا يوجد</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="12" class="muted">لا يوجد</td></tr>{% endfor %}
   </tbody>
   </table></div>
 </div>

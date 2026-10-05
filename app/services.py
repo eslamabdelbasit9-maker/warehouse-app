@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .mailer import send_mail
 from .models import (STAGES, ApprovalRoute, Item, LineDecision, OpeningBalance,
-                     Receipt, ReceiptLine, Request, RequestLine, User, Site)
+                     Receipt, ReceiptLine, Request, RequestLine, User, Site, Transfer, TransferLine)
 
 
 class BusinessError(Exception):
@@ -31,7 +31,8 @@ def stock_table(db: Session, site_id: int, item_ids=None):
     """يرجع dict[item_id] = {open_qty, open_val, in_qty, in_val, out_qty, pending_qty, cur, avg, value}
     متوسط التكلفة المرجح = (قيمة الافتتاحي + قيمة الوارد) / (كمية الافتتاحي + كمية الوارد)."""
     t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, in_qty=0.0, in_val=0.0,
-                                 out_qty=0.0, out_val=0.0, pending_qty=0.0, location=None))
+                                 out_qty=0.0, out_val=0.0, pending_qty=0.0, location=None,
+                                 tr_in_qty=0.0, tr_in_val=0.0, tr_out_qty=0.0, tr_out_val=0.0))
     q = db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id)
     if item_ids is not None:
         q = q.filter(OpeningBalance.item_id.in_(item_ids))
@@ -61,10 +62,27 @@ def stock_table(db: Session, site_id: int, item_ids=None):
         elif lstatus == "pending" and rstatus == "pending":
             t[iid]["pending_qty"] += qty or 0
 
+    # التحويلات: الصادر يُخصم من وقت الإرسال (وبعد الاستلام بالكمية المستلمة فقط — الفرق يرجع للمرسِل)،
+    # والوارد يُضاف عند تأكيد الاستلام بتكلفة الإرسال.
+    q = (db.query(TransferLine.item_id, TransferLine.qty, TransferLine.recv_qty, TransferLine.unit_cost,
+                  Transfer.status, Transfer.from_site_id)
+         .join(Transfer).filter(Transfer.status.in_(["in_transit", "received"]),
+                                (Transfer.from_site_id == site_id) | (Transfer.to_site_id == site_id)))
+    if item_ids is not None:
+        q = q.filter(TransferLine.item_id.in_(item_ids))
+    for iid, qty, recv, cost, status, from_id in q:
+        moved = (qty or 0) if status == "in_transit" else (recv or 0)
+        if from_id == site_id:
+            t[iid]["tr_out_qty"] += moved
+            t[iid]["tr_out_val"] += moved * (cost or 0)
+        elif status == "received":
+            t[iid]["tr_in_qty"] += moved
+            t[iid]["tr_in_val"] += moved * (cost or 0)
+
     for r in t.values():
-        base_q = r["open_qty"] + r["in_qty"]
-        r["avg"] = (r["open_val"] + r["in_val"]) / base_q if base_q else 0.0
-        r["cur"] = r["open_qty"] + r["in_qty"] - r["out_qty"]
+        base_q = r["open_qty"] + r["in_qty"] + r["tr_in_qty"]
+        r["avg"] = (r["open_val"] + r["in_val"] + r["tr_in_val"]) / base_q if base_q else 0.0
+        r["cur"] = r["open_qty"] + r["in_qty"] + r["tr_in_qty"] - r["out_qty"] - r["tr_out_qty"]
         r["available"] = r["cur"] - r["pending_qty"]
         r["value"] = r["cur"] * r["avg"]
     return t
@@ -232,6 +250,84 @@ def read_approval_token(token: str):
         return int(d["r"]), int(d["s"]), int(d["u"])
     except (BadSignature, KeyError, TypeError, ValueError):
         return None
+
+
+# ---------------- التحويل بين المواقع ----------------
+def next_transfer_no(db: Session, site: Site, year: int):
+    prefix = f"TR-{site.code}-{year}-"
+    last = db.scalar(select(func.max(Transfer.tr_no)).where(Transfer.tr_no.like(prefix + "%")))
+    n = int(last.rsplit("-", 1)[1]) + 1 if last else 1
+    return f"{prefix}{n:04d}"
+
+
+def create_transfer(db: Session, *, from_site, to_site, user, tr_date, note, lines):
+    """lines: list of dict(item, qty). يُخصم من المرسِل فوراً بمتوسط سعره الحالي."""
+    if not to_site or to_site.id == from_site.id:
+        raise BusinessError("اختر الموقع المحوَّل إليه (غير الموقع المرسِل)")
+    if not lines:
+        raise BusinessError("أضف صنفاً واحداً على الأقل")
+    for l in lines:
+        if l["qty"] is None or l["qty"] <= 0:
+            raise BusinessError(f"الكمية غير صحيحة للصنف «{l['item'].name}»")
+    st = stock_table(db, from_site.id, [l["item"].id for l in lines])
+    need = defaultdict(float)
+    for l in lines:
+        need[l["item"].id] += l["qty"]
+    for l in lines:
+        avail = st[l["item"].id]["available"] if l["item"].id in st else 0
+        if need[l["item"].id] > avail + 1e-9:
+            raise BusinessError(f"الكمية المحوَّلة من «{l['item'].name}» ({fmt(need[l['item'].id])}) "
+                                f"أكبر من الرصيد المتاح في {from_site.name} ({fmt(avail)})")
+    tr = Transfer(tr_no=next_transfer_no(db, from_site, tr_date.year), from_site_id=from_site.id, to_site_id=to_site.id,
+                  date=tr_date, note=(note or "").strip() or None, created_by_id=user.id, status="in_transit")
+    for l in lines:
+        tr.lines.append(TransferLine(item_id=l["item"].id, qty=l["qty"],
+                                     unit_cost=round(st[l["item"].id]["avg"], 4) if l["item"].id in st else 0))
+    db.add(tr)
+    db.commit()
+    _notify_transfer(db, tr, to_site.id, f"تحويل وارد {tr.tr_no} من {from_site.name} — بانتظار تأكيد الاستلام")
+    return tr
+
+
+def receive_transfer(db: Session, tr: Transfer, user, recv: dict, note: str | None):
+    """recv: dict[line_id] = الكمية المستلمة."""
+    if tr.status != "in_transit":
+        raise BusinessError("التحويل ده اتقفل قبل كده")
+    short = False
+    for l in tr.lines:
+        q = recv.get(l.id)
+        if q is None or q < 0 or q > l.qty + 1e-9:
+            raise BusinessError(f"الكمية المستلمة من «{l.item.name}» لازم تكون بين 0 و {fmt(l.qty)}")
+        short = short or q < l.qty - 1e-9
+    if short and not (note or "").strip():
+        raise BusinessError("في نقص في الاستلام — اكتب السبب في الملاحظات")
+    for l in tr.lines:
+        l.recv_qty = recv[l.id]
+    tr.status, tr.received_by_id, tr.received_at = "received", user.id, datetime.now()
+    tr.receive_note = (note or "").strip() or None
+    db.commit()
+    _notify_transfer(db, tr, tr.from_site_id, f"تم استلام التحويل {tr.tr_no} في {tr.to_site.name}")
+
+
+def cancel_transfer(db: Session, tr: Transfer):
+    if tr.status != "in_transit":
+        raise BusinessError("ما ينفعش يتلغي — التحويل اتقفل")
+    tr.status = "cancelled"
+    db.commit()
+
+
+def _notify_transfer(db, tr, site_id, title):
+    to = [u.email for u in db.query(User).filter(User.active.is_(True)).all()
+          if "storekeeper" in u.role_list and site_id in u.site_ids(db)]
+    th = "style='background:#0B2A5B;color:#fff;padding:6px;border:1px solid #ccc'"
+    rows = "".join(f"<tr><td>{escape(l.item.code)}</td><td>{escape(l.item.name)}</td><td>{fmt(l.qty)} {escape(l.item.uom)}</td>"
+                   f"<td>{fmt(l.recv_qty) if l.recv_qty is not None else ''}</td></tr>" for l in tr.lines)
+    body = (f"<p><b>من:</b> {escape(tr.from_site.name)} &nbsp; <b>إلى:</b> {escape(tr.to_site.name)} &nbsp; "
+            f"<b>التاريخ:</b> {tr.date:%Y-%m-%d}</p>"
+            f"<table dir='rtl' style='border-collapse:collapse;font-family:Tahoma;font-size:13px' border='1' cellpadding='6'>"
+            f"<tr><th {th}>الكود</th><th {th}>الصنف</th><th {th}>المُرسَل</th><th {th}>المُستلَم</th></tr>{rows}</table>"
+            f"<p><a href='{settings.BASE_URL}/transfers/{tr.id}'>فتح التحويل</a></p>")
+    send_mail(to, title, _wrap(title, body))
 
 
 # ---------------- الإيميلات ----------------

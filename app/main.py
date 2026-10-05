@@ -19,7 +19,8 @@ from .config import settings
 from .db import Base, engine, get_db, SessionLocal
 from .models import (CUSTODY_CATEGORIES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
-                     Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User)
+                     Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
+                     TRANSFER_STATUS, Transfer, TransferLine)
 
 APP_DIR = Path(__file__).parent
 from contextlib import asynccontextmanager
@@ -39,7 +40,8 @@ app.include_router(auth_router)
 T = Jinja2Templates(directory=APP_DIR / "templates")
 T.env.globals.update(fmt=S.fmt, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
-                     ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES)
+                     ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
+                     TRANSFER_STATUS=TRANSFER_STATUS)
 
 def _att_url(a):
     return a if a and a.startswith("http") else f"/files/{a}"
@@ -91,13 +93,16 @@ def flash(request: Request, msg: str, kind="ok"):
 
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
-    pending_n = 0
+    pending_n = transfer_n = 0
     if user is not None:
         with SessionLocal() as db:
             u = db.get(User, user.id)
             pending_n = sum(1 for r in db.query(Req).filter(Req.status == "pending").all() if S.can_approve(db, u, r))
+            if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
+                transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
+                                                       Transfer.to_site_id.in_(u.site_ids(db))).count()
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "path": request.url.path,
-                                              "pending_n": pending_n, **ctx})
+                                              "pending_n": pending_n, "transfer_n": transfer_n, **ctx})
 
 
 def back(url):
@@ -601,6 +606,19 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
         moves.append(dict(d=l.request.work_date, kind="صرف", ref=l.request.req_no, inq=0, outq=l.qty, price=l.unit_cost,
                           who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}",
                           value=l.value))
+    for tl in (db.query(TransferLine).join(Transfer).filter(
+            TransferLine.item_id == item_id, Transfer.status.in_(["in_transit", "received"]),
+            or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))):
+        t = tl.transfer
+        if t.from_site_id == sel.id:
+            q = tl.qty if t.status == "in_transit" else (tl.recv_qty or 0)
+            moves.append(dict(d=t.date, kind="تحويل صادر", ref=t.tr_no, inq=0, outq=q, price=tl.unit_cost,
+                              who=f"إلى {t.to_site.name}" + (" (في الطريق)" if t.status == "in_transit" else ""),
+                              link=f"/transfers/{t.id}", value=round(q * (tl.unit_cost or 0), 2)))
+        elif t.status == "received":
+            q = tl.recv_qty or 0
+            moves.append(dict(d=t.date, kind="تحويل وارد", ref=t.tr_no, inq=q, outq=0, price=tl.unit_cost,
+                              who=f"من {t.from_site.name}", link=f"/transfers/{t.id}", value=round(q * (tl.unit_cost or 0), 2)))
     moves.sort(key=lambda m: (m["d"] is not None, m["d"] or date.min))
     bal = 0
     for m in moves:
@@ -690,6 +708,97 @@ def receipt_detail(rid: int, request: Request, db: Session = Depends(get_db), us
     if not rec or rec.site_id not in user.site_ids(db):
         raise Forbidden()
     return render(request, "receipt_detail.html", user, r=rec)
+
+
+# ---------------- التحويل بين المواقع ----------------
+@app.get("/transfers", response_class=HTMLResponse)
+def transfers(request: Request, site: str | None = None, db: Session = Depends(get_db),
+              user: User = Depends(require("storekeeper"))):
+    sites, sel = pick_site(db, user, site)
+    rows = (db.query(Transfer).filter(or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))
+            .order_by((Transfer.status == "in_transit").desc(), Transfer.date.desc(), Transfer.id.desc()).limit(500).all())
+    return render(request, "transfers.html", user, sites=sites, sel=sel, rows=rows)
+
+
+@app.get("/transfers/new", response_class=HTMLResponse)
+def transfer_new(request: Request, site: str | None = None, db: Session = Depends(get_db),
+                 user: User = Depends(require("storekeeper"))):
+    sites, sel = pick_site(db, user, site)
+    targets = db.query(Site).filter(Site.active.is_(True), Site.id != sel.id).order_by(Site.name).all()
+    return render(request, "transfer_new.html", user, sites=sites, sel=sel, targets=targets, today=date.today())
+
+
+@app.post("/transfers/new")
+async def transfer_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    form = await request.form()
+    sites, sel = pick_site(db, user, form.get("from_site_id"))
+    try:
+        to_site = db.get(Site, int(form.get("to_site_id") or 0))
+        if to_site and not to_site.active:
+            to_site = None
+        lines = []
+        for iid, qty in zip(form.getlist("item_id"), form.getlist("qty")):
+            if not iid and not qty:
+                continue
+            item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+            if not item or item.category != "spare":
+                raise S.BusinessError("اختر الصنف من القائمة")
+            lines.append(dict(item=item, qty=parse_float(qty)))
+        tr = S.create_transfer(db, from_site=sel, to_site=to_site, user=user,
+                               tr_date=parse_date(form.get("date"), date.today()), note=form.get("note"), lines=lines)
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/transfers/new?site={sel.id}")
+    flash(request, f"تم إرسال التحويل {tr.tr_no} — بانتظار تأكيد الاستلام من {tr.to_site.name}")
+    return back(f"/transfers/{tr.id}")
+
+
+def _transfer_for(db, user, tid):
+    tr = db.get(Transfer, tid)
+    ids = user.site_ids(db)
+    if not tr or (tr.from_site_id not in ids and tr.to_site_id not in ids):
+        raise Forbidden()
+    return tr, ids
+
+
+@app.get("/transfers/{tid}", response_class=HTMLResponse)
+def transfer_detail(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    tr, ids = _transfer_for(db, user, tid)
+    return render(request, "transfer_detail.html", user, t=tr,
+                  can_receive=tr.status == "in_transit" and tr.to_site_id in ids,
+                  can_cancel=tr.status == "in_transit" and tr.from_site_id in ids)
+
+
+@app.post("/transfers/{tid}/receive")
+async def transfer_receive(tid: int, request: Request, db: Session = Depends(get_db),
+                           user: User = Depends(require("storekeeper"))):
+    tr, ids = _transfer_for(db, user, tid)
+    if tr.to_site_id not in ids:
+        raise Forbidden()
+    form = await request.form()
+    try:
+        S.receive_transfer(db, tr, user, {l.id: parse_float(form.get(f"recv_{l.id}")) for l in tr.lines}, form.get("note"))
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/transfers/{tid}")
+    flash(request, f"تم تأكيد استلام التحويل {tr.tr_no} وإضافته لرصيد {tr.to_site.name}")
+    return back(f"/transfers/{tid}")
+
+
+@app.post("/transfers/{tid}/cancel")
+def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    tr, ids = _transfer_for(db, user, tid)
+    if tr.from_site_id not in ids:
+        raise Forbidden()
+    try:
+        S.cancel_transfer(db, tr)
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/transfers/{tid}")
+    flash(request, f"تم إلغاء التحويل {tr.tr_no} ورجعت الكميات لرصيد {tr.from_site.name}")
+    return back(f"/transfers/{tid}")
 
 
 # ---------------- العهد ----------------
@@ -1111,11 +1220,11 @@ def export_stock(site: str | None = None, db: Session = Depends(get_db), user: U
     st = S.stock_table(db, sel.id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(st.keys())), Item.category == "spare")}
     rows = [[it.code, it.name, it.uom, r["location"] or "", r["open_qty"], r["in_qty"], r["out_qty"], r["cur"],
-             round(r["avg"], 4), round(r["value"], 2), r["pending_qty"]]
+             round(r["avg"], 4), round(r["value"], 2), r["pending_qty"], r["tr_in_qty"], r["tr_out_qty"]]
             for iid, r in sorted(st.items(), key=lambda x: items[x[0]].code if x[0] in items else "")
             if (it := items.get(iid))]
     h = ["كود الصنف", "اسم الصنف", "الوحدة", "الموقع", "الرصيد الافتتاحي", "إجمالي الوارد", "المنصرف المعتمد",
-         "الرصيد الحالي", "متوسط السعر", "قيمة الرصيد", "قيد الاعتماد"]
+         "الرصيد الحالي", "متوسط السعر", "قيمة الرصيد", "قيد الاعتماد", "تحويل وارد", "تحويل صادر"]
     return _send_xlsx(_xlsx(h, rows, "الرصيد"), f"رصيد_{sel.name}.xlsx")
 
 

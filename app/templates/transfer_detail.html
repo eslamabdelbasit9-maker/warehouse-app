@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block body %}
+{% set st_cls = {'in_transit':'pending','received':'approved','cancelled':'cancelled'} %}
+<h1>التحويل {{ t.tr_no }}</h1>
+<div class="card">
+  <div class="meta">
+    <div><b>من</b>{{ t.from_site.name }}</div><div><b>إلى</b>{{ t.to_site.name }}</div>
+    <div><b>التاريخ</b>{{ t.date }}</div>
+    <div><b>الحالة</b><span class="st st-{{ st_cls[t.status] }}">{{ TRANSFER_STATUS[t.status] }}</span></div>
+    <div><b>المحوِّل</b>{{ t.created_by.name if t.created_by else '-' }} — {{ t.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+    {% if t.received_at %}<div><b>المستلِم</b>{{ t.received_by.name if t.received_by else '-' }} — {{ t.received_at.strftime('%Y-%m-%d %H:%M') }}</div>{% endif %}
+  </div>
+  {% if t.note %}<p><b class="muted">ملاحظات:</b> {{ t.note }}</p>{% endif %}
+  {% if t.receive_note %}<p><b class="muted">ملاحظات الاستلام:</b> {{ t.receive_note }}</p>{% endif %}
+
+  {% if can_receive %}<form method="post" action="/transfers/{{ t.id }}/receive" id="rcv">{% endif %}
+  <div class="tw" style="margin-top:10px"><table class="t">
+    <tr><th>#</th><th>الكود</th><th>الصنف</th><th class="n">المُرسَل</th><th>الوحدة</th><th class="n">سعر الوحدة</th><th class="n">القيمة</th>
+      <th class="n">{{ 'الكمية المستلمة' if can_receive else 'المُستلَم' }}</th></tr>
+    {% for l in t.lines %}<tr>
+      <td>{{ loop.index }}</td><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
+      <td class="n">{{ fmt(l.unit_cost) }}</td><td class="n">{{ fmt(l.sent_value) }}</td>
+      <td class="n">{% if can_receive %}<input name="recv_{{ l.id }}" type="number" step="any" min="0" max="{{ '%g' % l.qty }}" value="{{ '%g' % l.qty }}" style="width:110px">
+        {% elif l.recv_qty is not none %}<span class="{{ 'low' if l.recv_qty < l.qty }}">{{ fmt(l.recv_qty) }}</span>{% endif %}</td></tr>
+    {% endfor %}
+    <tr><td colspan="6"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(t.total_value) }}</b></td><td></td></tr>
+  </table></div>
+  {% if can_receive %}
+    <div class="f" style="margin-top:10px"><label>ملاحظات الاستلام (إجبارية لو في نقص)</label><textarea name="note"></textarea></div>
+    <p class="muted">لو استلمت أقل من المُرسَل، اكتب الكمية الفعلية — الفرق بيرجع لرصيد {{ t.from_site.name }}.</p>
+    <button class="btn green" style="margin-top:6px">تأكيد الاستلام</button>
+  </form>{% endif %}
+  <div class="noprint" style="display:flex;gap:8px;margin-top:12px">
+    {% if can_cancel %}<form method="post" action="/transfers/{{ t.id }}/cancel" onsubmit="return confirm('إلغاء التحويل؟ الكميات هترجع لرصيد {{ t.from_site.name }}')"><button class="btn red">إلغاء التحويل</button></form>{% endif %}
+    <button class="btn sec" onclick="print()">طباعة</button>
+  </div>
+</div>
+{% endblock %}

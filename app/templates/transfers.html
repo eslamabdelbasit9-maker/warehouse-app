@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>التحويلات — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="f"><label>بحث (رقم/موقع/صنف)</label><input data-live="#ttbl"></div><span class="right"></span>
+  <a class="btn green" href="/transfers/new?site={{ sel.id }}">+ تحويل لموقع تاني</a></form>
+{% set st_cls = {'in_transit':'pending','received':'approved','cancelled':'cancelled'} %}
+<div class="card"><div class="tw"><table class="t" id="ttbl">
+<tr><th>رقم التحويل</th><th>التاريخ</th><th>الاتجاه</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">القيمة</th><th>الحالة</th></tr>
+{% for t in rows %}{% set out = t.from_site_id == sel.id %}<tr>
+<td><a href="/transfers/{{ t.id }}">{{ t.tr_no }}</a></td><td>{{ t.date }}</td>
+<td>{% if out %}صادر ← {{ t.to_site.name }}{% else %}وارد من {{ t.from_site.name }}{% endif %}</td>
+<td>{% for l in t.lines %}<div><span class="muted" dir="ltr">{{ l.item.code }}</span> {{ l.item.name }} — <b>{{ fmt(l.qty) }}</b> {{ l.item.uom }}</div>{% endfor %}</td>
+<td class="n">{{ fmt(t.total_value) }}</td>
+<td><span class="st st-{{ st_cls[t.status] }}">{{ TRANSFER_STATUS[t.status] }}</span>
+  {% if t.status == 'in_transit' and not out %}<a class="btn sm green" href="/transfers/{{ t.id }}">تأكيد الاستلام</a>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">مفيش تحويلات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

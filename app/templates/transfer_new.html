@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>تحويل قطع غيار لموقع تاني</h1>
+<form method="post" class="card" id="frm">
+  <div class="meta">
+    <div class="f"><label>من موقع</label>
+      <select name="from_site_id" onchange="location='?site='+this.value">
+        {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>إلى موقع *</label>
+      <select name="to_site_id" required><option value="">— اختر —</option>
+        {% for s in targets %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+    <div class="f"><label>المحوِّل</label><input value="{{ user.name }}" disabled></div>
+  </div>
+  <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="note"></textarea></div>
+  <p class="muted">الكمية بتتخصم من رصيد {{ sel.name }} أول ما تبعت التحويل، وبتتضاف للموقع التاني لما أمين مستودعه يأكد الاستلام.</p>
+  <datalist id="items"></datalist>
+  <div class="tw"><table class="t lines" id="lines">
+    <tr><th style="width:45%">الصنف (اكتب الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th style="width:130px">الكمية المحوَّلة</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
+  <button class="btn">إرسال التحويل</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const BY = {};
+fetch('/api/stock?site={{ sel.id }}').then(r => r.json()).then(d => {
+  const dl = document.getElementById('items');
+  d.filter(i => i.available > 0).forEach(i => { const k = i.code + ' — ' + i.name; BY[k] = i; const o = document.createElement('option'); o.value = k; dl.appendChild(o); });
+});
+function addRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input list="items" class="it" placeholder="ابحث..." autocomplete="off"><input type="hidden" name="item_id"></td>
+    <td class="uom"></td><td class="n av"></td><td><input name="qty" type="number" step="any" min="0"></td>
+    <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
+  document.getElementById('lines').appendChild(tr);
+  tr.querySelector('.it').addEventListener('input', e => {
+    const i = BY[e.target.value]; tr.querySelector('[name=item_id]').value = i ? i.id : '';
+    tr.querySelector('.uom').textContent = i ? i.uom : ''; tr.querySelector('.av').textContent = i ? i.available : '';
+    const q = tr.querySelector('[name=qty]'); if (i) q.max = i.available; else q.removeAttribute('max');
+  });
+}
+addRow(); addRow(); addRow();
+document.getElementById('frm').addEventListener('submit', e => {
+  for (const tr of document.querySelectorAll('#lines tr')) {
+    const t = tr.querySelector('.it'); if (!t) continue;
+    if (t.value && !tr.querySelector('[name=item_id]').value) { e.preventDefault(); alert('اختر الصنف من القائمة: ' + t.value); return; }
+  }
+});
+</script>
+{% endblock %}

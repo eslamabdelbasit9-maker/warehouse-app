@@ -36,6 +36,7 @@ LINE_STATUS = {"pending": "قيد الاعتماد", "approved": "معتمد", "
 ENTITY_TYPES = ["مشروع", "عميل"]
 DIESEL_PURPOSES = ["تشغيل", "تسخين"]
 CUSTODY_CATEGORIES = ["أصول", "مهمات سلامة"]
+TRANSFER_STATUS = {"in_transit": "في الطريق", "received": "تم الاستلام", "cancelled": "ملغي"}
 
 
 class Site(Base):
@@ -242,6 +243,50 @@ class CustodyRecord(Base):
     return_notes: Mapped[str | None] = mapped_column(Text)
     site: Mapped[Site] = relationship()
     issued_by: Mapped[User | None] = relationship()
+
+
+class Transfer(Base):
+    """تحويل قطع غيار بين موقعين: يُخصم من المرسِل عند الإرسال، ويُضاف للمستلِم عند تأكيد الاستلام
+    بنفس تكلفة الإرسال (متوسط سعر المرسِل وقتها)."""
+    __tablename__ = "transfers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tr_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    from_site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))
+    to_site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))
+    date: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(15), default="in_transit")
+    note: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    received_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    received_at: Mapped[datetime | None] = mapped_column(DateTime)
+    receive_note: Mapped[str | None] = mapped_column(Text)
+    from_site: Mapped[Site] = relationship(foreign_keys=[from_site_id])
+    to_site: Mapped[Site] = relationship(foreign_keys=[to_site_id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+    received_by: Mapped[User | None] = relationship(foreign_keys=[received_by_id])
+    lines: Mapped[list["TransferLine"]] = relationship(back_populates="transfer", cascade="all, delete-orphan",
+                                                       order_by="TransferLine.id")
+
+    @property
+    def total_value(self):
+        return sum(l.sent_value for l in self.lines)
+
+
+class TransferLine(Base):
+    __tablename__ = "transfer_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transfer_id: Mapped[int] = mapped_column(ForeignKey("transfers.id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
+    qty: Mapped[float] = mapped_column(Float)                       # المُرسَل
+    unit_cost: Mapped[float] = mapped_column(Float, default=0)      # متوسط سعر المرسِل وقت الإرسال
+    recv_qty: Mapped[float | None] = mapped_column(Float)           # المُستلَم فعلياً
+    transfer: Mapped[Transfer] = relationship(back_populates="lines")
+    item: Mapped[Item] = relationship()
+
+    @property
+    def sent_value(self):
+        return round((self.qty or 0) * (self.unit_cost or 0), 2)
 
 
 class Attachment(Base):
