@@ -24,7 +24,7 @@
     {{ nl('/stock', 'الأرصدة', '/stock') }}
     {{ nl('/receipts', 'الوارد', '/receipts') }}
     {% if user.has('storekeeper', 'transfer') %}<a href="/transfers" class="{{ 'on' if path.startswith('/transfers') else '' }}">التحويلات{% if transfer_n %}<span class="badge-n">{{ transfer_n }}</span>{% endif %}</a>{% endif %}
-    {{ nl('/custody', 'العهد', '/custody') }}
+    {{ nl('/custody', 'الأصول', '/custody') }}
     {% if user.has('admin') %}{{ nl('/admin/users', 'الإدارة', '/admin') }}{% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', '/admin/items') }}{% endif %}
   </nav>
   <span class="who"><a href="/account">{{ user.name }}</a> · <a href="/logout">خروج</a></span>

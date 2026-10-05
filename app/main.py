@@ -854,7 +854,7 @@ async def custody_new_post(request: Request, db: Session = Depends(get_db), user
         if not emp_no or not emp_name:
             raise S.BusinessError("الرقم الوظيفي واسم الموظف إجباريان")
         if cat not in CUSTODY_CATEGORIES:
-            raise S.BusinessError("اختر نوع العهدة")
+            raise S.BusinessError("اختر النوع (الأصول / أدوات السلامة)")
         att = save_upload(db, form.get("attachment"))
         n = 0
         for name, qty, serial in zip(form.getlist("item_name"), form.getlist("qty"), form.getlist("serial_no")):
@@ -873,7 +873,7 @@ async def custody_new_post(request: Request, db: Session = Depends(get_db), user
         db.rollback()
         flash(request, str(e), "err")
         return back(f"/custody/new?site={sel.id}")
-    flash(request, f"تم تسجيل {n} بند عهدة")
+    flash(request, f"تم تسجيل {n} بند")
     return back(f"/custody/employee/{emp_no}?site={sel.id}")
 
 
@@ -1249,7 +1249,7 @@ def export_custody(site: str | None = None, db: Session = Depends(get_db), user:
             for c in db.query(CustodyRecord).filter_by(site_id=sel.id).order_by(CustodyRecord.employee_no, CustodyRecord.issued_at)]
     h = ["الرقم الوظيفي", "اسم الموظف", "النوع", "البند", "الكمية", "الرقم التسلسلي", "تاريخ التسليم", "سلّمها",
          "تاريخ الإرجاع", "الحالة عند الإرجاع", "ملاحظات"]
-    return _send_xlsx(_xlsx(h, rows, "العهد"), f"عهد_{sel.name}.xlsx")
+    return _send_xlsx(_xlsx(h, rows, "الأصول"), f"أصول_{sel.name}.xlsx")
 
 
 # ---------------- روابط Power BI (CSV) ----------------

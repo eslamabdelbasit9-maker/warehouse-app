@@ -20,7 +20,7 @@
   <div class="card kpi"><div class="v">{{ fmt(stock_value, 0) }}</div><div class="l">قيمة الرصيد الحالي</div></div>
   <div class="card kpi"><div class="v">{{ month_reqs }}</div><div class="l">عدد الطلبات في الشهر</div></div>
   <div class="card kpi"><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد: المهندس / مدير الإنتاج / النهائي</div></div>
-  <div class="card kpi"><div class="v">{{ open_custody }}</div><div class="l">بنود عهد لم تُرجع</div></div>
+  <div class="card kpi"><div class="v">{{ open_custody }}</div><div class="l">بنود أصول لم تُرجع</div></div>
 </div>
 
 {% if my_pending %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>العهد — {{ sel.name }}</h1>
+<h1>الأصول — {{ sel.name }}</h1>
 <div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
   <a class="btn {{ '' if not cat else 'sec' }}" href="?site={{ sel.id }}&state={{ state }}">الكل</a>
   {% for c in CUSTODY_CATEGORIES %}<a class="btn {{ '' if cat == c else 'sec' }}" href="?site={{ sel.id }}&state={{ state }}&cat={{ c|urlencode }}">{{ c }}{% if counts.get(c) %} <span class="muted" style="color:inherit;opacity:.8">({{ counts[c] }} لدى الموظفين)</span>{% endif %}</a>{% endfor %}
@@ -12,7 +12,7 @@
     <option value="all" {{ 'selected' if state=='all' }}>الكل</option></select></div>
   <button class="btn">بحث</button><span class="right"></span>
   <a class="btn sec" href="/export/custody.xlsx?site={{ sel.id }}">تصدير Excel</a>
-  {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&cat={{ cat|urlencode }}">+ تسليم {{ cat or 'عهدة' }}</a>{% endif %}
+  {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&cat={{ cat|urlencode }}">+ تسليم {{ cat or 'أصول' }}</a>{% endif %}
 </form>
 <div class="card"><div class="tw"><table class="t">
 <tr><th>الرقم الوظيفي</th><th>الموظف</th><th>النوع</th><th>البند</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>الإرجاع</th><th>مرفق</th></tr>

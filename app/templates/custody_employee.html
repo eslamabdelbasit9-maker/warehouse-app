@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>عهد الموظف: {{ emp_name }} ({{ emp_no }})</h1>
+<h1>أصول الموظف: {{ emp_name }} ({{ emp_no }})</h1>
 <div class="card noprint" style="display:flex;gap:8px">
-  {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&emp={{ emp_no }}">+ تسليم عهدة لهذا الموظف</a>{% endif %}
+  {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&emp={{ emp_no }}">+ تسليم لهذا الموظف</a>{% endif %}
   <button class="btn sec" onclick="print()">طباعة</button>
 </div>
 <div class="card"><div class="tw"><table class="t">
