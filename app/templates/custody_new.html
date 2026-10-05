@@ -12,7 +12,7 @@
     <div class="f"><label>مرفق (نموذج استلام موقّع)</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc"></div>
   </div>
   <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
-    <tr><th style="width:50%">البند</th><th style="width:110px">الكمية</th><th>الرقم التسلسلي</th><th></th></tr>
+    <tr><th style="width:40%">البند</th><th style="width:100px">الكمية</th><th>الرقم التسلسلي</th><th>صورة البند</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ بند</button></p>
   <div class="f"><label>ملاحظات</label><textarea name="notes"></textarea></div>
@@ -21,8 +21,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function addRow() { const tr = document.createElement('tr');
-  tr.innerHTML = `<td><input name="item_name"></td><td><input name="qty" type="number" step="any" min="0" value="1"></td><td><input name="serial_no"></td>
+let K = 0;
+function addRow() { const tr = document.createElement('tr'); const k = K++;
+  tr.innerHTML = `<td><input type="hidden" name="row" value="${k}"><input name="item_name_${k}"></td>
+  <td><input name="qty_${k}" type="number" step="any" min="0" value="1"></td><td><input name="serial_no_${k}"></td>
+  <td><label class="btn sec sm photo-btn">📷 صورة<input type="file" name="photo_${k}" accept="image/*" data-shrink hidden></label>
+      <img class="thumb" hidden></td>
   <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
   document.getElementById('lines').appendChild(tr); }
 addRow(); addRow();

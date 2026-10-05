@@ -43,6 +43,8 @@ textarea{width:100%;min-height:60px}
 .steps span.done{background:var(--okbg);color:var(--ok)}.steps span.cur{background:var(--warnbg);color:var(--warn);font-weight:700}.steps span.no{background:var(--errbg);color:var(--err)}
 .low{color:var(--err);font-weight:700}
 .right{margin-right:auto}
+img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle}
+.photo-btn{cursor:pointer;margin:0;display:inline-block;color:#1f2937}
 .pager{display:flex;gap:6px;margin-top:10px}
 .menu{display:flex;align-items:center;gap:18px;flex:1;flex-wrap:wrap}
 .menu-btn{display:none}

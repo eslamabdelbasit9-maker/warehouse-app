@@ -239,6 +239,7 @@ class CustodyRecord(Base):
     issued_at: Mapped[date] = mapped_column(Date)
     issued_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     attachment: Mapped[str | None] = mapped_column(String(300))
+    photo: Mapped[str | None] = mapped_column(String(300))  # صورة البند
     notes: Mapped[str | None] = mapped_column(Text)
     returned_at: Mapped[date | None] = mapped_column(Date)
     return_condition: Mapped[str | None] = mapped_column(String(100))

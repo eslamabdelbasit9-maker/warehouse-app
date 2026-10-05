@@ -6,8 +6,10 @@
   <button class="btn sec" onclick="print()">طباعة</button>
 </div>
 <div class="card"><div class="tw"><table class="t">
-<tr><th>الموقع</th><th>النوع</th><th>البند</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>سلّمها</th><th>مرفق</th><th>الإرجاع</th></tr>
-{% for c in rows %}<tr><td>{{ c.site.name }}</td><td>{{ c.category }}</td><td>{{ c.item_name }}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td>
+<tr><th>الموقع</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>سلّمها</th><th>مرفق</th><th>الإرجاع</th></tr>
+{% for c in rows %}<tr><td>{{ c.site.name }}</td><td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}
+  {% if user.has('storekeeper') %}<form method="post" action="/custody/{{ c.id }}/photo" enctype="multipart/form-data" class="noprint" style="display:inline">
+    <label class="btn sec sm photo-btn">📷 {{ 'تغيير' if c.photo else 'رفع صورة' }}<input type="file" name="photo" accept="image/*" data-shrink data-autosubmit hidden></label></form>{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td>
 <td>{{ c.issued_at }}</td><td>{{ c.issued_by.name if c.issued_by else '' }}</td>
 <td>{% if c.attachment %}<a href="/files/{{ c.attachment }}" target="_blank">عرض</a>{% endif %}</td>
 <td>{% if c.returned_at %}<span class="st st-approved">أُرجعت {{ c.returned_at }}</span> {{ c.return_condition or '' }}
@@ -17,6 +19,6 @@
     <select name="return_condition"><option>سليمة</option><option>تالفة</option><option>مفقودة</option></select>
     <button class="btn sm" onclick="return confirm('تسجيل إرجاع البند؟')">إرجاع</button></form>
   {% else %}<span class="st st-pending">لدى الموظف</span>{% endif %}</td></tr>
-{% else %}<tr><td colspan="9" class="muted">لا يوجد</td></tr>{% endfor %}
+{% else %}<tr><td colspan="10" class="muted">لا يوجد</td></tr>{% endfor %}
 </table></div></div>
 {% endblock %}

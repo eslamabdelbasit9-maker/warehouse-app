@@ -48,6 +48,25 @@
   }
   document.querySelectorAll('table.lines, table.cards').forEach(function(t){ label(t); new MutationObserver(function(){ label(t); }).observe(t, {childList: true, subtree: true}); });
 })();
+// الصور: بتتصغّر لـ 1280 بكسل JPEG قبل الرفع (صور الموبايل كبيرة)، ومعاينة صغيرة جنب الزرار
+document.addEventListener('change', function(e){
+  var inp = e.target; if (!inp.matches || !inp.matches('input[type=file][data-shrink]') || !inp.files.length) return;
+  var f = inp.files[0], box = inp.closest('td, form, div');
+  var thumb = box && box.querySelector('img.thumb');
+  var img = new Image(), url = URL.createObjectURL(f);
+  img.onload = function(){
+    var s = Math.min(1, 1280 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+    c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob(function(b){
+      try { var dt = new DataTransfer(); dt.items.add(new File([b], 'photo.jpg', {type: 'image/jpeg'})); inp.files = dt.files; } catch (_) {}
+      if (thumb) { thumb.src = URL.createObjectURL(b); thumb.hidden = false; }
+      if (inp.dataset.autosubmit !== undefined) inp.form.submit();
+    }, 'image/jpeg', 0.8);
+  };
+  img.onerror = function(){ if (inp.dataset.autosubmit !== undefined) inp.form.submit(); };
+  img.src = url;
+});
 document.querySelectorAll('input[data-live]').forEach(function(inp){
   var t=document.querySelector(inp.dataset.live); if(!t) return;
   var norm=function(x){return (x||'').toLowerCase().replace(/[\u200e\u200f\u202a-\u202e]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');};

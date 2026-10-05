@@ -168,14 +168,36 @@ def test_receipt_updates_avg(env):
 def test_custody(env):
     c = TestClient(app)
     login(c, env, "storekeeper@example.com")
+    # قاعدة بيانات قديمة من غير عمود الصورة: init_db بيضيفه
+    from sqlalchemy import inspect, text
+    from app.db import engine
+    from app.main import init_db
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE custody_records DROP COLUMN photo"))
+    init_db()
+    assert "photo" in {col["name"] for col in inspect(engine).get_columns("custody_records")}
+
+    jpg = b"\xff\xd8\xff\xe0fake-jpeg"
     r = c.post("/custody/new", data={"site_id": env["site"], "employee_no": "1234", "employee_name": "أحمد",
-                                     "category": "أدوات السلامة", "item_name": ["خوذة", "حذاء سلامة"], "qty": ["1", "1"],
-                                     "serial_no": ["", ""]}, follow_redirects=False)
+                                     "category": "أدوات السلامة", "row": ["0", "1"],
+                                     "item_name_0": "خوذة", "qty_0": "1", "item_name_1": "حذاء سلامة", "qty_1": "1"},
+               files={"photo_0": ("helmet.jpg", jpg, "image/jpeg")}, follow_redirects=False)
     assert r.status_code == 303
     db = SessionLocal()
-    recs = db.query(CustodyRecord).filter_by(employee_no="1234").all()
-    assert len(recs) == 2
+    recs = db.query(CustodyRecord).filter_by(employee_no="1234").order_by(CustodyRecord.id).all()
+    assert len(recs) == 2 and recs[0].photo and not recs[1].photo
     db.close()
+    assert c.get(f"/files/{recs[0].photo}").content == jpg
+    # صورة بعدين من صفحة الموظف، والـ PDF مش مقبول كصورة
+    c.post(f"/custody/{recs[1].id}/photo", files={"photo": ("x.pdf", b"%PDF", "application/pdf")})
+    db = SessionLocal()
+    assert db.get(CustodyRecord, recs[1].id).photo is None
+    db.close()
+    c.post(f"/custody/{recs[1].id}/photo", files={"photo": ("shoe.png", b"\x89PNG", "image/png")})
+    db = SessionLocal()
+    assert db.get(CustodyRecord, recs[1].id).photo
+    db.close()
+    assert 'class="thumb"' in c.get("/custody/employee/1234").text
     c.post(f"/custody/{recs[0].id}/return", data={"return_condition": "سليمة"})
     db = SessionLocal()
     assert db.get(CustodyRecord, recs[0].id).returned_at is not None

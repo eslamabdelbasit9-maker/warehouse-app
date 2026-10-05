@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_
+from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -49,13 +49,27 @@ def _att_url(a):
 
 T.env.globals["att_url"] = _att_url
 
-ALLOWED_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".xlsx", ".xls", ".docx", ".doc"}
+ALLOWED_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls", ".docx", ".doc"}
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 DIESEL_CODE = "RM-DSL"
 
 
 # ---------------- تهيئة ----------------
+# أعمدة اتضافت لجداول موجودة — create_all ما بيضيفهاش، فبنضيفها هنا مرة واحدة
+NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)")]
+
+
+def _add_missing_columns():
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, col, ddl in NEW_COLUMNS:
+            if table in insp.get_table_names() and col not in {c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+
+
 def init_db():
     Base.metadata.create_all(engine)
+    _add_missing_columns()
     db = SessionLocal()
     try:
         if not db.query(User).first():
@@ -128,10 +142,12 @@ def pick_site(db, user, site_id):
     return sites, next((s for s in sites if s.id == sid), sites[0])
 
 
-def save_upload(db, upload):
+def save_upload(db, upload, images_only=False):
     if upload is None or not getattr(upload, "filename", ""):
         return None
     ext = Path(upload.filename).suffix.lower()
+    if images_only and ext not in IMAGE_EXT:
+        raise S.BusinessError("الصورة لازم تكون JPG أو PNG")
     if ext not in ALLOWED_EXT:
         raise S.BusinessError("نوع المرفق غير مسموح (PDF أو صورة أو Excel أو Word)")
     data = upload.file.read()
@@ -857,14 +873,16 @@ async def custody_new_post(request: Request, db: Session = Depends(get_db), user
             raise S.BusinessError("اختر النوع (الأصول / أدوات السلامة)")
         att = save_upload(db, form.get("attachment"))
         n = 0
-        for name, qty, serial in zip(form.getlist("item_name"), form.getlist("qty"), form.getlist("serial_no")):
-            if not (name or "").strip():
+        for k in form.getlist("row"):  # كل سطر ليه رقم، وصورته اسمها photo_<رقم>
+            name = (form.get(f"item_name_{k}") or "").strip()
+            if not name:
                 continue
-            q = parse_float(qty) or 1
+            q = parse_float(form.get(f"qty_{k}")) or 1
+            photo = save_upload(db, form.get(f"photo_{k}"), images_only=True)
             db.add(CustodyRecord(site_id=sel.id, employee_no=emp_no, employee_name=emp_name, category=cat,
-                                 item_name=name.strip(), qty=q, serial_no=(serial or "").strip() or None,
+                                 item_name=name, qty=q, serial_no=(form.get(f"serial_no_{k}") or "").strip() or None,
                                  issued_at=parse_date(form.get("issued_at"), date.today()), issued_by_id=user.id,
-                                 attachment=att, notes=(form.get("notes") or "").strip() or None))
+                                 attachment=att, photo=photo, notes=(form.get("notes") or "").strip() or None))
             n += 1
         if not n:
             raise S.BusinessError("أضف بنداً واحداً على الأقل")
@@ -886,6 +904,25 @@ def custody_employee(emp_no: str, request: Request, site: str | None = None, db:
             .order_by(CustodyRecord.returned_at.is_not(None), CustodyRecord.issued_at.desc()).all())
     return render(request, "custody_employee.html", user, sites=sites, sel=sel, rows=rows, emp_no=emp_no,
                   emp_name=rows[0].employee_name if rows else "", today=date.today())
+
+
+@app.post("/custody/{cid}/photo")
+async def custody_photo(cid: int, request: Request, db: Session = Depends(get_db),
+                        user: User = Depends(require("storekeeper"))):
+    rec = db.get(CustodyRecord, cid)
+    if not rec or rec.site_id not in user.site_ids(db):
+        raise Forbidden()
+    form = await request.form()
+    try:
+        key = save_upload(db, form.get("photo"), images_only=True)
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/custody/employee/{rec.employee_no}?site={rec.site_id}")
+    if key:
+        rec.photo = key
+        db.commit()
+        flash(request, f"تم رفع صورة «{rec.item_name}»")
+    return back(f"/custody/employee/{rec.employee_no}?site={rec.site_id}")
 
 
 @app.post("/custody/{cid}/return")
