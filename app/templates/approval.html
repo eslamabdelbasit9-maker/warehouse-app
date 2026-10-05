@@ -5,7 +5,7 @@
 <form method="post" class="card" id="frm">
   {% include "_req_head.html" %}
   <p class="muted">علّم على الأصناف التي توافق عليها. الأصناف غير المعلَّمة تُرفض.{% if r.current_stage < 3 %} الأصناف الموافق عليها تنتقل للمرحلة التالية.{% endif %}</p>
-  <div class="tw"><table class="t">
+  <div class="tw"><table class="t cards">
     <tr><th><input type="checkbox" id="all" {{ '' if do=='reject' else 'checked' }}></th><th>الكود</th><th>الصنف</th><th class="n">الكمية المطلوبة</th><th>الوحدة</th>
       {% if r.type=='raw' %}<th>نوع الجهة</th><th>الجهة / الغرض</th>{% else %}{{ issued_th() }}<th class="n">متوسط السعر</th><th class="n">القيمة التقديرية</th>{% endif %}
       <th>قرارات سابقة</th></tr>

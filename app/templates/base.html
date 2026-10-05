@@ -13,6 +13,9 @@
 <header class="top">
   <a href="/"><img src="/static/logo.png" alt=""></a>
   <span class="title">{{ APP_NAME }}</span>
+  {% set alerts = (pending_n or 0) + (transfer_n or 0) %}
+  <button type="button" class="menu-btn" aria-label="القائمة" onclick="this.closest('header').classList.toggle('open')">☰{% if alerts %}<span class="badge-n">{{ alerts }}</span>{% endif %}</button>
+  <div class="menu">
   <nav class="main">
     {% macro nl(href, label, pre) %}<a href="{{ href }}" class="{{ 'on' if (path == href or (pre and path.startswith(pre))) else '' }}">{{ label }}</a>{% endmacro %}
     {{ nl('/', 'لوحة المتابعة', '') }}
@@ -25,6 +28,7 @@
     {% if user.has('admin') %}{{ nl('/admin/users', 'الإدارة', '/admin') }}{% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', '/admin/items') }}{% endif %}
   </nav>
   <span class="who"><a href="/account">{{ user.name }}</a> · <a href="/logout">خروج</a></span>
+  </div>
 </header>
 {% elif approver %}{% include "_link_head.html" %}
 {% endif %}
@@ -34,6 +38,16 @@
 </main>
 {% block scripts %}{% endblock %}
 <script>
+// الموبايل: أسطر الأصناف في الفورمات بتتعرض ككروت — كل خانة عليها اسم العمود
+(function(){
+  function label(tbl){
+    var head = tbl.querySelector('tr'); if (!head) return;
+    var names = [].map.call(head.children, function(th){ return th.textContent.trim(); });
+    tbl.querySelectorAll('tr').forEach(function(tr){ if (tr === head) return;
+      [].forEach.call(tr.children, function(td, i){ if (names[i] && !td.dataset.label) td.dataset.label = names[i]; }); });
+  }
+  document.querySelectorAll('table.lines, table.cards').forEach(function(t){ label(t); new MutationObserver(function(){ label(t); }).observe(t, {childList: true, subtree: true}); });
+})();
 document.querySelectorAll('input[data-live]').forEach(function(inp){
   var t=document.querySelector(inp.dataset.live); if(!t) return;
   var norm=function(x){return (x||'').toLowerCase().replace(/[\u200e\u200f\u202a-\u202e]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');};

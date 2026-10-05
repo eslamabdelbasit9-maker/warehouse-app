@@ -22,7 +22,7 @@
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
 
   <h2>الديزل (إجمالي اليوم) — لتر</h2>
-  <div class="row" style="display:flex;gap:14px">
+  <div class="row" style="display:flex;gap:14px;flex-wrap:wrap">
     {% for p in DIESEL_PURPOSES %}<div class="f"><label>ديزل {{ p }}</label><input type="number" step="any" min="0" name="diesel_{{ p }}"></div>{% endfor %}
   </div>
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="reason"></textarea></div>

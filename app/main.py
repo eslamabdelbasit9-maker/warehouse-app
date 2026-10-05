@@ -83,7 +83,8 @@ def _login_required(request: Request, exc: LoginRequired):
 
 @app.exception_handler(Forbidden)
 def _forbidden(request: Request, exc: Forbidden):
-    return HTMLResponse("<div dir=rtl style='font-family:Tahoma;padding:40px'>ليس لديك صلاحية لهذه الصفحة. "
+    return HTMLResponse("<meta name=viewport content='width=device-width, initial-scale=1'>"
+                        "<div dir=rtl style='font-family:Tahoma;padding:40px'>ليس لديك صلاحية لهذه الصفحة. "
                         "<a href='/'>الرئيسية</a></div>", status_code=403)
 
 

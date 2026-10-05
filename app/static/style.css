@@ -44,7 +44,49 @@ textarea{width:100%;min-height:60px}
 .low{color:var(--err);font-weight:700}
 .right{margin-right:auto}
 .pager{display:flex;gap:6px;margin-top:10px}
-@media (max-width:700px){.g2{grid-template-columns:1fr}header.top{padding:8px 12px}main{padding:0 10px}}
+.menu{display:flex;align-items:center;gap:18px;flex:1;flex-wrap:wrap}
+.menu-btn{display:none}
+@media (max-width:700px){
+  body{font-size:14px}
+  main{padding:0 10px;margin:12px auto}
+  h1{font-size:19px;margin-bottom:10px}
+  .card{padding:12px;margin-bottom:12px}
+  .g2{grid-template-columns:1fr}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi .v{font-size:21px}
+  /* الهيدر: لوجو + اسم + زرار قائمة، والقائمة بتفتح تحت */
+  header.top{padding:8px 12px;gap:10px;min-height:54px}
+  header.top img{height:32px}
+  header.top .title{font-size:15px;flex:1}
+  .menu-btn{display:block;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;font-size:22px;line-height:1;padding:7px 12px;cursor:pointer;position:relative}
+  .menu-btn .badge-n{position:absolute;top:-6px;left:-6px;margin:0}
+  .menu{display:none;flex-basis:100%;flex-direction:column;align-items:stretch;gap:6px;padding-bottom:8px}
+  header.top.open .menu{display:flex}
+  nav.main{flex-direction:column;gap:2px}
+  nav.main a{padding:11px 12px;font-size:15px}
+  .who{padding:8px 12px;border-top:1px solid rgba(255,255,255,.15)}
+  /* الفلاتر والفورمات */
+  .filters .f{flex:1 1 140px}.filters .f input,.filters .f select{width:100%}
+  input,select,textarea{font-size:16px}
+  .meta{grid-template-columns:1fr}
+  table.t{font-size:13px}table.t th,table.t td{padding:6px}
+  /* أسطر الأصناف في الفورمات ككروت */
+  :is(table.lines,table.cards),:is(table.lines,table.cards) tbody{display:block}
+  :is(table.lines,table.cards) tr:first-child{display:none}
+  :is(table.lines,table.cards) tr{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;background:#fff}
+  :is(table.lines,table.cards) tr:nth-child(even) td{background:none}
+  :is(table.lines,table.cards) td{display:block;border:0;padding:2px 0}
+  :is(table.lines,table.cards) td:first-child{grid-column:1/-1}
+  :is(table.lines,table.cards) td[data-label]:not(:empty)::before,:is(table.lines,table.cards) td[data-label]:has(input,select)::before{content:attr(data-label);display:block;font-size:12px;color:var(--muted)}
+  :is(table.lines,table.cards) td:last-child:has(button){grid-column:1/-1;text-align:left}
+  :is(table.lines,table.cards) td input:not([type=checkbox]),:is(table.lines,table.cards) td select{width:100%}
+  table.cards td input[type=checkbox]{width:22px;height:22px}
+  :is(table.lines,table.cards) td.n{text-align:right;direction:rtl}
+  .grid{margin-bottom:12px}.grid>.card{margin-bottom:0}
+  /* الأرصدة على الموبايل: الكود والصنف والرصيد الحالي وقيد الاعتماد والقيمة بس */
+  #stbl tr>:nth-child(n+3):nth-child(-n+8),#stbl tr>:nth-child(11){display:none}
+  #stbl tr.colf input,#stbl tr.colf select{min-width:0}
+  #stbl th{white-space:normal}
+}
 @media print{header.top,.noprint{display:none}body{background:#fff}.card{border:0}}
 /* جدول برأس ثابت وبحث في رأس كل عمود */
 .tw.sticky{overflow:auto;max-height:calc(100vh - 120px)}
