@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 500" preserveAspectRatio="xMidYMax slice">
+  <!-- خلفية صفحة الدخول: كسارة (يسار) وخلاطة أسفلت (يمين) — سيلويت أبيض شفاف -->
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".10"/>
+    </linearGradient>
+  </defs>
+  <!-- تلال بعيدة -->
+  <path d="M0 420 C160 360 300 390 420 370 S700 330 860 372 S1150 340 1300 366 S1500 350 1600 380 L1600 500 L0 500Z" fill="#fff" opacity=".06"/>
+  <rect x="0" y="300" width="1600" height="200" fill="url(#fade)"/>
+
+  <g fill="#fff" opacity=".22">
+    <!-- الأرض -->
+    <rect x="0" y="458" width="1600" height="42"/>
+
+    <!-- ===== الكسارة ===== -->
+    <!-- قادوس التغذية والكسارة الفكية -->
+    <polygon points="200,292 312,292 292,334 220,334"/>
+    <rect x="228" y="334" width="56" height="44" rx="3"/>
+    <rect x="212" y="378" width="88" height="10"/>
+    <rect x="218" y="388" width="8" height="70"/><rect x="286" y="388" width="8" height="70"/>
+    <rect x="248" y="388" width="16" height="70" opacity=".6"/>
+    <!-- سير رئيسي للمنخل -->
+    <polygon points="290,392 298,382 532,252 530,262"/>
+    <rect x="410" y="320" width="6" height="138"/>
+    <!-- بيت المنخل -->
+    <rect x="512" y="206" width="84" height="48" rx="3"/>
+    <rect x="500" y="200" width="108" height="8"/>
+    <rect x="520" y="254" width="8" height="204"/><rect x="580" y="254" width="8" height="204"/>
+    <polygon points="520,300 588,300 588,306 520,306"/>
+    <!-- سيور للأكوام -->
+    <polygon points="596,240 600,232 760,330 756,338"/>
+    <polygon points="596,252 600,246 690,372 686,378"/>
+    <polygon points="512,246 508,238 380,330 384,338"/>
+    <rect x="700" y="300" width="5" height="158"/><rect x="430" y="300" width="5" height="158"/>
+    <!-- أكوام البحص -->
+    <polygon points="690,458 770,334 860,458"/>
+    <polygon points="620,458 688,376 760,458"/>
+    <polygon points="300,458 384,336 460,458"/>
+
+    <!-- ===== خلاطة الأسفلت ===== -->
+    <!-- صناديق التغذية الباردة -->
+    <g>
+      <polygon points="880,350 930,350 922,384 888,384"/><polygon points="936,350 986,350 978,384 944,384"/>
+      <polygon points="992,350 1042,350 1034,384 1000,384"/><polygon points="1048,350 1098,350 1090,384 1056,384"/>
+      <rect x="884" y="384" width="210" height="8"/>
+      <rect x="890" y="392" width="6" height="66"/><rect x="1084" y="392" width="6" height="66"/><rect x="986" y="392" width="6" height="66"/>
+      <rect x="876" y="410" width="236" height="7"/>
+    </g>
+    <!-- سير مائل للدرام -->
+    <polygon points="1100,414 1106,406 1148,368 1146,378"/>
+    <!-- درام التجفيف المائل + الشعلة -->
+    <g transform="rotate(-7 1210 372)">
+      <rect x="1130" y="354" width="168" height="38" rx="18"/>
+      <rect x="1150" y="350" width="10" height="46" rx="3"/><rect x="1262" y="350" width="10" height="46" rx="3"/>
+      <rect x="1298" y="364" width="22" height="18" rx="4"/>
+    </g>
+    <rect x="1150" y="392" width="7" height="66"/><rect x="1270" y="380" width="7" height="78"/>
+    <!-- الفلتر (Baghouse) والمدخنة -->
+    <rect x="1170" y="276" width="70" height="62" rx="3"/>
+    <polygon points="1170,338 1240,338 1220,356 1190,356"/>
+    <rect x="1176" y="356" width="6" height="102"/><rect x="1228" y="356" width="6" height="102"/>
+    <rect x="1246" y="128" width="16" height="230"/>
+    <rect x="1242" y="122" width="24" height="8"/>
+    <!-- الرافع والبرج -->
+    <rect x="1290" y="150" width="10" height="250"/>
+    <rect x="1312" y="150" width="78" height="168" rx="2"/>
+    <rect x="1304" y="126" width="94" height="26" rx="2"/>
+    <rect x="1300" y="118" width="102" height="8"/>
+    <polygon points="1320,318 1382,318 1366,346 1336,346"/>
+    <rect x="1318" y="346" width="8" height="112"/><rect x="1376" y="346" width="8" height="112"/>
+    <!-- الصوامع -->
+    <rect x="1404" y="196" width="46" height="178" rx="6"/><polygon points="1404,374 1450,374 1434,398 1420,398"/>
+    <rect x="1458" y="196" width="46" height="178" rx="6"/><polygon points="1458,374 1504,374 1488,398 1474,398"/>
+    <rect x="1400" y="186" width="108" height="10"/>
+    <rect x="1406" y="398" width="6" height="60"/><rect x="1496" y="398" width="6" height="60"/>
+    <rect x="1340" y="182" width="64" height="6"/>
+    <!-- قلاب واقف تحت الصوامع -->
+    <g transform="translate(1418 420)">
+      <rect x="0" y="0" width="58" height="26" rx="3"/><rect x="60" y="6" width="22" height="20" rx="3"/>
+      <circle cx="14" cy="32" r="7"/><circle cx="64" cy="32" r="7"/>
+    </g>
+  </g>
+
+  <!-- دخان المدخنة -->
+  <g fill="#fff">
+    <circle cx="1254" cy="112" r="8" opacity="0">
+      <animate attributeName="cy" values="112;40" dur="6s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="8;30" dur="6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".32;0" dur="6s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="1254;1226" dur="6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1254" cy="112" r="8" opacity="0">
+      <animate attributeName="cy" values="112;40" dur="6s" begin="2s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="8;30" dur="6s" begin="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".32;0" dur="6s" begin="2s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="1254;1226" dur="6s" begin="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1254" cy="112" r="8" opacity="0">
+      <animate attributeName="cy" values="112;40" dur="6s" begin="4s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="8;30" dur="6s" begin="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".32;0" dur="6s" begin="4s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="1254;1226" dur="6s" begin="4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- حجارة ماشية على السير الرئيسي للكسارة -->
+  <g fill="#fff" opacity=".35">
+    <circle r="3"><animateMotion path="M300,382 L524,254" dur="3.5s" repeatCount="indefinite"/></circle>
+    <circle r="3"><animateMotion path="M300,382 L524,254" dur="3.5s" begin="1.2s" repeatCount="indefinite"/></circle>
+    <circle r="3"><animateMotion path="M300,382 L524,254" dur="3.5s" begin="2.4s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- قلاب ماشي على الأرض -->
+  <g fill="#fff" opacity=".28">
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="-160 0;1760 0" dur="28s" repeatCount="indefinite"/>
+      <polygon points="0,430 62,430 70,416 6,416"/>
+      <rect x="0" y="430" width="70" height="14" rx="2"/>
+      <rect x="72" y="420" width="26" height="24" rx="4"/>
+      <circle cx="16" cy="450" r="8"/><circle cx="40" cy="450" r="8"/><circle cx="84" cy="450" r="8"/>
+    </g>
+  </g>
+</svg>

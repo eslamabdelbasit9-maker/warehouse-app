@@ -158,11 +158,9 @@ main>*:nth-child(5){animation-delay:.2s}main>*:nth-child(n+6){animation-delay:.2
 .grid>.card:nth-child(5){animation-delay:.24s}.grid>.card:nth-child(n+6){animation-delay:.3s}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 /* صفحة الدخول */
-body:has(.auth){background:linear-gradient(135deg,#0B2A5B,#1c4f98 60%,#2a66c2);min-height:100vh;overflow-x:hidden}
-body:has(.auth)::before,body:has(.auth)::after{content:"";position:fixed;border-radius:50%;filter:blur(2px);opacity:.18;background:var(--accent);animation:float 9s ease-in-out infinite;z-index:0}
-body:has(.auth)::before{width:280px;height:280px;top:-80px;left:-60px;background:#fff;opacity:.08}
-body:has(.auth)::after{width:200px;height:200px;bottom:-60px;right:-40px;background:#7fb0ff;animation-delay:-4s}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(24px)}}
+body:has(.auth){background:url("/static/bg-plant.svg") center bottom/auto min(60vh,560px) no-repeat,
+  linear-gradient(160deg,#0B2A5B 0%,#163d7a 55%,#2a66c2 100%);background-attachment:fixed;min-height:100vh;overflow-x:hidden}
+@media (max-width:700px){body:has(.auth){background-position:96% bottom,0 0;background-size:auto 44vh,auto}}
 .auth{position:relative;z-index:1;box-shadow:0 20px 50px rgba(0,0,0,.25);animation:pop .6s var(--ease) both}
 .auth h1::before{display:none}.auth h1{padding:0}
 @keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
