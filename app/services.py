@@ -175,6 +175,49 @@ def issued_summary(db: Session, site_id: int, item_ids, ref_date, exclude_reques
     return out
 
 
+# ---------------- رسم الأعمدة (لوحة المتابعة) ----------------
+MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر",
+             "ديسمبر"]
+
+
+def _nice_step(top, n=4):
+    import math
+    if top <= 0:
+        return 1
+    raw = top / n
+    mag = 10 ** math.floor(math.log10(raw))
+    for k in (1, 2, 2.5, 5, 10):
+        if raw <= k * mag:
+            return k * mag
+    return 10 * mag
+
+
+def column_chart(values, w=720, h=230, pad_l=8, pad_r=58, pad_t=22, pad_b=30, bar_max=24):
+    """أبعاد رسم أعمدة SVG (سلسلة واحدة) من اليمين للشمال (عربي): أول قيمة على اليمين والأرقام على اليمين.
+    أعمدة بعرض ≤24px وطرف علوي مدوّر 4px، وخطوط شبكة بأرقام مقرّبة."""
+    step = _nice_step(max(values or [0]))
+    top = step * max(1, -(-max(values or [0]) // step))
+    ticks = [round(step * i, 2) for i in range(int(round(top / step)) + 1)]
+    plot_w, plot_h = w - pad_l - pad_r, h - pad_t - pad_b
+    n = max(1, len(values))
+    band = plot_w / n
+    bw = min(bar_max, band * 0.6)
+    bars = []
+    for i, v in enumerate(values):
+        slot = pad_l + band * (n - 1 - i)  # عكس الاتجاه: القيمة رقم 0 في أقصى اليمين
+        bh = plot_h * (v / top) if top else 0
+        x = slot + (band - bw) / 2
+        y = pad_t + plot_h - bh
+        r = min(4, bh, bw / 2)
+        path = (f"M{x:.1f},{pad_t + plot_h:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
+                f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{pad_t + plot_h:.1f} Z") if bh > 0 else ""
+        bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band))
+    grid = [dict(y=pad_t + plot_h - plot_h * t / top, v=t) for t in ticks]
+    return dict(w=w, h=h, bars=bars, grid=grid, base=pad_t + plot_h, pad_l=pad_l, pad_t=pad_t, plot_h=plot_h,
+                x0=pad_l, x1=w - pad_r, tick_x=w - pad_r + 8,
+                max_i=max(range(len(values)), key=lambda i: values[i]) if any(values) else None)
+
+
 # ---------------- الرواكد ----------------
 STAGNANT_DAYS = (90, 180, 365)
 

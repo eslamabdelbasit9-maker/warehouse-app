@@ -67,7 +67,7 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
   main{padding:0 10px;margin:12px auto}
   h1{font-size:19px;margin-bottom:10px}
   .card{padding:12px;margin-bottom:12px}
-  .g2{grid-template-columns:1fr}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g2{grid-template-columns:minmax(0,1fr)}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi .v{font-size:21px}
   /* الهيدر: لوجو + اسم + زرار قائمة، والقائمة بتفتح تحت */
   header.top{padding:8px 12px;gap:10px;min-height:54px}
@@ -202,6 +202,61 @@ h1,h2,.kpi .v,.hero-hi{font-weight:700}nav.main a,.btn{font-weight:600}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 @media print{*{animation:none !important;box-shadow:none !important}header.top{position:static}h1::before{display:none}}
 
+/* ================= كروت وجداول متناسقة ================= */
+.card{padding:18px}
+.card-h{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.card-h h2{margin:0;font-size:16px}
+.card-h .muted{font-size:12px;margin-top:2px}
+.ic-chip{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--brand3);background:rgba(var(--brand-rgb),.08)}
+/* المؤشرات */
+.kpis{gap:14px}
+.kpi{display:flex;flex-direction:column;gap:4px;padding:18px 18px 16px;min-height:132px}
+.kpi::after{display:none}
+.kpi::before{height:3px}
+.kpi-ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--kc,var(--brand3));
+  background:color-mix(in srgb,var(--kc,var(--brand3)) 12%,transparent);margin-bottom:6px}
+.kpi .v{font-size:27px;line-height:1.15}
+.kpi .l{font-size:13px;color:var(--muted);font-weight:600}
+.kpi .s{font-size:11.5px;color:var(--muted);opacity:.85}
+.g4.kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+/* الجداول: إطار مدوّر، رأس هادي بلون البرنامج، وسطر إجمالي واضح */
+.tw{border:1px solid var(--line);border-radius:12px}
+table.t{font-size:14px}
+table.t th{background:rgba(var(--brand-rgb),.06);color:var(--brand);font-weight:700;font-size:13px;padding:11px 12px;border-bottom:1px solid var(--line)}
+table.t tr:first-child th:first-child,table.t tr:first-child th:last-child{border-radius:0}
+table.t td{padding:10px 12px}
+table.t tr:nth-child(even) td{background:rgba(var(--brand-rgb),.018)}
+table.t tr:last-child td{border-bottom:0}
+table.t tr:hover>td{background:rgba(var(--brand-rgb),.05)}
+table.t tr.total td{font-weight:700;background:rgba(var(--brand-rgb),.06);border-top:2px solid var(--line)}
+.tw.sticky thead th{background:#EEF0F4}
+.tw.sticky thead tr.colf th{background:#F6F7F9}
+/* رسم الأعمدة */
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart .grid,.chart .base{stroke:var(--line);stroke-width:1}
+.chart .base{stroke:#C9CFD8}
+.chart .tick{fill:var(--muted);font-size:11px}
+.chart .val{fill:#1f2937;font-size:12px;font-weight:700}
+.chart .bar path{fill:#2a78d6;transition:opacity .2s}
+.chart .bar .hit{fill:transparent;cursor:pointer}
+.chart .bar.dim path{opacity:.35}
+.chart .tip{position:absolute;top:0;min-width:130px;background:#111827;color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;pointer-events:none;box-shadow:var(--sh-md);z-index:2}
+.chart .tip .tv{font-size:16px;font-weight:700;margin:2px 0}
+.chart .tip .ts{opacity:.8}
+.dash-g{grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.dash-g table.t td,.dash-g table.t th{white-space:nowrap}
+.chart svg text{direction:rtl}.chart svg text.num{direction:ltr}
+.chart .scroll{overflow-x:auto}
+@media (max-width:700px){
+  .dash-g{grid-template-columns:minmax(0,1fr)}
+  .g4.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi{min-height:0;padding:14px}.kpi .v{font-size:21px}.kpi-ic{width:34px;height:34px}
+  .card{padding:14px}
+  .chart svg{min-width:620px}
+}
+details.tview{margin-top:10px}
+details.tview summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:8px}
 /* ================= الوضع الداكن (المظهر ← الخلفية: داكن) ================= */
 html[data-mode=dark]{--card:#1B2129;--line:#2C3540;--muted:#9AA4B2;--okbg:#12301F;--ok:#4ADE80;--errbg:#3A1717;--err:#F87171;--warnbg:#3A2A0E;--warn:#FBBF24;color-scheme:dark}
 html[data-mode=dark] body{color:#E5E7EB;background:var(--bg)}
@@ -222,3 +277,10 @@ html[data-mode=dark] .meta b{color:#9AA4B2}
 html[data-mode=dark] img.thumb{border-color:#374151}
 html[data-mode=dark] body:not(:has(.auth))::after{background:#fff;opacity:.035}
 @media (max-width:700px){html[data-mode=dark] :is(table.lines,table.cards) tr{background:#1B2129;border-color:#2C3540}}
+html[data-mode=dark] table.t th{background:#232B35;color:#E5E7EB}
+html[data-mode=dark] .tw.sticky thead th{background:#232B35}
+html[data-mode=dark] table.t tr.total td{background:#232B35}
+html[data-mode=dark] .chart .bar path{fill:#3987e5}
+html[data-mode=dark] .chart .val{fill:#F3F4F6}
+html[data-mode=dark] .chart .base{stroke:#3B4654}
+html[data-mode=dark] .ic-chip{color:#93C5FD;background:rgba(147,197,253,.12)}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon, card_h %}
 {% block body %}
 {% with hero_sub = sel.name if sel else 'كل المواقع' %}{% include "_hero.html" %}{% endwith %}
 <form class="filters card noprint" method="get">
@@ -16,43 +17,73 @@
   {% endif %}
 </form>
 {% set q = '?site=' ~ (sel.id if sel else '') %}
-<div class="grid g4">
-  <a class="card kpi" href="/approvals"><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
-  <div class="card kpi"><div class="v">{{ fmt(period_spend) }}</div><div class="l">قيمة صرف قطع الغيار المعتمد<br>من {{ d_from }} إلى {{ d_to }}</div></div>
-  <div class="card kpi"><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
-  <div class="card kpi"><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد: المهندس / مدير الإنتاج / النهائي</div></div>
-  <a class="card kpi" href="/stagnant{{ q }}"><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ({{ stagnant_n }} صنف — ما اتحركتش من 6 شهور) ←</div></a>
+{% set per = 'من ' ~ d_from ~ ' إلى ' ~ d_to %}
+<div class="grid g4 kpis">
+  <a class="card kpi" href="/approvals"><span class="kpi-ic">{{ icon('inbox') }}</span><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
+  <div class="card kpi"><span class="kpi-ic">{{ icon('wrench') }}</span><div class="v">{{ fmt(period_spend) }}</div><div class="l">صرف قطع الغيار المعتمد</div><div class="s">{{ per }}</div></div>
+  <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (الوارد)</div><div class="s">{{ per }}</div></a>
+  <div class="card kpi"><span class="kpi-ic">{{ icon('file') }}</span><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
+  <div class="card kpi"><span class="kpi-ic">{{ icon('steps') }}</span><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد</div><div class="s">المهندس / مدير الإنتاج / النهائي</div></div>
+  <a class="card kpi" href="/stagnant{{ q }}"><span class="kpi-ic">{{ icon('archive') }}</span><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ←</div><div class="s">{{ stagnant_n }} صنف — ما اتحركتش من 6 شهور</div></a>
 </div>
 
 {% if my_pending %}
-<div class="card"><h2>بانتظار اعتمادي</h2><div class="tw"><table class="t">
-<tr><th>رقم الطلب</th><th>النوع</th><th>الموقع / الوحدة</th><th>التاريخ</th><th>طالب الصرف</th><th>الأصناف</th><th></th></tr>
+<div class="card">{% call card_h('inbox', 'بانتظار اعتمادي', my_pending|length ~ ' طلب') %}{% endcall %}<div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>الموقع / الوحدة</th><th>التاريخ</th><th>طالب الصرف</th><th class="n">الأصناف</th><th></th></tr>
 {% for r in my_pending %}<tr><td>{{ r.req_no }}</td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.site.name }}{% if r.unit %} / {{ r.unit.name }}{% endif %}</td>
-<td>{{ r.work_date }}</td><td>{{ r.requester_display }}</td><td>{{ r.lines|selectattr('status','equalto','pending')|list|length }}</td>
+<td>{{ r.work_date }}</td><td>{{ r.requester_display }}</td><td class="n">{{ r.lines|selectattr('status','equalto','pending')|list|length }}</td>
 <td><a class="btn sm" href="/approvals/{{ r.id }}">مراجعة واعتماد</a></td></tr>{% endfor %}
 </table></div></div>
 {% endif %}
 
-<div class="grid g2">
-  <div class="card"><h2>صرف قطع الغيار حسب الوحدة</h2><p class="muted" style="margin-top:-6px">من {{ d_from }} إلى {{ d_to }} — المعتمد بس</p><div class="tw"><table class="t">
+<div class="card">
+  {% call card_h('cart', 'المشتريات الشهرية', 'قيمة الوارد في آخر 12 شهر' ~ (' — ' ~ sel.name if sel else ' — كل المواقع')) %}{% endcall %}
+  <div class="chart" id="pchart">
+    <div class="scroll"><svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="رسم أعمدة لقيمة المشتريات الشهرية">
+      {% for g in chart.grid %}<line class="grid" x1="{{ chart.x0 }}" x2="{{ chart.x1 }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
+      <text class="tick num" x="{{ chart.tick_x }}" y="{{ g.y + 4 }}" text-anchor="start">{{ fmt(g.v, 0) }}</text>{% endfor %}
+      {% for b in chart.bars %}{% set p = purchases[loop.index0] %}
+      <g class="bar" data-tip="{{ MONTHS_AR[p.m - 1] }} {{ p.y }}|{{ fmt(p.total) }}{% for s in pivot_sites %}{% if p.by.get(s.id) %}|{{ s.name }}: {{ fmt(p.by[s.id]) }}{% endif %}{% endfor %}">
+        <rect class="hit" x="{{ b.hit_x }}" y="{{ chart.pad_t }}" width="{{ b.band }}" height="{{ chart.plot_h }}"/>
+        {% if b.path %}<path d="{{ b.path }}"/>{% endif %}
+        {% if loop.index0 == chart.max_i or loop.last %}{% if b.v %}<text class="val num" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle">{{ fmt(b.v, 0) }}</text>{% endif %}{% endif %}
+        <text class="tick" x="{{ b.cx }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ MONTHS_AR[p.m - 1][:3] if not loop.last else MONTHS_AR[p.m - 1] }}</text>
+      </g>{% endfor %}
+      <line class="base" x1="{{ chart.x0 }}" x2="{{ chart.x1 }}" y1="{{ chart.base }}" y2="{{ chart.base }}"/>
+    </svg></div>
+    <div class="tip" hidden></div>
+  </div>
+  <details class="tview"><summary>عرض كجدول (الشهور × الفروع)</summary>
+  <div class="tw"><table class="t">
+    <tr><th>الشهر</th>{% if not sel %}{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}{% endif %}<th class="n">الإجمالي</th></tr>
+    {% for p in purchases|reverse %}<tr><td>{{ MONTHS_AR[p.m - 1] }} {{ p.y }}</td>
+      {% if not sel %}{% for s in pivot_sites %}<td class="n">{{ fmt(p.by.get(s.id)) if p.by.get(s.id) else '-' }}</td>{% endfor %}{% endif %}
+      <td class="n"><b>{{ fmt(p.total) if p.total else '-' }}</b></td></tr>{% endfor %}
+    <tr class="total"><td>الإجمالي</td>{% if not sel %}{% for s in pivot_sites %}{% set ns = namespace(t=0) %}{% for p in purchases %}{% set ns.t = ns.t + (p.by.get(s.id) or 0) %}{% endfor %}<td class="n">{{ fmt(ns.t) if ns.t else '-' }}</td>{% endfor %}{% endif %}
+      <td class="n">{{ fmt(purchases|sum(attribute='total')) }}</td></tr>
+  </table></div></details>
+</div>
+
+<div class="grid dash-g">
+  <div class="card">{% call card_h('wrench', 'صرف قطع الغيار حسب الوحدة', per ~ ' — المعتمد بس') %}{% endcall %}<div class="tw"><table class="t">
   {% if sel %}
     <tr><th>الوحدة</th><th>النوع</th><th class="n">عدد الطلبات</th><th class="n">القيمة</th></tr>
     {% for u, k, v, c in spend %}<tr><td>{{ u }}</td><td>{{ k }}</td><td class="n">{{ c }}</td><td class="n">{{ fmt(v) }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
-    {% if spend %}<tr><td colspan="3"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(period_spend) }}</b></td></tr>{% endif %}
+    {% if spend %}<tr class="total"><td colspan="3">الإجمالي</td><td class="n">{{ fmt(period_spend) }}</td></tr>{% endif %}
   {% else %}
     <tr><th>نوع الوحدة</th>{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}<th class="n">الإجمالي</th></tr>
     {% for kind, by in spend %}<tr><td><b>{{ kind }}</b></td>
       {% for s in pivot_sites %}<td class="n">{{ fmt(by.get(s.id)) if by.get(s.id) else '-' }}</td>{% endfor %}
       <td class="n"><b>{{ fmt(by.values()|sum) }}</b></td></tr>
     {% else %}<tr><td colspan="{{ pivot_sites|length + 2 }}" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
-    {% if spend %}<tr><td><b>الإجمالي</b></td>
+    {% if spend %}<tr class="total"><td>الإجمالي</td>
       {% for s in pivot_sites %}{% set ns = namespace(t=0) %}{% for kind, by in spend %}{% set ns.t = ns.t + (by.get(s.id) or 0) %}{% endfor %}
-      <td class="n"><b>{{ fmt(ns.t) if ns.t else '-' }}</b></td>{% endfor %}<td class="n"><b>{{ fmt(period_spend) }}</b></td></tr>{% endif %}
+      <td class="n">{{ fmt(ns.t) if ns.t else '-' }}</td>{% endfor %}<td class="n">{{ fmt(period_spend) }}</td></tr>{% endif %}
   {% endif %}
   </table></div></div>
 
-  <div class="card"><h2>المواد الخام المصروفة</h2><p class="muted" style="margin-top:-6px">من {{ d_from }} إلى {{ d_to }} — المعتمد بس</p><div class="tw"><table class="t">
+  <div class="card">{% call card_h('layers', 'المواد الخام المصروفة', per ~ ' — المعتمد بس') %}{% endcall %}<div class="tw"><table class="t">
   {% if sel %}
     <tr><th>المادة</th><th class="n">الكمية</th><th>الوحدة</th></tr>
     {% for (n, uom), by in raw_pivot %}<tr><td>{{ n }}</td><td class="n">{{ fmt(by.values()|sum) }}</td><td>{{ uom }}</td></tr>
@@ -66,15 +97,39 @@
   {% endif %}
   </table></div></div>
 
-  <div class="card"><h2>أعلى 10 أصناف صرفاً</h2><div class="tw"><table class="t">
+  <div class="card">{% call card_h('star', 'أعلى 10 أصناف صرفاً', per) %}{% endcall %}<div class="tw"><table class="t">
     <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
     {% for c, n, uom, qq, v in top_items %}<tr><td>{{ c }}</td><td>{{ n }}</td><td class="n">{{ fmt(qq) }} {{ uom }}</td><td class="n">{{ fmt(v) }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">لا يوجد</td></tr>{% endfor %}
   </table></div></div>
-  <div class="card"><h2>آخر الطلبات</h2><div class="tw"><table class="t">
+  <div class="card">{% call card_h('list', 'آخر الطلبات') %}{% endcall %}<div class="tw"><table class="t">
     <tr><th>رقم الطلب</th><th>التاريخ</th><th>الوحدة</th><th>الحالة</th></tr>
     {% for r in recent %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ r.work_date }}</td><td>{{ r.unit.name if r.unit else '-' }}</td>
     <td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>{% endfor %}
   </table></div></div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+// تلميح الرسم: بيظهر فوق العمود اللي الماوس (أو الصباع) عليه
+(function(){
+  var box = document.getElementById('pchart'); if (!box) return;
+  var sc = box.querySelector('.scroll'); if (sc && sc.scrollWidth > sc.clientWidth) sc.scrollLeft = -sc.scrollWidth;  // على الموبايل: يبدأ بآخر الشهور
+  var tip = box.querySelector('.tip');
+  function show(g, e){
+    var parts = g.dataset.tip.split('|');
+    tip.innerHTML = '<b>' + parts[0] + '</b><div class="tv">' + parts[1] + '</div>' + parts.slice(2).map(function(x){ return '<div class="ts">' + x + '</div>'; }).join('');
+    tip.hidden = false;
+    var r = box.getBoundingClientRect(), hr = g.querySelector('.hit').getBoundingClientRect();
+    var x = hr.left + hr.width / 2 - r.left, w = tip.offsetWidth;
+    tip.style.left = Math.max(4, Math.min(r.width - w - 4, x - w / 2)) + 'px';
+    box.querySelectorAll('.bar').forEach(function(b){ b.classList.toggle('dim', b !== g); });
+  }
+  box.querySelectorAll('.bar').forEach(function(g){
+    g.addEventListener('pointerenter', function(e){ show(g, e); });
+    g.addEventListener('click', function(e){ show(g, e); });
+  });
+  box.addEventListener('pointerleave', function(){ tip.hidden = true; box.querySelectorAll('.bar').forEach(function(b){ b.classList.remove('dim'); }); });
+})();
+</script>
 {% endblock %}

@@ -333,6 +333,26 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         raw_pivot[key][sid] += q or 0
     raw_pivot = sorted(raw_pivot.items())
 
+    # المشتريات (الوارد = الكمية × سعر الوحدة): قيمة الفترة + آخر 12 شهر لحد شهر «إلى تاريخ»
+    line_val = func.sum(ReceiptLine.qty * ReceiptLine.unit_price)
+    period_purchases = (db.query(line_val).select_from(ReceiptLine).join(Receipt)
+                        .filter(Receipt.site_id.in_(ids), Receipt.date.between(d_from, d_to)).scalar() or 0)
+    months = []
+    y, m = d_to.year, d_to.month
+    for _ in range(12):
+        months.insert(0, (y, m))
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    first = date(*months[0], 1)
+    last = date(d_to.year + (d_to.month == 12), d_to.month % 12 + 1, 1)
+    monthly = {k: {} for k in months}
+    for sid, d, v in (db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
+                      .filter(Receipt.site_id.in_(ids), Receipt.date >= first, Receipt.date < last)
+                      .group_by(Receipt.id, Receipt.site_id, Receipt.date)):
+        cell = monthly[(d.year, d.month)]
+        cell[sid] = cell.get(sid, 0) + (v or 0)
+    purchases = [dict(y=y, m=m, by=monthly[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
+    chart = S.column_chart([p["total"] for p in purchases])
+
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
                  .group_by(Item.code, Item.name, Item.uom).order_by(func.sum(RequestLine.value).desc()).limit(10).all())
@@ -342,6 +362,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                   my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
                   period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
                   top_items=top_items, stagnant_value=sum(x["value"] for x in stagnant), stagnant_n=len(stagnant),
+                  period_purchases=period_purchases, purchases=purchases, chart=chart, MONTHS_AR=S.MONTHS_AR,
                   recent=recent)
 
 

@@ -532,14 +532,18 @@ def test_dashboard_roles_and_stagnant(env):
     c = TestClient(app)
     login(c, env, "requester@example.com")
     page = c.get("/").text
-    assert "طلباتي" in page and "قيمة صرف قطع الغيار" not in page and "الرواكد" not in page
+    assert "طلباتي" in page and "صرف قطع الغيار المعتمد" not in page and "الرواكد" not in page and "المشتريات" not in page
     assert c.get("/stagnant", follow_redirects=False).status_code == 403
     login(c, env, "storekeeper@example.com")
     assert "طلباتي" in c.get("/").text            # أمين المستودع: اللوحة المختصرة
     assert "صنف راكد" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
     login(c, env, "eng.crusher@example.com")
     page = c.get("/").text
-    assert "قيمة صرف قطع الغيار" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
+    assert "صرف قطع الغيار المعتمد" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
+    assert "قيمة المشتريات" in page and "المشتريات الشهرية" in page
+    # وارد «NEW-1» من 10 أيام بـ 100 (2 × 50) لازم يظهر في المشتريات الشهرية
+    page = c.get(f"/?site={env['site']}").text
+    assert "100" in page.split("المشتريات الشهرية", 1)[1]
     page = c.get(f"/?site={env['site']}&date_from=2000-01-01&date_to=2099-12-31").text
     assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
     assert "صنف راكد" in c.get(f"/stagnant?site={env['site']}&days=90").text
