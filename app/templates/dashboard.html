@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block body %}
 <div class="hero noprint">
+  <div class="hero-art"></div>
   <div class="hero-txt">
-    <div class="hero-hi">أهلاً، {{ user.name }} 👋</div>
+    <div class="hero-hi">أهلاً، {{ user.name.split()[0] if user.name else "" }} 👋</div>
     <div class="hero-sub"><span id="hero-date"></span> · {{ sel.name if sel else 'كل المواقع' }}</div>
   </div>
 </div>

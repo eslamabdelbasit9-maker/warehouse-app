@@ -292,6 +292,13 @@ class TransferLine(Base):
         return round((self.qty or 0) * (self.unit_cost or 0), 2)
 
 
+class AppSetting(Base):
+    """إعدادات عامة بسيطة (key/value) — زي ألوان وخط البرنامج."""
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
 class Attachment(Base):
     """المرفقات تُحفظ داخل قاعدة البيانات (تبقى مع النسخ الاحتياطي ولا تضيع عند إعادة تشغيل الاستضافة)."""
     __tablename__ = "attachments"

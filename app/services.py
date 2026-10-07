@@ -26,6 +26,68 @@ def fmt(n, d=2):
     return f"{n:,.{d}f}".rstrip("0").rstrip(".")
 
 
+# ---------------- المظهر (الألوان والخط) ----------------
+THEME_COLORS = {  # ألوان جاهزة — والمدير يقدر يختار أي لون تاني
+    "#0B2A5B": "كحلي", "#1D4ED8": "أزرق", "#0F5E56": "أخضر بترولي", "#2B3440": "رمادي فحمي",
+    "#7A1F3D": "عنابي", "#9A3412": "برتقالي محروق",
+}
+THEME_BGS = {"gray": ("رمادي فاتح", "#ECEEF2"), "light": ("فاتح مزرق", "#F3F5F9"),
+             "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB")}
+THEME_FONTS = {"Cairo": "القاهرة (Cairo)", "IBM Plex Sans Arabic": "IBM Plex عربي", "Tajawal": "تجول (Tajawal)",
+               "Almarai": "المراعي (Almarai)"}
+THEME_DEFAULT = {"primary": "#0B2A5B", "bg": "gray", "font": "Cairo"}
+
+
+def _hex_ok(v):
+    import re
+    return bool(re.fullmatch(r"#[0-9A-Fa-f]{6}", v or ""))
+
+
+def _shade(hex_color, dl, ds=0.0):
+    """يفتّح/يغمّق اللون (dl على الإضاءة) ويرجع hex."""
+    import colorsys
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = min(0.92, max(0.05, l + dl))
+    s = min(1, max(0, s + ds))
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def get_theme(db: Session):
+    from .models import AppSetting
+    t = dict(THEME_DEFAULT)
+    for row in db.query(AppSetting).filter(AppSetting.key.in_(["primary", "bg", "font"])):
+        t[row.key] = row.value
+    if not _hex_ok(t["primary"]):
+        t["primary"] = THEME_DEFAULT["primary"]
+    if t["bg"] not in THEME_BGS:
+        t["bg"] = THEME_DEFAULT["bg"]
+    if t["font"] not in THEME_FONTS:
+        t["font"] = THEME_DEFAULT["font"]
+    p = t["primary"].upper()
+    t.update(brand=p, brand2=_shade(p, 0.08), brand3=_shade(p, 0.20, 0.05),
+             brand_rgb=",".join(str(int(p[i:i + 2], 16)) for i in (1, 3, 5)), bg_hex=THEME_BGS[t["bg"]][1],
+             font_url="https://fonts.googleapis.com/css2?family=" + t["font"].replace(" ", "+")
+                      + ":wght@400;500;600;700&display=swap")
+    return t
+
+
+def save_theme(db: Session, primary, bg, font):
+    from .models import AppSetting
+    if not _hex_ok(primary):
+        raise BusinessError("اختر لون صحيح")
+    if bg not in THEME_BGS or font not in THEME_FONTS:
+        raise BusinessError("اختيار غير صحيح")
+    for k, v in (("primary", primary.upper()), ("bg", bg), ("font", font)):
+        row = db.get(AppSetting, k)
+        if row:
+            row.value = v
+        else:
+            db.add(AppSetting(key=k, value=v))
+    db.commit()
+
+
 # ---------------- الأرصدة ----------------
 def stock_table(db: Session, site_id: int, item_ids=None):
     """يرجع dict[item_id] = {open_qty, open_val, in_qty, in_val, out_qty, pending_qty, cur, avg, value}

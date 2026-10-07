@@ -480,3 +480,26 @@ def test_custody_categories(env):
     assets = c.get(f"/custody?site={env['site']}&cat=الأصول").text
     assert "لابتوب" in assets and "نظارة" not in assets
     assert "selected>أدوات السلامة" in c.get(f"/custody/new?site={env['site']}&cat=أدوات السلامة").text
+
+
+def test_appearance(env):
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/admin/appearance", follow_redirects=False).status_code == 403
+    db = SessionLocal()
+    admin = db.query(User).filter(User.roles == "admin").first()
+    env["admin"] = admin.id
+    db.close()
+    login(c, env, "admin")
+    page = c.get("/").text
+    assert "--brand:#0B2A5B" in page and "family=Cairo" in page and "/static/vendor/gsap.min.js" in page
+    assert "تم حفظ المظهر" in c.post("/admin/appearance", data={"primary": "#7a1f3d", "bg": "warm", "font": "Almarai"},
+                                    follow_redirects=True).text
+    page = c.get("/stock").text
+    assert "--brand:#7A1F3D" in page and "--bg:#F0EEEA" in page and "family=Almarai" in page
+    assert "اختر لون صحيح" in c.post("/admin/appearance", data={"primary": "red", "bg": "gray", "font": "Cairo"},
+                                     follow_redirects=True).text
+    c.post("/admin/appearance", data={"reset": "1"})
+    assert "--brand:#0B2A5B" in c.get("/").text
+    c.cookies.clear()
+    assert "--brand:#0B2A5B" in c.get("/signin").text   # صفحة الدخول كمان بتاخد الثيم

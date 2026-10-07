@@ -111,15 +111,16 @@ def flash(request: Request, msg: str, kind="ok"):
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
     pending_n = transfer_n = 0
-    if user is not None:
-        with SessionLocal() as db:
+    with SessionLocal() as db:
+        if user is not None:
             u = db.get(User, user.id)
             pending_n = sum(1 for r in db.query(Req).filter(Req.status == "pending").all() if S.can_approve(db, u, r))
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
+        theme = S.get_theme(db)
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "path": request.url.path,
-                                              "pending_n": pending_n, "transfer_n": transfer_n, **ctx})
+                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, **ctx})
 
 
 def back(url):
@@ -1197,6 +1198,29 @@ async def admin_invoices_post(request: Request, db: Session = Depends(get_db),
         stats.append((s, total, inside))
     return render(request, "admin_invoices.html", user, sites=sites, stats=stats,
                   result=dict(site=site, matched=matched, unmatched=unmatched, errors=errors))
+
+
+# ---------------- المظهر ----------------
+@app.get("/admin/appearance", response_class=HTMLResponse)
+def admin_appearance(request: Request, user: User = Depends(require("admin"))):
+    return render(request, "admin_appearance.html", user, colors=S.THEME_COLORS, bgs=S.THEME_BGS, fonts=S.THEME_FONTS)
+
+
+@app.post("/admin/appearance")
+async def admin_appearance_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    form = await request.form()
+    if form.get("reset"):
+        d = S.THEME_DEFAULT
+        S.save_theme(db, d["primary"], d["bg"], d["font"])
+        flash(request, "رجعنا للشكل الافتراضي")
+        return back("/admin/appearance")
+    try:
+        S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"))
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back("/admin/appearance")
+    flash(request, "تم حفظ المظهر — اتطبق على البرنامج كله")
+    return back("/admin/appearance")
 
 
 @app.get("/admin/mail", response_class=HTMLResponse)
