@@ -22,7 +22,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 <body>
 {% if user %}
 <header class="top">
-  <a href="/"><img src="/static/logo.png" alt=""></a>
+  <a href="/" class="logo-link">{% include "_logo.html" %}</a>
   <span class="title">{{ APP_NAME }}</span>
   {% set alerts = (pending_n or 0) + (transfer_n or 0) %}
   <button type="button" class="menu-btn" aria-label="القائمة" onclick="this.closest('header').classList.toggle('open')">☰{% if alerts %}<span class="badge-n">{{ alerts }}</span>{% endif %}</button>

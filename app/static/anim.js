@@ -19,12 +19,12 @@
     document.body.classList.add('auth-js');
     gsap.set(auth, { visibility: 'visible', transformPerspective: 1200, transformOrigin: '50% 100%' });
     var parts = [];
-    auth.querySelectorAll(':scope > img, :scope > h1, :scope > p, form > *').forEach(function (el) { if (parts.indexOf(el) < 0) parts.push(el); });
+    auth.querySelectorAll(':scope > .logo, :scope > h1, :scope > p, form > *').forEach(function (el) { if (parts.indexOf(el) < 0) parts.push(el); });
     var tl = gsap.timeline({ onComplete: function () { gsap.set(auth, { clearProps: 'transform' }); done(); } });
     tl.from(art, { y: 80, autoAlpha: 0, duration: 1.4, ease: 'expo.out' }, 0)
       .from(auth, { autoAlpha: 0, rotationX: 28, rotationY: -18, z: -220, y: 60, duration: 1.2, ease: 'expo.out' }, 0.1)
       .from(parts, { autoAlpha: 0, y: 18, stagger: 0.07, duration: 0.6, ease: EASE, clearProps: 'transform' }, '-=0.75');
-    gsap.to(auth.querySelector('img'), { y: -4, duration: 1.6, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: 1.4 });
+    gsap.to(auth.querySelector('.logo'), { y: -4, duration: 1.6, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: 1.4 });
     if (fine) {  // الخلفية بس اللي بتتحرك مع الماوس — الكارت ثابت عشان الكتابة والضغط
       var ax = gsap.quickTo(art, 'x', { duration: 1.2, ease: 'power2.out' });
       window.addEventListener('pointermove', function (e) { ax(-(e.clientX / innerWidth - 0.5) * 40); });
@@ -37,7 +37,7 @@
   try { first = !sessionStorage.getItem('hdrAnim'); sessionStorage.setItem('hdrAnim', '1'); } catch (_) {}
   if (first) {
     gsap.from('header.top', { yPercent: -100, duration: 0.7, ease: EASE });
-    gsap.from('nav.main a, header.top .who, header.top img, header.top .title', { autoAlpha: 0, y: -10, stagger: 0.04, duration: 0.5, delay: 0.25, ease: EASE });
+    gsap.from('nav.main a, header.top .who, header.top .logo, header.top .title', { autoAlpha: 0, y: -10, stagger: 0.04, duration: 0.5, delay: 0.25, ease: EASE });
   }
 
   // ---------- محتوى الصفحة: بيدخل واحد ورا التاني بميلة 3D خفيفة ----------

@@ -4,7 +4,14 @@
 body{margin:0;font-family:"Cairo",Tahoma,Arial,sans-serif;background:var(--bg);color:#1f2937;font-size:15px}
 a{color:var(--navy2);text-decoration:none}a:hover{text-decoration:underline}
 header.top{background:var(--navy);color:#fff;display:flex;align-items:center;gap:18px;padding:0 18px;min-height:60px;flex-wrap:wrap}
-header.top img{height:40px}
+/* اللوجو: 3 طبقات — الخلفية والمثلث بلون البرنامج، والكلام والطريق ثابتين */
+.logo{position:relative;display:inline-block;vertical-align:middle;height:40px;aspect-ratio:312/124;background:var(--brand);border-radius:6px;overflow:hidden}
+.logo img{position:relative;display:block;width:100%;height:100%}
+.logo-tri,.logo-tri-l{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.logo-tri{background:var(--brand3);-webkit-mask-image:url("/static/logo_tri.png");mask-image:url("/static/logo_tri.png")}
+.logo-tri-l{background:#fff;opacity:.6;-webkit-mask-image:url("/static/logo_tri_light.png");mask-image:url("/static/logo_tri_light.png")}
+.logo-lg{height:64px;border-radius:10px}
+header.top .logo{box-shadow:0 0 0 1px rgba(255,255,255,.12)}
 header.top .title{font-weight:700;font-size:17px}
 nav.main{display:flex;gap:4px;flex-wrap:wrap;flex:1}
 nav.main a{color:#dbe6ff;padding:8px 10px;border-radius:6px;font-size:14px}
@@ -64,7 +71,7 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
   .kpi .v{font-size:21px}
   /* الهيدر: لوجو + اسم + زرار قائمة، والقائمة بتفتح تحت */
   header.top{padding:8px 12px;gap:10px;min-height:54px}
-  header.top img{height:32px}
+  header.top .logo{height:32px}
   header.top .title{font-size:15px;flex:1}
   .menu-btn{display:block;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;font-size:22px;line-height:1;padding:7px 12px;cursor:pointer;position:relative}
   .menu-btn .badge-n{position:absolute;top:-6px;left:-6px;margin:0}
@@ -110,7 +117,7 @@ table.t tr.colf input,table.t tr.colf select{width:100%;min-width:70px;padding:4
 body{background:radial-gradient(1200px 500px at 100% -10%,rgba(var(--brand-rgb),.07) 0,transparent 60%),var(--bg);background-attachment:fixed}
 /* الهيدر */
 header.top{background:linear-gradient(120deg,var(--brand) 0%,var(--brand2) 55%,var(--brand3) 100%);box-shadow:0 2px 12px rgba(var(--brand-rgb),.25);position:sticky;top:0;z-index:20}
-header.top img{transition:transform .4s var(--ease)}header.top a:hover img{transform:rotate(-6deg) scale(1.06)}
+header.top .logo{transition:transform .4s var(--ease)}header.top a:hover .logo{transform:scale(1.06)}
 nav.main a{position:relative;transition:background .2s,color .2s}
 nav.main a::after{content:"";position:absolute;right:10px;left:10px;bottom:3px;height:2px;border-radius:2px;background:var(--accent);
   transform:scaleX(0);transition:transform .25s var(--ease)}
