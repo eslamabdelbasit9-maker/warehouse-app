@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الأصناف الراكدة{{ ' — ' ~ sel.name if sel }}</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الموقع</label>
+    <select name="site" onchange="this.form.submit()"><option value="">كل المواقع</option>
+      {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>ما اتحركتش من</label>
+    <select name="days" onchange="this.form.submit()">{% for d in day_opts %}<option value="{{ d }}" {{ 'selected' if d == days }}>{{ {90:'3 شهور',180:'6 شهور',365:'سنة'}[d] }}</option>{% endfor %}</select></div>
+  <div class="f"><label>بحث</label><input data-live="#sgtbl" placeholder="كود أو صنف"></div>
+</form>
+<div class="card">
+  <p class="muted" style="margin-top:0">صنف راكد = ليه رصيد، وما حصلش عليه صرف ولا وارد ولا تحويل من {{ {90:'3 شهور',180:'6 شهور',365:'سنة'}[days] }} أو أكتر.</p>
+  <div class="muted">{{ rows|length }} صنف — القيمة: <b>{{ fmt(total) }}</b></div>
+  <div class="tw"><table class="t" id="sgtbl">
+  <tr>{% if not sel %}<th>الموقع</th>{% endif %}<th>الكود</th><th>الصنف</th><th class="n">الرصيد</th><th>الوحدة</th><th class="n">متوسط السعر</th><th class="n">القيمة</th><th>آخر حركة</th><th class="n">من كام يوم</th></tr>
+  {% for r in rows %}<tr>{% if not sel %}<td>{{ r.site.name }}</td>{% endif %}
+    <td><a href="/stock/{{ r.item.id }}?site={{ r.site.id }}">{{ r.item.code }}</a></td><td>{{ r.item.name }}</td>
+    <td class="n">{{ fmt(r.cur) }}</td><td>{{ r.item.uom }}</td><td class="n">{{ fmt(r.avg) }}</td><td class="n"><b>{{ fmt(r.value) }}</b></td>
+    <td>{{ r.last or 'رصيد افتتاحي — ما اتحركش' }}</td><td class="n">{{ r.idle_days if r.idle_days is not none else '-' }}</td></tr>
+  {% else %}<tr><td colspan="9" class="muted">مفيش أصناف راكدة 👍</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endblock %}

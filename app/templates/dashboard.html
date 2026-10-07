@@ -1,18 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
-<div class="hero noprint">
-  <div class="hero-art"></div>
-  <div class="hero-txt">
-    <div class="hero-hi">أهلاً، {{ user.name.split()[0] if user.name else "" }} 👋</div>
-    <div class="hero-sub"><span id="hero-date"></span> · {{ sel.name if sel else 'كل المواقع' }}</div>
-  </div>
-</div>
+{% with hero_sub = sel.name if sel else 'كل المواقع' %}{% include "_hero.html" %}{% endwith %}
 <form class="filters card noprint" method="get">
   <div class="f"><label>الموقع</label>
     <select name="site"><option value="">كل المواقع</option>
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}
     </select></div>
-  <div class="f"><label>الشهر</label><input type="month" name="month" value="{{ month }}"></div>
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
   <button class="btn">عرض</button>
   <span class="right"></span>
   {% if user.has('requester','storekeeper') %}
@@ -20,14 +15,13 @@
   <a class="btn green" href="/requests/new/raw">+ صرف مواد خام</a>
   {% endif %}
 </form>
-
+{% set q = '?site=' ~ (sel.id if sel else '') %}
 <div class="grid g4">
-  <div class="card kpi"><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></div>
-  <div class="card kpi"><div class="v">{{ fmt(month_spend) }}</div><div class="l">قيمة صرف قطع الغيار المعتمد — {{ month }}</div></div>
-  <div class="card kpi"><div class="v">{{ fmt(stock_value, 0) }}</div><div class="l">قيمة الرصيد الحالي</div></div>
-  <div class="card kpi"><div class="v">{{ month_reqs }}</div><div class="l">عدد الطلبات في الشهر</div></div>
+  <a class="card kpi" href="/approvals"><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
+  <div class="card kpi"><div class="v">{{ fmt(period_spend) }}</div><div class="l">قيمة صرف قطع الغيار المعتمد<br>من {{ d_from }} إلى {{ d_to }}</div></div>
+  <div class="card kpi"><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
   <div class="card kpi"><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد: المهندس / مدير الإنتاج / النهائي</div></div>
-  <div class="card kpi"><div class="v">{{ open_custody }}</div><div class="l">بنود أصول لم تُرجع</div></div>
+  <a class="card kpi" href="/stagnant{{ q }}"><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ({{ stagnant_n }} صنف — ما اتحركتش من 6 شهور) ←</div></a>
 </div>
 
 {% if my_pending %}
@@ -40,19 +34,41 @@
 {% endif %}
 
 <div class="grid g2">
-  <div class="card"><h2>صرف قطع الغيار حسب الوحدة — {{ month }}</h2><div class="tw"><table class="t">
-    <tr><th>الموقع</th><th>الوحدة</th><th class="n">عدد الطلبات</th><th class="n">القيمة</th></tr>
-    {% for s, u, v, c in spend_rows %}<tr><td>{{ s }}</td><td>{{ u or '-' }}</td><td class="n">{{ c }}</td><td class="n">{{ fmt(v) }}</td></tr>
-    {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في هذا الشهر</td></tr>{% endfor %}
+  <div class="card"><h2>صرف قطع الغيار حسب الوحدة</h2><p class="muted" style="margin-top:-6px">من {{ d_from }} إلى {{ d_to }} — المعتمد بس</p><div class="tw"><table class="t">
+  {% if sel %}
+    <tr><th>الوحدة</th><th>النوع</th><th class="n">عدد الطلبات</th><th class="n">القيمة</th></tr>
+    {% for u, k, v, c in spend %}<tr><td>{{ u }}</td><td>{{ k }}</td><td class="n">{{ c }}</td><td class="n">{{ fmt(v) }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
+    {% if spend %}<tr><td colspan="3"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(period_spend) }}</b></td></tr>{% endif %}
+  {% else %}
+    <tr><th>نوع الوحدة</th>{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}<th class="n">الإجمالي</th></tr>
+    {% for kind, by in spend %}<tr><td><b>{{ kind }}</b></td>
+      {% for s in pivot_sites %}<td class="n">{{ fmt(by.get(s.id)) if by.get(s.id) else '-' }}</td>{% endfor %}
+      <td class="n"><b>{{ fmt(by.values()|sum) }}</b></td></tr>
+    {% else %}<tr><td colspan="{{ pivot_sites|length + 2 }}" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
+    {% if spend %}<tr><td><b>الإجمالي</b></td>
+      {% for s in pivot_sites %}{% set ns = namespace(t=0) %}{% for kind, by in spend %}{% set ns.t = ns.t + (by.get(s.id) or 0) %}{% endfor %}
+      <td class="n"><b>{{ fmt(ns.t) if ns.t else '-' }}</b></td>{% endfor %}<td class="n"><b>{{ fmt(period_spend) }}</b></td></tr>{% endif %}
+  {% endif %}
   </table></div></div>
-  <div class="card"><h2>المواد الخام المصروفة — {{ month }}</h2><div class="tw"><table class="t">
+
+  <div class="card"><h2>المواد الخام المصروفة</h2><p class="muted" style="margin-top:-6px">من {{ d_from }} إلى {{ d_to }} — المعتمد بس</p><div class="tw"><table class="t">
+  {% if sel %}
     <tr><th>المادة</th><th class="n">الكمية</th><th>الوحدة</th></tr>
-    {% for n, uom, p, q in raw_rows %}<tr><td>{{ n }}{% if p %} — {{ p }}{% endif %}</td><td class="n">{{ fmt(q) }}</td><td>{{ uom }}</td></tr>
+    {% for (n, uom), by in raw_pivot %}<tr><td>{{ n }}</td><td class="n">{{ fmt(by.values()|sum) }}</td><td>{{ uom }}</td></tr>
     {% else %}<tr><td colspan="3" class="muted">لا يوجد</td></tr>{% endfor %}
+  {% else %}
+    <tr><th>المادة</th>{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}<th class="n">الإجمالي</th><th>الوحدة</th></tr>
+    {% for (n, uom), by in raw_pivot %}<tr><td><b>{{ n }}</b></td>
+      {% for s in pivot_sites %}<td class="n">{{ fmt(by.get(s.id)) if by.get(s.id) else '-' }}</td>{% endfor %}
+      <td class="n"><b>{{ fmt(by.values()|sum) }}</b></td><td>{{ uom }}</td></tr>
+    {% else %}<tr><td colspan="{{ pivot_sites|length + 3 }}" class="muted">لا يوجد</td></tr>{% endfor %}
+  {% endif %}
   </table></div></div>
-  <div class="card"><h2>أعلى 10 أصناف صرفاً — {{ month }}</h2><div class="tw"><table class="t">
+
+  <div class="card"><h2>أعلى 10 أصناف صرفاً</h2><div class="tw"><table class="t">
     <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
-    {% for c, n, uom, q, v in top_items %}<tr><td>{{ c }}</td><td>{{ n }}</td><td class="n">{{ fmt(q) }} {{ uom }}</td><td class="n">{{ fmt(v) }}</td></tr>
+    {% for c, n, uom, qq, v in top_items %}<tr><td>{{ c }}</td><td>{{ n }}</td><td class="n">{{ fmt(qq) }} {{ uom }}</td><td class="n">{{ fmt(v) }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">لا يوجد</td></tr>{% endfor %}
   </table></div></div>
   <div class="card"><h2>آخر الطلبات</h2><div class="tw"><table class="t">

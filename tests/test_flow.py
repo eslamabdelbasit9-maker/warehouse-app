@@ -506,3 +506,40 @@ def test_appearance(env):
     assert "--brand:#2B3440" in c.get("/").text
     c.cookies.clear()
     assert "--brand:#2B3440" in c.get("/signin").text   # صفحة الدخول كمان بتاخد الثيم
+
+
+def test_dashboard_roles_and_stagnant(env):
+    from datetime import date, timedelta
+    db = SessionLocal()
+    site = db.get(Site, env["site"])
+    old = Item(code="SP_OLD", name="صنف راكد", uom="قطعة")
+    new = Item(code="SP_NEW", name="صنف متحرك", uom="قطعة")
+    db.add_all([old, new])
+    db.flush()
+    db.add(OpeningBalance(site_id=site.id, item_id=old.id, qty=4, value=400))
+    rec = Receipt(site_id=site.id, date=date.today() - timedelta(days=10), invoice_no="NEW-1")
+    rec.lines = [ReceiptLine(item_id=new.id, qty=2, unit_price=50)]
+    db.add(rec)
+    db.commit()
+    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180)}
+    assert "SP_OLD" in rows and rows["SP_OLD"]["value"] == 400 and rows["SP_OLD"]["last"] is None
+    assert "SP_NEW" not in rows
+    # بعد 200 يوم الصنف اللي اتورد من 10 أيام برضه بيبقى راكد
+    later = {r["item"].code for r in S.stagnant_items(db, [site.id], 180, today=date.today() + timedelta(days=200))}
+    assert "SP_NEW" in later
+    db.close()
+
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    page = c.get("/").text
+    assert "طلباتي" in page and "قيمة صرف قطع الغيار" not in page and "الرواكد" not in page
+    assert c.get("/stagnant", follow_redirects=False).status_code == 403
+    login(c, env, "storekeeper@example.com")
+    assert "طلباتي" in c.get("/").text            # أمين المستودع: اللوحة المختصرة
+    assert "صنف راكد" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
+    login(c, env, "eng.crusher@example.com")
+    page = c.get("/").text
+    assert "قيمة صرف قطع الغيار" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
+    page = c.get(f"/?site={env['site']}&date_from=2000-01-01&date_to=2099-12-31").text
+    assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
+    assert "صنف راكد" in c.get(f"/stagnant?site={env['site']}&days=90").text

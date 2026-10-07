@@ -130,7 +130,7 @@ nav.main a:hover,nav.main a.on{background:rgba(255,255,255,.10)}
 h1{position:relative;padding-right:12px}
 h1::before{content:"";position:absolute;right:0;top:4px;bottom:4px;width:4px;border-radius:3px;background:linear-gradient(var(--accent),#f08c00)}
 /* مؤشرات لوحة المتابعة */
-.kpi{position:relative;overflow:hidden}
+.kpi{position:relative;overflow:hidden}a.kpi{display:block;color:inherit;text-decoration:none}a.kpi:hover{text-decoration:none}
 .kpi::before{content:"";position:absolute;top:0;right:0;left:0;height:4px;background:var(--kc,var(--brand3))}
 .kpi::after{content:"";position:absolute;left:-30px;bottom:-30px;width:90px;height:90px;border-radius:50%;background:var(--kc,var(--brand3));opacity:.07;transition:transform .4s var(--ease)}
 .kpi:hover{box-shadow:var(--sh-md)}.kpi:hover::after{transform:scale(1.35)}

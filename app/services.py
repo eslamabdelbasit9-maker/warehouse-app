@@ -175,6 +175,48 @@ def issued_summary(db: Session, site_id: int, item_ids, ref_date, exclude_reques
     return out
 
 
+# ---------------- الرواكد ----------------
+STAGNANT_DAYS = (90, 180, 365)
+
+
+def stagnant_items(db: Session, site_ids, days=180, today=None):
+    """أصناف قطع غيار ليها رصيد ومتحركتش (لا صرف ولا وارد ولا تحويل) من `days` يوم أو أكتر.
+    يرجع list of dict(site, item, cur, avg, value, last, idle_days) مرتبة بالقيمة."""
+    from datetime import date as _date, timedelta
+    today = today or _date.today()
+    limit = today - timedelta(days=days)
+    out = []
+    for site in db.query(Site).filter(Site.id.in_(list(site_ids))).order_by(Site.name):
+        st = stock_table(db, site.id)
+        live = [iid for iid, r in st.items() if r["cur"] > 1e-9]
+        if not live:
+            continue
+        last = defaultdict(lambda: None)
+
+        def bump(rows):
+            for iid, d in rows:
+                if d and (last[iid] is None or d > last[iid]):
+                    last[iid] = d
+        bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
+             .filter(Request.site_id == site.id, Request.status.in_(["approved", "partial"]),
+                     RequestLine.status == "approved", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
+        bump(db.query(ReceiptLine.item_id, func.max(Receipt.date)).join(Receipt)
+             .filter(Receipt.site_id == site.id, ReceiptLine.item_id.in_(live)).group_by(ReceiptLine.item_id))
+        bump(db.query(TransferLine.item_id, func.max(Transfer.date)).join(Transfer)
+             .filter(Transfer.status.in_(["in_transit", "received"]), TransferLine.item_id.in_(live),
+                     (Transfer.from_site_id == site.id) | (Transfer.to_site_id == site.id)).group_by(TransferLine.item_id))
+        items = {i.id: i for i in db.query(Item).filter(Item.id.in_(live), Item.category == "spare")}
+        for iid in live:
+            it = items.get(iid)
+            if not it or (last[iid] is not None and last[iid] > limit):
+                continue
+            r = st[iid]
+            out.append(dict(site=site, item=it, cur=r["cur"], avg=r["avg"], value=r["value"], last=last[iid],
+                            idle_days=(today - last[iid]).days if last[iid] else None))
+    out.sort(key=lambda x: -x["value"])
+    return out
+
+
 # ---------------- الطلبات ----------------
 def next_req_no(db: Session, rtype: str, site: Site, year: int):
     prefix = f"{'SP' if rtype == 'spare' else 'RM'}-{site.code}-{year}-"

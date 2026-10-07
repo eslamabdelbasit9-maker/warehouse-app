@@ -272,58 +272,90 @@ async def account_post(request: Request, db: Session = Depends(get_db), user: Us
 
 
 # ---------------- لوحة المتابعة ----------------
+def can_see_full_dashboard(user):
+    """اللوحة الكاملة (القيم المالية) للمعتمدين ومدير النظام بس."""
+    return user.has("engineer", "manager", "final")
+
+
 @app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, site: str | None = None, month: str | None = None,
+def dashboard(request: Request, site: str | None = None, date_from: str | None = None, date_to: str | None = None,
               db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites = user_sites(db, user)
+    if not can_see_full_dashboard(user):
+        mine = (db.query(Req).filter(Req.requester_id == user.id).order_by(Req.created_at.desc()).limit(30).all())
+        incoming = []
+        if user.has("storekeeper"):
+            incoming = (db.query(Transfer).filter(Transfer.status == "in_transit",
+                                                  Transfer.to_site_id.in_([s.id for s in sites]))
+                        .order_by(Transfer.date).all())
+        return render(request, "dashboard_simple.html", user, sel=None, mine=mine, incoming=incoming)
+
     site_ids = [s.id for s in sites]
     sel = next((s for s in sites if str(s.id) == str(site)), None)
     ids = [sel.id] if sel else site_ids
     today = date.today()
-    try:
-        y, m = (int(x) for x in (month or f"{today:%Y-%m}").split("-"))
-    except ValueError:
-        y, m = today.year, today.month
-    start = date(y, m, 1)
-    end = date(y + (m == 12), m % 12 + 1, 1)
+    d_from = parse_date(date_from, today.replace(day=1))
+    d_to = parse_date(date_to, today)
+    if d_to < d_from:
+        d_from, d_to = d_to, d_from
+    period = Req.work_date.between(d_from, d_to)
 
     my_pending = [r for r in db.query(Req).filter(Req.status == "pending").all() if S.can_approve(db, user, r)]
     base = db.query(Req).filter(Req.site_id.in_(ids))
     pending_by_stage = {s: base.filter(Req.status == "pending", Req.current_stage == s).count() for s in STAGES}
-    month_reqs = base.filter(Req.work_date >= start, Req.work_date < end).count()
+    period_reqs = base.filter(period).count()
+    approved = [Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]), RequestLine.status == "approved", period]
 
-    # قيمة المصروف المعتمد (قطع غيار) حسب الوحدة
-    spend_rows = (db.query(Site.name, Unit.name, func.sum(RequestLine.value), func.count(func.distinct(Req.id)))
-                  .select_from(RequestLine).join(Req).join(Site, Site.id == Req.site_id)
-                  .outerjoin(Unit, Unit.id == Req.unit_id)
-                  .filter(Req.site_id.in_(ids), Req.type == "spare", Req.status.in_(["approved", "partial"]),
-                          RequestLine.status == "approved", Req.work_date >= start, Req.work_date < end)
-                  .group_by(Site.name, Unit.name).order_by(func.sum(RequestLine.value).desc()).all())
-    month_spend = sum(r[2] or 0 for r in spend_rows)
+    # صرف قطع الغيار: حسب الوحدة (موقع واحد) أو جدول نوع الوحدة × الفروع (كل المواقع)
+    rows = (db.query(Req.site_id, Unit.kind, Unit.name, func.sum(RequestLine.value), func.count(func.distinct(Req.id)))
+            .select_from(RequestLine).join(Req).outerjoin(Unit, Unit.id == Req.unit_id)
+            .filter(Req.type == "spare", *approved).group_by(Req.site_id, Unit.kind, Unit.name).all())
+    period_spend = sum(r[3] or 0 for r in rows)
+    pivot_sites = [s for s in sites if s.id in ids]
+    if sel:
+        spend = sorted(([u or "-", UNIT_KINDS.get(k, ""), v or 0, c] for _, k, u, v, c in rows), key=lambda x: -x[2])
+    else:
+        spend = {}
+        for sid, k, _, v, _ in rows:
+            spend.setdefault(k or "other", {}).setdefault(sid, 0.0)
+            spend[k or "other"][sid] += v or 0
+        spend = [(UNIT_KINDS.get(k, k), spend[k]) for k in UNIT_KINDS if k in spend]
+
+    # المواد الخام (كميات): حسب المادة، ولو كل المواقع: المادة × الفروع
+    raw = (db.query(Req.site_id, Item.name, Item.uom, RequestLine.diesel_purpose, func.sum(RequestLine.qty))
+           .select_from(RequestLine).join(Req).join(Item)
+           .filter(Req.type == "raw", *approved).group_by(Req.site_id, Item.name, Item.uom, RequestLine.diesel_purpose)
+           .order_by(Item.name).all())
+    raw_pivot = {}
+    for sid, n, uom, purpose, q in raw:
+        key = (f"{n} — {purpose}" if purpose else n, uom)
+        raw_pivot.setdefault(key, {}).setdefault(sid, 0.0)
+        raw_pivot[key][sid] += q or 0
+    raw_pivot = sorted(raw_pivot.items())
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
-                 .select_from(RequestLine).join(Req).join(Item)
-                 .filter(Req.site_id.in_(ids), Req.type == "spare", Req.status.in_(["approved", "partial"]),
-                         RequestLine.status == "approved", Req.work_date >= start, Req.work_date < end)
+                 .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
                  .group_by(Item.code, Item.name, Item.uom).order_by(func.sum(RequestLine.value).desc()).limit(10).all())
-
-    raw_rows = (db.query(Item.name, Item.uom, RequestLine.diesel_purpose, func.sum(RequestLine.qty))
-                .select_from(RequestLine).join(Req).join(Item)
-                .filter(Req.site_id.in_(ids), Req.type == "raw", Req.status.in_(["approved", "partial"]),
-                        RequestLine.status == "approved", Req.work_date >= start, Req.work_date < end)
-                .group_by(Item.name, Item.uom, RequestLine.diesel_purpose).order_by(Item.name).all())
-
-    stock_value = 0.0
-    for sid in ids:
-        stock_value += sum(r["value"] for r in S.stock_table(db, sid).values())
-
-    open_custody = db.query(CustodyRecord).filter(CustodyRecord.site_id.in_(ids),
-                                                  CustodyRecord.returned_at.is_(None)).count()
+    stagnant = S.stagnant_items(db, ids)
     recent = base.order_by(Req.created_at.desc()).limit(8).all()
-    return render(request, "dashboard.html", user, sites=sites, sel=sel, month=f"{y:04d}-{m:02d}",
-                  my_pending=my_pending, pending_by_stage=pending_by_stage, month_reqs=month_reqs,
-                  month_spend=month_spend, spend_rows=spend_rows, top_items=top_items, raw_rows=raw_rows,
-                  stock_value=stock_value, open_custody=open_custody, recent=recent)
+    return render(request, "dashboard.html", user, sites=sites, sel=sel, d_from=d_from, d_to=d_to,
+                  my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
+                  period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
+                  top_items=top_items, stagnant_value=sum(x["value"] for x in stagnant), stagnant_n=len(stagnant),
+                  recent=recent)
+
+
+@app.get("/stagnant", response_class=HTMLResponse)
+def stagnant(request: Request, site: str | None = None, days: int = 180, db: Session = Depends(get_db),
+             user: User = Depends(current_user)):
+    if not (can_see_full_dashboard(user) or user.has("storekeeper")):
+        raise Forbidden()
+    sites = user_sites(db, user)
+    sel = next((s for s in sites if str(s.id) == str(site)), None)
+    days = days if days in S.STAGNANT_DAYS else 180
+    rows = S.stagnant_items(db, [sel.id] if sel else [s.id for s in sites], days)
+    return render(request, "stagnant.html", user, sites=sites, sel=sel, days=days, rows=rows,
+                  total=sum(r["value"] for r in rows), day_opts=S.STAGNANT_DAYS)
 
 
 # ---------------- API ----------------

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+{% with hero_sub = 'متابعة طلباتك' %}{% include "_hero.html" %}{% endwith %}
+{% if user.has('requester','storekeeper') %}
+<div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+  <a class="btn green" href="/requests/new/spare">+ طلب صرف قطع غيار</a>
+  <a class="btn green" href="/requests/new/raw">+ صرف مواد خام</a>
+</div>
+{% endif %}
+{% if incoming %}
+<div class="card"><h2>تحويلات واردة بانتظار تأكيد الاستلام</h2><div class="tw"><table class="t">
+<tr><th>رقم التحويل</th><th>التاريخ</th><th>من</th><th>إلى</th><th></th></tr>
+{% for t in incoming %}<tr><td>{{ t.tr_no }}</td><td>{{ t.date }}</td><td>{{ t.from_site.name }}</td><td>{{ t.to_site.name }}</td>
+<td><a class="btn sm green" href="/transfers/{{ t.id }}">تأكيد الاستلام</a></td></tr>{% endfor %}
+</table></div></div>
+{% endif %}
+<div class="card"><h2>طلباتي</h2><div class="tw"><table class="t">
+<tr><th>رقم الطلب</th><th>النوع</th><th>التاريخ</th><th>الموقع / الوحدة</th><th>الأصناف</th><th>الحالة</th></tr>
+{% for r in mine %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.work_date }}</td>
+<td>{{ r.site.name }}{% if r.unit %} / {{ r.unit.name }}{% endif %}</td><td>{{ r.lines|length }}</td>
+<td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — عند {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>
+{% else %}<tr><td colspan="6" class="muted">لسه ما عملتش طلبات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}
