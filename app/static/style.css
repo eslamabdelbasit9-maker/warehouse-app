@@ -96,3 +96,78 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
 table.t tr.colf th{background:#e8edf6;padding:4px}
 table.t tr.colf input,table.t tr.colf select{width:100%;min-width:70px;padding:4px 6px;font-size:13px}
 @media print{.tw.sticky{max-height:none;overflow:visible}}
+
+/* ================= التصميم والحركة ================= */
+:root{--accent:#f5b301;--sh-sm:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  --sh-md:0 6px 16px rgba(16,24,40,.10),0 2px 6px rgba(16,24,40,.06);--ease:cubic-bezier(.2,.8,.2,1)}
+body{background:radial-gradient(1200px 500px at 100% -10%,#e3ebfa 0,transparent 60%),var(--bg);background-attachment:fixed}
+/* الهيدر */
+header.top{background:linear-gradient(120deg,#0B2A5B 0%,#143a74 55%,#1c4f98 100%);box-shadow:0 2px 12px rgba(11,42,91,.25);position:sticky;top:0;z-index:20}
+header.top img{transition:transform .4s var(--ease)}header.top a:hover img{transform:rotate(-6deg) scale(1.06)}
+nav.main a{position:relative;transition:background .2s,color .2s}
+nav.main a::after{content:"";position:absolute;right:10px;left:10px;bottom:3px;height:2px;border-radius:2px;background:var(--accent);
+  transform:scaleX(0);transition:transform .25s var(--ease)}
+nav.main a:hover::after,nav.main a.on::after{transform:scaleX(1)}
+nav.main a:hover,nav.main a.on{background:rgba(255,255,255,.10)}
+.badge-n{animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(225,29,72,.55)}70%{box-shadow:0 0 0 7px rgba(225,29,72,0)}100%{box-shadow:0 0 0 0 rgba(225,29,72,0)}}
+/* الكروت */
+.card{border:1px solid rgba(15,23,42,.06);border-radius:14px;box-shadow:var(--sh-sm);transition:box-shadow .25s,transform .25s var(--ease)}
+h1{position:relative;padding-right:12px}
+h1::before{content:"";position:absolute;right:0;top:4px;bottom:4px;width:4px;border-radius:3px;background:linear-gradient(var(--accent),#f08c00)}
+/* مؤشرات لوحة المتابعة */
+.kpi{position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;top:0;right:0;left:0;height:4px;background:var(--kc,#1c4f98)}
+.kpi::after{content:"";position:absolute;left:-30px;bottom:-30px;width:90px;height:90px;border-radius:50%;background:var(--kc,#1c4f98);opacity:.07;transition:transform .4s var(--ease)}
+.kpi:hover{transform:translateY(-3px);box-shadow:var(--sh-md)}.kpi:hover::after{transform:scale(1.35)}
+.g4 .kpi:nth-child(6n+1){--kc:#1c4f98}.g4 .kpi:nth-child(6n+2){--kc:#0f9d58}.g4 .kpi:nth-child(6n+3){--kc:#f5b301}
+.g4 .kpi:nth-child(6n+4){--kc:#7c3aed}.g4 .kpi:nth-child(6n+5){--kc:#e8590c}.g4 .kpi:nth-child(6n+6){--kc:#0891b2}
+.kpi .v{font-variant-numeric:tabular-nums}
+/* الأزرار */
+.btn{border-radius:8px;transition:transform .15s var(--ease),box-shadow .2s,background .2s,filter .2s;box-shadow:0 1px 2px rgba(16,24,40,.12)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(16,24,40,.15)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn.green{background:linear-gradient(135deg,#12884a,#0f7b3f)}.btn.green:hover{filter:brightness(1.07)}
+.btn.red{background:linear-gradient(135deg,#c8321f,#b42318)}.btn.red:hover{filter:brightness(1.07)}
+.btn.sec:hover{background:#dbe1ea}
+.btn.loading{pointer-events:none;opacity:.85;position:relative;color:transparent !important}
+.btn.loading::after{content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.5);border-top-color:#fff;animation:spin .7s linear infinite}
+.btn.sec.loading::after{border-color:rgba(31,41,55,.3);border-top-color:#1f2937}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* الخانات */
+input,select,textarea{transition:border-color .2s,box-shadow .2s;border-radius:8px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#3b6fc4;box-shadow:0 0 0 3px rgba(59,111,196,.18)}
+/* الجداول */
+table.t th{background:linear-gradient(180deg,#0f3266,#0B2A5B)}
+table.t tr:first-child th:first-child{border-top-right-radius:8px}table.t tr:first-child th:last-child{border-top-left-radius:8px}
+table.t td{transition:background .15s}
+table.t tr:hover>td{background:#eef3fb}
+/* رسائل التنبيه */
+.flash{animation:slideIn .45s var(--ease) both;box-shadow:var(--sh-sm);border-right:4px solid currentColor}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.st{transition:transform .2s}.st:hover{transform:scale(1.05)}
+.steps span{transition:transform .2s}.steps span.cur{animation:pulseWarn 2.2s infinite}
+@keyframes pulseWarn{0%,100%{box-shadow:0 0 0 0 rgba(161,92,0,.25)}50%{box-shadow:0 0 0 5px rgba(161,92,0,0)}}
+img.thumb{transition:transform .2s var(--ease)}img.thumb:hover{transform:scale(1.12)}
+/* دخول الصفحة: الأجزاء بتظهر واحدة ورا التانية */
+main>*,.grid>.card{animation:fadeUp .5s var(--ease) both}
+main>*:nth-child(2){animation-delay:.05s}main>*:nth-child(3){animation-delay:.1s}main>*:nth-child(4){animation-delay:.15s}
+main>*:nth-child(5){animation-delay:.2s}main>*:nth-child(n+6){animation-delay:.25s}
+.grid>.card:nth-child(2){animation-delay:.06s}.grid>.card:nth-child(3){animation-delay:.12s}.grid>.card:nth-child(4){animation-delay:.18s}
+.grid>.card:nth-child(5){animation-delay:.24s}.grid>.card:nth-child(n+6){animation-delay:.3s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+/* صفحة الدخول */
+body:has(.auth){background:linear-gradient(135deg,#0B2A5B,#1c4f98 60%,#2a66c2);min-height:100vh;overflow-x:hidden}
+body:has(.auth)::before,body:has(.auth)::after{content:"";position:fixed;border-radius:50%;filter:blur(2px);opacity:.18;background:var(--accent);animation:float 9s ease-in-out infinite;z-index:0}
+body:has(.auth)::before{width:280px;height:280px;top:-80px;left:-60px;background:#fff;opacity:.08}
+body:has(.auth)::after{width:200px;height:200px;bottom:-60px;right:-40px;background:#7fb0ff;animation-delay:-4s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(24px)}}
+.auth{position:relative;z-index:1;box-shadow:0 20px 50px rgba(0,0,0,.25);animation:pop .6s var(--ease) both}
+.auth h1::before{display:none}.auth h1{padding:0}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+/* قايمة الموبايل */
+@media (max-width:700px){header.top.open .menu{animation:fadeUp .25s var(--ease) both}.kpi:hover{transform:none}}
+/* اللي مش عايز حركة */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
+@media print{*{animation:none !important;box-shadow:none !important}header.top{position:static}h1::before{display:none}}

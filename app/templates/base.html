@@ -38,6 +38,27 @@
 </main>
 {% block scripts %}{% endblock %}
 <script>
+// الأرقام في لوحة المتابعة بتعدّ من صفر لقيمتها
+(function(){
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.kpi .v').forEach(function(el){
+    var txt = el.textContent.trim(); if (!/^-?[\d,]+(\.\d+)?$/.test(txt)) return;
+    var target = parseFloat(txt.replace(/,/g, '')), dec = (txt.split('.')[1] || '').length;
+    if (!target) return;
+    var t0 = null, dur = 900;
+    function step(t){ if (!t0) t0 = t; var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (target * e).toLocaleString('en-US', {minimumFractionDigits: p < 1 ? 0 : dec, maximumFractionDigits: dec});
+      if (p < 1) requestAnimationFrame(step); else el.textContent = txt; }
+    el.textContent = '0'; requestAnimationFrame(step);
+  });
+})();
+// زرار الحفظ بيلف لحد ما الصفحة اللي بعدها تفتح (ويمنع الضغط مرتين)
+document.addEventListener('submit', function(e){
+  if (e.defaultPrevented) return;
+  var b = e.submitter || e.target.querySelector('button:not([type=button])');
+  if (b && b.classList.contains('btn') && e.target.method.toLowerCase() === 'post') setTimeout(function(){ b.classList.add('loading'); }, 0);
+});
+window.addEventListener('pageshow', function(){ document.querySelectorAll('.btn.loading').forEach(function(b){ b.classList.remove('loading'); }); });
 // الموبايل: أسطر الأصناف في الفورمات بتتعرض ككروت — كل خانة عليها اسم العمود
 (function(){
   function label(tbl){
