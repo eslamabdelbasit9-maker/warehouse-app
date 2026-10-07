@@ -166,6 +166,20 @@ body:has(.auth){background:url("/static/bg-plant.svg") center bottom/auto min(60
 @keyframes pop{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
 /* قايمة الموبايل */
 @media (max-width:700px){header.top.open .menu{animation:fadeUp .25s var(--ease) both}.kpi:hover{transform:none}}
+/* شريط الترحيب في لوحة المتابعة */
+.hero{position:relative;overflow:hidden;border-radius:16px;margin-bottom:16px;min-height:150px;display:flex;align-items:center;padding:22px 26px;
+  background:linear-gradient(120deg,#0B2A5B 0%,#163d7a 55%,#2a66c2 100%);color:#fff;box-shadow:var(--sh-md)}
+.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:600px;max-width:100%;pointer-events:none;
+  background:url("/static/bg-plant.svg") left bottom/auto 118% no-repeat;
+  -webkit-mask-image:linear-gradient(to right,#000 84%,transparent 100%);mask-image:linear-gradient(to right,#000 84%,transparent 100%)}
+.hero-txt{position:relative}
+.hero-hi{font-size:24px;font-weight:700}
+.hero-sub{opacity:.85;margin-top:6px;font-size:14px}
+@media (max-width:700px){.hero{min-height:118px;padding:16px}.hero::before{opacity:.55;background-position:-40px bottom}.hero-hi{font-size:19px}}
+/* باقي الصفحات: نفس الرسمة باهتة جداً في أسفل الشاشة */
+body:not(:has(.auth))::after{content:"";position:fixed;left:0;right:0;bottom:0;height:min(42vh,380px);z-index:-1;pointer-events:none;
+  background:#0B2A5B;opacity:.07;-webkit-mask:url("/static/bg-plant.svg") center bottom/auto 100% no-repeat;mask:url("/static/bg-plant.svg") center bottom/auto 100% no-repeat}
+@media print{body::after{display:none}}
 /* اللي مش عايز حركة */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 @media print{*{animation:none !important;box-shadow:none !important}header.top{position:static}h1::before{display:none}}

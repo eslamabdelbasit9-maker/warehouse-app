@@ -38,6 +38,8 @@
 </main>
 {% block scripts %}{% endblock %}
 <script>
+var hd = document.getElementById('hero-date');
+if (hd) hd.textContent = new Date().toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 // الأرقام في لوحة المتابعة بتعدّ من صفر لقيمتها
 (function(){
   if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
