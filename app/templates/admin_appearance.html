@@ -10,7 +10,7 @@
     <label class="swatch"><input type="radio" name="preset" value="{{ hex }}" {{ 'checked' if theme.primary|upper == hex }}>
       <span style="background:{{ hex }}"></span>{{ name }}</label>
     {% endfor %}
-    <label class="swatch"><input type="color" name="primary" id="primary" value="{{ theme.primary }}"> لون تاني…</label>
+    <label class="swatch"><input type="color" name="primary" id="primary" value="{{ theme.primary }}"> لون آخر</label>
   </div>
 
   <h2 style="margin-top:20px">لون الخلفية</h2>
@@ -25,7 +25,7 @@
   <div class="swatches">
     {% for k, name in fonts.items() %}
     <label class="swatch font-opt"><input type="radio" name="font" value="{{ k }}" {{ 'checked' if theme.font == k }}>
-      <b style="font-family:'{{ k }}'">أبجد هوز ١٢٣</b> <span class="muted">{{ name }}</span></label>
+      <b style="font-family:'{{ k }}'">منظومة المستودعات 123</b><span class="muted" dir="ltr">{{ name }}</span></label>
     {% endfor %}
   </div>
   <p class="muted" style="margin-top:14px">التغيير بيظهر في الصفحة دي على طول كمعاينة، وبيتطبق على الكل لما تدوس حفظ.</p>
@@ -51,7 +51,7 @@
     var c = pick.value;
     root.style.setProperty('--brand', c); root.style.setProperty('--brand2', shade(c,.08)); root.style.setProperty('--brand3', shade(c,.20));
     root.style.setProperty('--brand-rgb', [1,3,5].map(function(i){return parseInt(c.substr(i,2),16)}).join(','));
-    var bg = f.querySelector('[name=bg]:checked'); if (bg) root.style.setProperty('--bg', bg.dataset.hex);
+    var bg = f.querySelector('[name=bg]:checked'); if (bg) { root.style.setProperty('--bg', bg.dataset.hex); if (bg.value === 'dark') root.dataset.mode = 'dark'; else delete root.dataset.mode; }
     var ft = f.querySelector('[name=font]:checked'); if (ft) document.body.style.fontFamily = "'" + ft.value + "', Tahoma, sans-serif";
   }
   f.querySelectorAll('[name=preset]').forEach(function(r){ r.addEventListener('change', function(){ pick.value = r.value; apply(); }); });

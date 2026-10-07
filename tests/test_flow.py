@@ -499,7 +499,10 @@ def test_appearance(env):
     assert "--brand:#7A1F3D" in page and "--bg:#F0EEEA" in page and "family=Almarai" in page
     assert "اختر لون صحيح" in c.post("/admin/appearance", data={"primary": "red", "bg": "gray", "font": "Cairo"},
                                      follow_redirects=True).text
+    c.post("/admin/appearance", data={"primary": "#2B3440", "bg": "dark", "font": "Cairo"})
+    assert 'data-mode="dark"' in c.get("/").text
     c.post("/admin/appearance", data={"reset": "1"})
+    assert 'data-mode="dark"' not in c.get("/").text
     assert "--brand:#2B3440" in c.get("/").text
     c.cookies.clear()
     assert "--brand:#2B3440" in c.get("/signin").text   # صفحة الدخول كمان بتاخد الثيم

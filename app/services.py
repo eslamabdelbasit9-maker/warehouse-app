@@ -32,9 +32,8 @@ THEME_COLORS = {  # ألوان جاهزة — والمدير يقدر يختار
     "#7A1F3D": "عنابي", "#9A3412": "برتقالي محروق",
 }
 THEME_BGS = {"gray": ("رمادي فاتح", "#ECEEF2"), "light": ("فاتح مزرق", "#F3F5F9"),
-             "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB")}
-THEME_FONTS = {"Cairo": "القاهرة (Cairo)", "IBM Plex Sans Arabic": "IBM Plex عربي", "Tajawal": "تجول (Tajawal)",
-               "Almarai": "المراعي (Almarai)"}
+             "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB"), "dark": ("داكن (Dark)", "#12161C")}
+THEME_FONTS = {"Cairo": "Cairo", "IBM Plex Sans Arabic": "IBM Plex Arabic", "Tajawal": "Tajawal", "Almarai": "Almarai"}
 THEME_DEFAULT = {"primary": "#2B3440", "bg": "gray", "font": "Cairo"}
 
 

@@ -58,7 +58,7 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
 .swatch span{width:22px;height:22px;border-radius:6px;display:inline-block}
 .swatch input[type=radio]{display:none}
 .swatch input[type=color]{width:34px;height:26px;padding:0;border:0;background:none}
-.font-opt b{font-size:17px}.font-opt .muted{white-space:nowrap}
+.font-opt{flex-direction:column;align-items:flex-start;gap:2px;min-width:170px}.font-opt b{font-size:17px;white-space:nowrap}.font-opt .muted{font-size:12px;white-space:nowrap}
 .pager{display:flex;gap:6px;margin-top:10px}
 .menu{display:flex;align-items:center;gap:18px;flex:1;flex-wrap:wrap}
 .menu-btn{display:none}
@@ -201,3 +201,24 @@ h1,h2,.kpi .v,.hero-hi{font-weight:700}nav.main a,.btn{font-weight:600}
 /* اللي مش عايز حركة */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 @media print{*{animation:none !important;box-shadow:none !important}header.top{position:static}h1::before{display:none}}
+
+/* ================= الوضع الداكن (المظهر ← الخلفية: داكن) ================= */
+html[data-mode=dark]{--card:#1B2129;--line:#2C3540;--muted:#9AA4B2;--okbg:#12301F;--ok:#4ADE80;--errbg:#3A1717;--err:#F87171;--warnbg:#3A2A0E;--warn:#FBBF24;color-scheme:dark}
+html[data-mode=dark] body{color:#E5E7EB;background:var(--bg)}
+html[data-mode=dark] h1,html[data-mode=dark] h2,html[data-mode=dark] .kpi .v{color:#F3F4F6}
+html[data-mode=dark] a{color:#93C5FD}
+html[data-mode=dark] .card{border-color:#2C3540;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+html[data-mode=dark] input,html[data-mode=dark] select,html[data-mode=dark] textarea{background:#11161D;border-color:#374151;color:#E5E7EB}
+html[data-mode=dark] table.t td{border-bottom-color:#2C3540}
+html[data-mode=dark] table.t tr:nth-child(even) td{background:#1F262F}
+html[data-mode=dark] table.t tr:hover>td{background:#26303B}
+html[data-mode=dark] table.t tr.colf th{background:#232B35}
+html[data-mode=dark] .btn.sec,html[data-mode=dark] .photo-btn{background:#2C3540;color:#E5E7EB}
+html[data-mode=dark] .btn.sec:hover{background:#374151}
+html[data-mode=dark] .steps span{background:#2C3540;color:#D1D5DB}
+html[data-mode=dark] .st-partial{background:#172554;color:#93C5FD}
+html[data-mode=dark] .swatch{background:#1F262F;color:#E5E7EB;border-color:#374151}
+html[data-mode=dark] .meta b{color:#9AA4B2}
+html[data-mode=dark] img.thumb{border-color:#374151}
+html[data-mode=dark] body:not(:has(.auth))::after{background:#fff;opacity:.035}
+@media (max-width:700px){html[data-mode=dark] :is(table.lines,table.cards) tr{background:#1B2129;border-color:#2C3540}}
