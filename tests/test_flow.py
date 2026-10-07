@@ -492,7 +492,7 @@ def test_appearance(env):
     db.close()
     login(c, env, "admin")
     page = c.get("/").text
-    assert "--brand:#0B2A5B" in page and "family=Cairo" in page and "/static/vendor/gsap.min.js" in page
+    assert "--brand:#2B3440" in page and "family=Cairo" in page and "/static/vendor/gsap.min.js" in page
     assert "تم حفظ المظهر" in c.post("/admin/appearance", data={"primary": "#7a1f3d", "bg": "warm", "font": "Almarai"},
                                     follow_redirects=True).text
     page = c.get("/stock").text
@@ -500,6 +500,6 @@ def test_appearance(env):
     assert "اختر لون صحيح" in c.post("/admin/appearance", data={"primary": "red", "bg": "gray", "font": "Cairo"},
                                      follow_redirects=True).text
     c.post("/admin/appearance", data={"reset": "1"})
-    assert "--brand:#0B2A5B" in c.get("/").text
+    assert "--brand:#2B3440" in c.get("/").text
     c.cookies.clear()
-    assert "--brand:#0B2A5B" in c.get("/signin").text   # صفحة الدخول كمان بتاخد الثيم
+    assert "--brand:#2B3440" in c.get("/signin").text   # صفحة الدخول كمان بتاخد الثيم

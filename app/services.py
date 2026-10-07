@@ -28,14 +28,14 @@ def fmt(n, d=2):
 
 # ---------------- المظهر (الألوان والخط) ----------------
 THEME_COLORS = {  # ألوان جاهزة — والمدير يقدر يختار أي لون تاني
-    "#0B2A5B": "كحلي", "#1D4ED8": "أزرق", "#0F5E56": "أخضر بترولي", "#2B3440": "رمادي فحمي",
+    "#2B3440": "رمادي فحمي (الافتراضي)", "#0B2A5B": "كحلي", "#1D4ED8": "أزرق", "#0F5E56": "أخضر بترولي",
     "#7A1F3D": "عنابي", "#9A3412": "برتقالي محروق",
 }
 THEME_BGS = {"gray": ("رمادي فاتح", "#ECEEF2"), "light": ("فاتح مزرق", "#F3F5F9"),
              "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB")}
 THEME_FONTS = {"Cairo": "القاهرة (Cairo)", "IBM Plex Sans Arabic": "IBM Plex عربي", "Tajawal": "تجول (Tajawal)",
                "Almarai": "المراعي (Almarai)"}
-THEME_DEFAULT = {"primary": "#0B2A5B", "bg": "gray", "font": "Cairo"}
+THEME_DEFAULT = {"primary": "#2B3440", "bg": "gray", "font": "Cairo"}
 
 
 def _hex_ok(v):
