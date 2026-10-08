@@ -192,7 +192,7 @@ def _nice_step(top, n=4):
     return 10 * mag
 
 
-def column_chart(values, w=720, h=230, pad_l=8, pad_r=58, pad_t=22, pad_b=30, bar_max=24):
+def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, bar_max=22):
     """أبعاد رسم أعمدة SVG (سلسلة واحدة) من اليمين للشمال (عربي): أول قيمة على اليمين والأرقام على اليمين.
     أعمدة بعرض ≤24px وطرف علوي مدوّر 4px، وخطوط شبكة بأرقام مقرّبة."""
     step = _nice_step(max(values or [0]))

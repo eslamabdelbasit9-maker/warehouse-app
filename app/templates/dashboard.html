@@ -47,7 +47,8 @@
         <rect class="hit" x="{{ b.hit_x }}" y="{{ chart.pad_t }}" width="{{ b.band }}" height="{{ chart.plot_h }}"/>
         {% if b.path %}<path d="{{ b.path }}"/>{% endif %}
         {% if loop.index0 == chart.max_i or loop.last %}{% if b.v %}<text class="val num" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle">{{ fmt(b.v, 0) }}</text>{% endif %}{% endif %}
-        <text class="tick" x="{{ b.cx }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ MONTHS_AR[p.m - 1][:3] if not loop.last else MONTHS_AR[p.m - 1] }}</text>
+        <text class="mlabel" x="{{ b.cx }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ MONTHS_AR[p.m - 1] }}</text>
+        {% if p.m == 1 or loop.first %}<text class="ylabel num" x="{{ b.cx }}" y="{{ chart.base + 34 }}" text-anchor="middle">{{ p.y }}</text>{% endif %}
       </g>{% endfor %}
       <line class="base" x1="{{ chart.x0 }}" x2="{{ chart.x1 }}" y1="{{ chart.base }}" y2="{{ chart.base }}"/>
     </svg></div>

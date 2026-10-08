@@ -236,8 +236,11 @@ table.t tr.total td{font-weight:700;background:rgba(var(--brand-rgb),.06);border
 .chart svg{width:100%;height:auto;display:block;overflow:visible}
 .chart .grid,.chart .base{stroke:var(--line);stroke-width:1}
 .chart .base{stroke:#C9CFD8}
-.chart .tick{fill:var(--muted);font-size:11px}
-.chart .val{fill:#1f2937;font-size:12px;font-weight:700}
+.chart .tick{fill:var(--muted);font-size:12px}
+.chart .mlabel{fill:#374151;font-size:13px;font-weight:600}
+.chart .ylabel{fill:var(--muted);font-size:11px}
+.chart svg{max-width:1000px;margin:0 auto}
+.chart .val{fill:#1f2937;font-size:13px;font-weight:700}
 .chart .bar path{fill:#2a78d6;transition:opacity .2s}
 .chart .bar .hit{fill:transparent;cursor:pointer}
 .chart .bar.dim path{opacity:.35}
@@ -253,7 +256,7 @@ table.t tr.total td{font-weight:700;background:rgba(var(--brand-rgb),.06);border
   .g4.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi{min-height:0;padding:14px}.kpi .v{font-size:21px}.kpi-ic{width:34px;height:34px}
   .card{padding:14px}
-  .chart svg{min-width:620px}
+  .chart svg{min-width:760px}
 }
 details.tview{margin-top:10px}
 details.tview summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:8px}
@@ -284,3 +287,4 @@ html[data-mode=dark] .chart .bar path{fill:#3987e5}
 html[data-mode=dark] .chart .val{fill:#F3F4F6}
 html[data-mode=dark] .chart .base{stroke:#3B4654}
 html[data-mode=dark] .ic-chip{color:#93C5FD;background:rgba(147,197,253,.12)}
+html[data-mode=dark] .chart .mlabel{fill:#D1D5DB}
