@@ -547,3 +547,13 @@ def test_dashboard_roles_and_stagnant(env):
     page = c.get(f"/?site={env['site']}&date_from=2000-01-01&date_to=2099-12-31").text
     assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
     assert "صنف راكد" in c.get(f"/stagnant?site={env['site']}&days=90").text
+
+
+def test_greet_name():
+    from app.main import greet_name
+    assert greet_name("م/ حسين عبد الله") == "م/ حسين"
+    assert greet_name("م. أحمد علي") == "م. أحمد"
+    assert greet_name("مهندس خالد عمر") == "مهندس خالد"
+    assert greet_name("إسلام عبد الباسط") == "إسلام"
+    assert greet_name("م/حسين") == "م/حسين"
+    assert greet_name("") == ""

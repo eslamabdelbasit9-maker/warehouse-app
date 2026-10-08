@@ -43,6 +43,23 @@ T.env.globals.update(fmt=S.fmt, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
                      TRANSFER_STATUS=TRANSFER_STATUS)
 
+_TITLES = {"م/", "م.", "م", "أ/", "أ.", "أ", "د/", "د.", "د", "مهندس", "المهندس", "م.ـ", "أستاذ", "الأستاذ", "دكتور",
+           "الدكتور", "eng", "eng.", "mr", "mr.", "dr", "dr."}
+
+
+def greet_name(name):
+    """الاسم في الترحيب: الاسم الأول، ومعاه اللقب لو موجود («م/ حسين» بدل «م/»)."""
+    parts = (name or "").split()
+    if not parts:
+        return ""
+    if parts[0].lower() in _TITLES and len(parts) > 1:
+        return f"{parts[0]} {parts[1]}"
+    return parts[0]
+
+
+T.env.filters["greet_name"] = greet_name
+
+
 def _att_url(a):
     return a if a and a.startswith("http") else f"/files/{a}"
 
