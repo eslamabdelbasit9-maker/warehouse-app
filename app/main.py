@@ -140,14 +140,19 @@ def flash(request: Request, msg: str, kind="ok"):
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
     pending_n = transfer_n = 0
-    with SessionLocal() as db:
+    own = getattr(request.state, "db", None)  # نفس اتصال الطلب — من غير ما نفتح اتصال تاني
+    db = own or SessionLocal()
+    try:
         if user is not None:
             u = db.get(User, user.id)
-            pending_n = sum(1 for r in db.query(Req).filter(Req.status == "pending").all() if S.can_approve(db, u, r))
+            pending_n = len(S.pending_for(db, u))
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
         theme = S.get_theme(db)
+    finally:
+        if own is None:
+            db.close()
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "path": request.url.path,
                                               "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, **ctx})
 
@@ -329,7 +334,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         d_from, d_to = d_to, d_from
     period = Req.work_date.between(d_from, d_to)
 
-    my_pending = [r for r in db.query(Req).filter(Req.status == "pending").all() if S.can_approve(db, user, r)]
+    my_pending = S.pending_for(db, user)
     base = db.query(Req).filter(Req.site_id.in_(ids))
     pending_by_stage = {s: base.filter(Req.status == "pending", Req.current_stage == s).count() for s in STAGES}
     period_reqs = base.filter(period).count()
@@ -567,8 +572,7 @@ def _spare_ctx(db, req):
 
 @app.get("/approvals", response_class=HTMLResponse)
 def approvals(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    rows = [r for r in db.query(Req).filter(Req.status == "pending").order_by(Req.created_at).all()
-            if S.can_approve(db, user, r)]
+    rows = S.pending_for(db, user)
     done = (db.query(Req).join(LineDecision).filter(LineDecision.user_id == user.id)
             .distinct().order_by(Req.id.desc()).limit(30).all())
     return render(request, "approvals.html", user, rows=rows, done=done)

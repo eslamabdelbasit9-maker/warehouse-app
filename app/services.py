@@ -268,8 +268,9 @@ def next_req_no(db: Session, rtype: str, site: Site, year: int):
     return f"{prefix}{n:04d}"
 
 
-def approvers_for(db: Session, req: Request, stage: int):
-    routes = db.query(ApprovalRoute).filter(ApprovalRoute.stage == stage).all()
+def approvers_for(db: Session, req: Request, stage: int, routes=None):
+    routes = [r for r in routes if r.stage == stage] if routes is not None else \
+        db.query(ApprovalRoute).filter(ApprovalRoute.stage == stage).all()
     kind = req.unit.kind if req.unit else None
 
     def site_ok(r):
@@ -279,6 +280,18 @@ def approvers_for(db: Session, req: Request, stage: int):
     general = [r for r in routes if site_ok(r) and not r.unit_kind]
     chosen = specific or general
     return [r.user for r in chosen if r.user.active]
+
+
+def pending_for(db: Session, user: User):
+    """الطلبات اللي مستنية اعتماد المستخدم ده — مسار الاعتماد بيتقري مرة واحدة بدل مرة لكل طلب."""
+    from sqlalchemy.orm import selectinload
+    routes = db.query(ApprovalRoute).options(selectinload(ApprovalRoute.user)).all()
+    mine_stages = {r.stage for r in routes if r.user_id == user.id}
+    if not mine_stages:
+        return []
+    reqs = (db.query(Request).options(selectinload(Request.unit))
+            .filter(Request.status == "pending", Request.current_stage.in_(mine_stages)).order_by(Request.created_at).all())
+    return [r for r in reqs if any(u.id == user.id for u in approvers_for(db, r, r.current_stage, routes))]
 
 
 def can_approve(db: Session, user: User, req: Request):
