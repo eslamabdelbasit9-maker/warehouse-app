@@ -50,6 +50,7 @@ textarea{width:100%;min-height:60px}
 .steps span.done{background:var(--okbg);color:var(--ok)}.steps span.cur{background:var(--warnbg);color:var(--warn);font-weight:700}.steps span.no{background:var(--errbg);color:var(--err)}
 .low{color:var(--err);font-weight:700}
 .right{margin-right:auto}
+bdi.nw{white-space:nowrap;direction:ltr;unicode-bidi:isolate}
 img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);vertical-align:middle}
 .photo-btn{cursor:pointer;margin:0;display:inline-block;color:#1f2937}
 .swatches{display:flex;flex-wrap:wrap;gap:10px}
@@ -130,10 +131,10 @@ nav.main a:hover,nav.main a.on{background:rgba(255,255,255,.10)}
 h1{position:relative;padding-right:12px}
 h1::before{content:"";position:absolute;right:0;top:4px;bottom:4px;width:4px;border-radius:3px;background:linear-gradient(var(--accent),#f08c00)}
 /* مؤشرات لوحة المتابعة */
-.kpi{position:relative;overflow:hidden}a.kpi{display:block;color:inherit;text-decoration:none}a.kpi:hover{text-decoration:none}
+.kpi{position:relative;overflow:hidden}a.kpi{display:flex;color:inherit;text-decoration:none}a.kpi:hover{text-decoration:none}
 .kpi::before{content:"";position:absolute;top:0;right:0;left:0;height:4px;background:var(--kc,var(--brand3))}
 .kpi::after{content:"";position:absolute;left:-30px;bottom:-30px;width:90px;height:90px;border-radius:50%;background:var(--kc,var(--brand3));opacity:.07;transition:transform .4s var(--ease)}
-.kpi:hover{box-shadow:var(--sh-md)}.kpi:hover::after{transform:scale(1.35)}
+.kpi:hover{box-shadow:var(--sh-md)}
 .g4 .kpi:nth-child(6n+1){--kc:var(--brand3)}.g4 .kpi:nth-child(6n+2){--kc:#0f9d58}.g4 .kpi:nth-child(6n+3){--kc:#f5b301}
 .g4 .kpi:nth-child(6n+4){--kc:#7c3aed}.g4 .kpi:nth-child(6n+5){--kc:#e8590c}.g4 .kpi:nth-child(6n+6){--kc:#0891b2}
 .kpi .v{font-variant-numeric:tabular-nums}
@@ -260,6 +261,23 @@ table.t tr.total td{font-weight:700;background:rgba(var(--brand-rgb),.06);border
 }
 details.tview{margin-top:10px}
 details.tview summary{cursor:pointer;color:var(--muted);font-size:13px;margin-bottom:8px}
+/* ================= حركة الكروت مع الماوس ================= */
+/* كروت الأرقام: لونها بيطلع يملا الكارت من تحت لفوق، والكلام يقلب أبيض */
+.kpi{isolation:isolate;transition:box-shadow .35s var(--ease)}
+.kpi>*{position:relative;z-index:1;transition:color .35s var(--ease),background .35s var(--ease)}
+.kpi::after{display:block !important;content:"";position:absolute;inset:0;left:0;bottom:0;width:auto;height:auto;border-radius:0;opacity:1;z-index:0;
+  background:linear-gradient(160deg,var(--kc,var(--brand3)),color-mix(in srgb,var(--kc,var(--brand3)) 70%,#000));
+  clip-path:circle(0% at 50% 120%);transition:clip-path .55s var(--ease)}
+@media (hover:hover){
+  .kpi:hover{box-shadow:0 14px 30px -10px color-mix(in srgb,var(--kc,var(--brand3)) 60%,transparent)}
+  .kpi:hover::after{clip-path:circle(150% at 50% 120%)}
+  .kpi:hover .v,.kpi:hover .l,.kpi:hover .s{color:#fff}
+  .kpi:hover .kpi-ic{background:rgba(255,255,255,.2);color:#fff}
+  /* كروت الجداول والرسم: بترتفع وخط بلون البرنامج فوق */
+  .card:not(.kpi):not(.filters):not(.auth):not(.noprint){transition:box-shadow .3s var(--ease),translate .3s var(--ease)}
+  main .card:not(.kpi):not(.filters):not(.auth):not(.noprint):hover{translate:0 -3px;box-shadow:0 12px 28px -12px rgba(var(--brand-rgb),.35);
+    border-top-color:var(--brand3)}
+}
 /* ================= الوضع الداكن (المظهر ← الخلفية: داكن) ================= */
 html[data-mode=dark]{--card:#1B2129;--line:#2C3540;--muted:#9AA4B2;--okbg:#12301F;--ok:#4ADE80;--errbg:#3A1717;--err:#F87171;--warnbg:#3A2A0E;--warn:#FBBF24;color-scheme:dark}
 html[data-mode=dark] body{color:#E5E7EB;background:var(--bg)}

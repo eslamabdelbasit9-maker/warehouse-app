@@ -60,6 +60,18 @@ def greet_name(name):
 T.env.filters["greet_name"] = greet_name
 
 
+def _asset_version():
+    """رقم نسخة لملفات التصميم والحركة — بيتغير مع أي تعديل، فالمتصفح ياخد النسخة الجديدة بعد كل Deploy."""
+    import hashlib
+    h = hashlib.md5()
+    for f in ("static/style.css", "static/anim.js"):
+        h.update((APP_DIR / f).read_bytes())
+    return h.hexdigest()[:10]
+
+
+T.env.globals["ASSET_V"] = _asset_version()
+
+
 def _att_url(a):
     return a if a and a.startswith("http") else f"/files/{a}"
 

@@ -8,7 +8,7 @@
 <link rel="icon" href="/static/logo.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="{{ theme.font_url if theme else 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap' }}" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{ ASSET_V }}">
 {% if theme %}<style>:root{--brand:{{ theme.brand }};--brand2:{{ theme.brand2 }};--brand3:{{ theme.brand3 }};--brand-rgb:{{ theme.brand_rgb }};--bg:{{ theme.bg_hex }}}
 body{font-family:"{{ theme.font }}",Tahoma,Arial,sans-serif}</style>{% endif %}
 <script>
@@ -50,7 +50,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 {% block scripts %}{% endblock %}
 <script src="/static/vendor/gsap.min.js"></script>
 <script src="/static/vendor/ScrollTrigger.min.js"></script>
-<script src="/static/anim.js"></script>
+<script src="/static/anim.js?v={{ ASSET_V }}"></script>
 <script>
 var hd = document.getElementById('hero-date');
 if (hd) hd.textContent = new Date().toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});

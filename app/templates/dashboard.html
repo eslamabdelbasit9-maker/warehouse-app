@@ -17,7 +17,7 @@
   {% endif %}
 </form>
 {% set q = '?site=' ~ (sel.id if sel else '') %}
-{% set per = 'من ' ~ d_from ~ ' إلى ' ~ d_to %}
+{% set per %}من <bdi class="nw">{{ d_from }}</bdi> إلى <bdi class="nw">{{ d_to }}</bdi>{% endset %}
 <div class="grid g4 kpis">
   <a class="card kpi" href="/approvals"><span class="kpi-ic">{{ icon('inbox') }}</span><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('wrench') }}</span><div class="v">{{ fmt(period_spend) }}</div><div class="l">صرف قطع الغيار المعتمد</div><div class="s">{{ per }}</div></div>
