@@ -1,11 +1,22 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>حسابي</h1>
-<form method="post" class="card" style="max-width:420px">
-  <p><b>{{ user.name }}</b><br><span class="muted" dir="ltr">{{ user.email }}</span></p>
-  {% if user.password_hash %}<div class="f"><label>كلمة المرور الحالية</label><input name="old" type="password" dir="ltr" required></div>{% endif %}
-  <div class="f" style="margin-top:8px"><label>كلمة المرور الجديدة (8 أحرف على الأقل)</label><input name="new" type="password" dir="ltr" required minlength="8"></div>
-  <div class="f" style="margin-top:8px"><label>تأكيد كلمة المرور</label><input name="new2" type="password" dir="ltr" required minlength="8"></div>
+<h1>الإعدادات</h1>
+<div class="card" style="display:flex;align-items:center;gap:14px">
+  <span class="ic-chip" style="width:46px;height:46px;font-size:20px;font-weight:700">{{ (user.name|greet_name)[:1] }}</span>
+  <div><b style="font-size:17px">{{ user.name }}</b><div class="muted" dir="ltr" style="text-align:right">{{ user.email }}</div>
+  <div class="muted">{% for r in user.role_list %}{{ ROLES.get(r, r) }}{{ '، ' if not loop.last }}{% endfor %}</div></div>
+</div>
+
+{% with action="/account/appearance", form_title="المظهر بتاعك",
+        form_sub=("انت مختار مظهر خاص بيك." if form_theme.personal else "انت دلوقتي على مظهر البرنامج الافتراضي.") ~ " التغيير هنا ليك انت بس، وما بيأثرش على حد تاني.",
+        save_note="التغيير بيظهر على طول كمعاينة، وبيتحفظ لما تدوس حفظ.",
+        reset_label="رجوع لمظهر البرنامج", reset_confirm="ترجع لمظهر البرنامج الافتراضي؟" %}{% include "_appearance_form.html" %}{% endwith %}
+
+<form method="post" action="/account" class="card" id="password" style="max-width:460px">
+  <h2 style="font-size:18px">تغيير كلمة المرور</h2>
+  {% if user.password_hash %}<div class="f"><label>كلمة المرور الحالية</label><input name="old" type="password" dir="ltr" required autocomplete="current-password"></div>{% endif %}
+  <div class="f" style="margin-top:8px"><label>كلمة المرور الجديدة (8 أحرف على الأقل)</label><input name="new" type="password" dir="ltr" required minlength="8" autocomplete="new-password"></div>
+  <div class="f" style="margin-top:8px"><label>تأكيد كلمة المرور</label><input name="new2" type="password" dir="ltr" required minlength="8" autocomplete="new-password"></div>
   <button class="btn" style="margin-top:12px">تغيير كلمة المرور</button>
 </form>
 {% endblock %}

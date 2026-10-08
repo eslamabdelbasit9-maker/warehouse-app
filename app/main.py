@@ -149,7 +149,7 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
-        theme = S.get_theme(db)
+        theme = S.get_theme(db, user.id if user is not None else None)
     finally:
         if own is None:
             db.close()
@@ -292,8 +292,9 @@ async def signin(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/account", response_class=HTMLResponse)
-def account(request: Request, user: User = Depends(current_user)):
-    return render(request, "account.html", user)
+def account(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return render(request, "account.html", user, form_theme=S.get_theme(db, user.id),
+                  colors=S.THEME_COLORS, bgs=S.THEME_BGS, fonts=S.THEME_FONTS)
 
 
 @app.post("/account")
@@ -309,6 +310,23 @@ async def account_post(request: Request, db: Session = Depends(get_db), user: Us
         u.password_hash = hash_password(new)
         db.commit()
         flash(request, "تم تغيير كلمة المرور")
+    return back("/account#password")
+
+
+@app.post("/account/appearance")
+async def account_appearance(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """المظهر الخاص بالمستخدم — ما بيأثرش على حد تاني."""
+    form = await request.form()
+    if form.get("reset"):
+        S.reset_user_theme(db, user.id)
+        flash(request, "رجعت لمظهر البرنامج الافتراضي")
+        return back("/account")
+    try:
+        S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"), user_id=user.id)
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back("/account")
+    flash(request, "تم حفظ المظهر بتاعك")
     return back("/account")
 
 
@@ -1295,8 +1313,9 @@ async def admin_invoices_post(request: Request, db: Session = Depends(get_db),
 
 # ---------------- المظهر ----------------
 @app.get("/admin/appearance", response_class=HTMLResponse)
-def admin_appearance(request: Request, user: User = Depends(require("admin"))):
-    return render(request, "admin_appearance.html", user, colors=S.THEME_COLORS, bgs=S.THEME_BGS, fonts=S.THEME_FONTS)
+def admin_appearance(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    return render(request, "admin_appearance.html", user, form_theme=S.get_theme(db),
+                  colors=S.THEME_COLORS, bgs=S.THEME_BGS, fonts=S.THEME_FONTS)
 
 
 @app.post("/admin/appearance")

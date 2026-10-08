@@ -38,7 +38,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/custody', 'الأصول', '/custody') }}
     {% if user.has('admin') %}{{ nl('/admin/users', 'الإدارة', '/admin') }}{% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', '/admin/items') }}{% endif %}
   </nav>
-  <span class="who"><a href="/account">{{ user.name }}</a> · <a href="/logout">خروج</a></span>
+  <span class="who"><a href="/account" title="الإعدادات" class="{{ 'on' if path.startswith('/account') }}">⚙ الإعدادات</a> · <span class="who-n">{{ user.name }}</span> · <a href="/logout">خروج</a></span>
   </div>
 </header>
 {% elif approver %}{% include "_link_head.html" %}

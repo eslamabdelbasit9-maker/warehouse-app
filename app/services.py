@@ -53,11 +53,26 @@ def _shade(hex_color, dl, ds=0.0):
     return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
 
 
-def get_theme(db: Session):
+def _theme_keys(user_id=None):
+    pre = f"u{user_id}:" if user_id else ""
+    return {k: pre + k for k in ("primary", "bg", "font")}
+
+
+def get_theme(db: Session, user_id=None):
+    """المظهر الافتراضي (من الإدارة)، ولو المستخدم مختار مظهر لنفسه بيغطي عليه."""
     from .models import AppSetting
     t = dict(THEME_DEFAULT)
-    for row in db.query(AppSetting).filter(AppSetting.key.in_(["primary", "bg", "font"])):
-        t[row.key] = row.value
+    rows = {r.key: r.value for r in db.query(AppSetting).filter(
+        AppSetting.key.in_(list(_theme_keys().values()) + (list(_theme_keys(user_id).values()) if user_id else [])))}
+    for k, key in _theme_keys().items():
+        if key in rows:
+            t[k] = rows[key]
+    t["personal"] = False
+    if user_id:
+        for k, key in _theme_keys(user_id).items():
+            if key in rows:
+                t[k] = rows[key]
+                t["personal"] = True
     if not _hex_ok(t["primary"]):
         t["primary"] = THEME_DEFAULT["primary"]
     if t["bg"] not in THEME_BGS:
@@ -72,18 +87,26 @@ def get_theme(db: Session):
     return t
 
 
-def save_theme(db: Session, primary, bg, font):
+def save_theme(db: Session, primary, bg, font, user_id=None):
+    """user_id فاضي = المظهر الافتراضي للكل (الإدارة)، وإلا = مظهر المستخدم ده بس."""
     from .models import AppSetting
     if not _hex_ok(primary):
         raise BusinessError("اختر لون صحيح")
     if bg not in THEME_BGS or font not in THEME_FONTS:
         raise BusinessError("اختيار غير صحيح")
+    keys = _theme_keys(user_id)
     for k, v in (("primary", primary.upper()), ("bg", bg), ("font", font)):
-        row = db.get(AppSetting, k)
+        row = db.get(AppSetting, keys[k])
         if row:
             row.value = v
         else:
-            db.add(AppSetting(key=k, value=v))
+            db.add(AppSetting(key=keys[k], value=v))
+    db.commit()
+
+
+def reset_user_theme(db: Session, user_id):
+    from .models import AppSetting
+    db.query(AppSetting).filter(AppSetting.key.in_(list(_theme_keys(user_id).values()))).delete(synchronize_session=False)
     db.commit()
 
 

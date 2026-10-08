@@ -562,3 +562,27 @@ def test_greet_name():
 def test_healthz():
     r = TestClient(app).get("/healthz")
     assert r.status_code == 200 and r.json() == {"ok": True}
+
+
+def test_personal_settings(env):
+    from app.auth import check_password
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    page = c.get("/account").text
+    assert "الإعدادات" in page and "المظهر بتاعك" in page and "تغيير كلمة المرور" in page
+    # مظهر خاص بيه بس
+    assert "تم حفظ المظهر" in c.post("/account/appearance", data={"primary": "#7A1F3D", "bg": "dark", "font": "Tajawal"},
+                                     follow_redirects=True).text
+    page = c.get("/").text
+    assert "--brand:#7A1F3D" in page and 'data-mode="dark"' in page and "family=Tajawal" in page
+    other = TestClient(app)
+    login(other, env, "storekeeper@example.com")
+    assert "--brand:#7A1F3D" not in other.get("/").text and 'data-mode="dark"' not in other.get("/").text
+    c.post("/account/appearance", data={"reset": "1"})
+    assert "--brand:#7A1F3D" not in c.get("/").text
+    # كلمة المرور
+    c.post("/account", data={"new": "pass-1234", "new2": "pass-1234"})
+    db = SessionLocal()
+    assert check_password("pass-1234", db.get(User, env["requester@example.com"]).password_hash)
+    db.close()
+    assert "غير صحيحة" in c.post("/account", data={"old": "wrong", "new": "x" * 8, "new2": "x" * 8}, follow_redirects=True).text
