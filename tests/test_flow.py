@@ -557,3 +557,8 @@ def test_greet_name():
     assert greet_name("إسلام عبد الباسط") == "إسلام"
     assert greet_name("م/حسين") == "م/حسين"
     assert greet_name("") == ""
+
+
+def test_healthz():
+    r = TestClient(app).get("/healthz")
+    assert r.status_code == 200 and r.json() == {"ok": True}

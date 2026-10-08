@@ -214,6 +214,13 @@ def can_view_request(db, user, req):
     return any(d.user_id == user.id for d in req.decisions) or S.can_approve(db, user, req)
 
 
+# ---------------- فحص التشغيل ----------------
+@app.get("/healthz")
+def healthz():
+    """لـ cron-job.org: بيصحّي Render من غير ما يلمس قاعدة البيانات (عشان Neon يفضل ينام ويوفّر ساعاته)."""
+    return JSONResponse({"ok": True})
+
+
 # ---------------- دخول تجريبي ----------------
 @app.get("/dev-login", response_class=HTMLResponse)
 def dev_login_page(request: Request, db: Session = Depends(get_db)):
