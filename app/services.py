@@ -363,6 +363,34 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
     return out
 
 
+def unissued_purchases(db: Session, site_ids, since):
+    """المشتريات اللي دخلت وما اتصرفتش: الصرف (المعتمد + المعلق في الاعتماد + التحويل الصادر) بيتخصم
+    بالأقدمية (الافتتاحي الأول، وبعده الوارد بالتاريخ). يرجع لكل سطر وارد من `since`:
+    (site_id, date, قيمة الباقي، قيمة الوارد)."""
+    out = []
+    for sid in site_ids:
+        st = stock_table(db, sid)
+        inflow = defaultdict(list)   # item → [(date, qty, price, is_receipt)]
+        for iid, r in st.items():
+            if r["open_qty"] > 0:
+                inflow[iid].append((None, r["open_qty"], 0, False))
+        for iid, d, q, p in (db.query(ReceiptLine.item_id, Receipt.date, ReceiptLine.qty, ReceiptLine.unit_price)
+                             .join(Receipt).filter(Receipt.site_id == sid)):
+            inflow[iid].append((d, q or 0, p or 0, True))
+        for iid, d, q in (db.query(TransferLine.item_id, Transfer.date, TransferLine.recv_qty).join(Transfer)
+                          .filter(Transfer.status == "received", Transfer.to_site_id == sid)):
+            inflow[iid].append((d, q or 0, 0, False))
+        for iid, lst in inflow.items():
+            r = st.get(iid)
+            used = (r["out_qty"] + r["tr_out_qty"] + r["pending_qty"]) if r else 0
+            for d, q, p, is_rec in sorted(lst, key=lambda x: (x[0] is not None, x[0] or datetime.min.date())):
+                take = min(q, used)
+                used -= take
+                if is_rec and d >= since:
+                    out.append((sid, d, (q - take) * p, q * p))
+    return out
+
+
 # ---------------- الطلبات ----------------
 def next_req_no(db: Session, rtype: str, site: Site, year: int):
     prefix = f"{'SP' if rtype == 'spare' else 'RM'}-{site.code}-{year}-"

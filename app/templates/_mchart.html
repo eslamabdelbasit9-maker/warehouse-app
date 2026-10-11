@@ -1,0 +1,47 @@
+{# رسم شهري لآخر 12 شهر: mc = monthly_charts(...)، mc_id/mc_icon/mc_title/mc_sub من الصفحة #}
+{% from "_icons.html" import card_h %}
+{% set ch1, ch2, sc = mc.chart, mc.chart2, mc.site_c %}
+{% set multi = mc.legend|length > 1 %}
+<div class="card">
+  {% call card_h(mc_icon, mc_title, mc_sub) %}{% endcall %}
+  {% if mc.legend %}<div class="legend">{% for l in mc.legend %}<span class="lg"><i class="sw s{{ l.c }}"></i>{{ l.name }} <b class="num">{{ fmt(l.total, 0) }}</b></span>{% endfor %}</div>{% endif %}
+  {% macro draw(ch, mode) %}
+    <div class="scroll" data-mode="{{ mode }}"{% if mode == 'grp' %} hidden{% endif %}><svg viewBox="0 0 {{ ch.w }} {{ ch.h }}" role="img" aria-label="{{ mc_title }}">
+      {% for g in ch.grid %}<line class="grid" x1="{{ ch.x0 }}" x2="{{ ch.x1 }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
+      <text class="tick num" x="{{ ch.tick_x }}" y="{{ g.y + 4 }}" text-anchor="start">{{ fmt(g.v, 0) }}</text>{% endfor %}
+      {% for b in ch.bars %}{% set p = mc.data[loop.index0] %}
+      <g class="bar" data-tip="{{ MONTHS_AR[p.m - 1] }} {{ p.y }}|{{ fmt(p.total) }}{% for s in mc.sites %}{% if p.by.get(s.id) and multi %}|{{ sc.get(s.id, '') }}~{{ s.name }}: {{ fmt(p.by[s.id]) }}{% endif %}{% endfor %}">
+        <rect class="hit" x="{{ b.hit_x }}" y="{{ ch.pad_t }}" width="{{ b.band }}" height="{{ ch.plot_h }}"/>
+        {% if ch.grouped %}{% for sg in b.segs %}{% if sg.path %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>
+          <text class="val sm num" transform="translate({{ sg.cx + 3.5 }},{{ sg.y - 5 }}) rotate(-90)" text-anchor="start">{{ fmt(sg.v, 0) }}</text>{% endif %}{% endfor %}
+        {% else %}
+        {% if b.segs is defined %}{% for sg in b.segs %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endfor %}
+        {% elif b.path %}<path d="{{ b.path }}"/>{% endif %}
+        {% if b.v %}<text class="val num" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle">{{ fmt(b.v, 0) }}</text>{% endif %}
+        {% endif %}
+        <text class="mlabel" x="{{ b.cx }}" y="{{ ch.base + 18 }}" text-anchor="middle">{{ MONTHS_AR[p.m - 1] }}</text>
+        {% if p.m == 1 or loop.first %}<text class="ylabel num" x="{{ b.cx }}" y="{{ ch.base + 34 }}" text-anchor="middle">{{ p.y }}</text>{% endif %}
+      </g>{% endfor %}
+      <line class="base" x1="{{ ch.x0 }}" x2="{{ ch.x1 }}" y1="{{ ch.base }}" y2="{{ ch.base }}"/>
+    </svg></div>
+  {% endmacro %}
+  <div class="chart mchart" id="{{ mc_id }}">
+    {% if ch2 %}<div class="seg-tg" role="tablist"><button type="button" class="on" data-m="stk">الإجمالي</button><button type="button" data-m="grp">مقارنة الفروع</button></div>{% endif %}
+    {{ draw(ch1, 'stk') }}
+    {% if ch2 %}{{ draw(ch2, 'grp') }}{% endif %}
+    <div class="tip" hidden></div>
+  </div>
+  {% set has_b = mc.data and mc.data[0].bought is defined %}
+  <details class="tview"><summary>عرض كجدول{{ ' (الأشهر × الفروع)' if multi }}</summary>
+  <div class="tw"><table class="t">
+    <tr><th>الشهر</th>{% if has_b %}<th class="n">قيمة الوارد</th>{% endif %}{% if multi %}{% for s in mc.sites %}<th class="n">{{ s.name }}</th>{% endfor %}{% endif %}<th class="n">{{ 'لم يُصرف' if has_b else 'الإجمالي' }}</th>{% if has_b %}<th class="n">النسبة</th>{% endif %}</tr>
+    {% for p in mc.data|reverse %}<tr><td>{{ MONTHS_AR[p.m - 1] }} {{ p.y }}</td>
+      {% if has_b %}<td class="n">{{ fmt(p.bought) if p.bought else '-' }}</td>{% endif %}
+      {% if multi %}{% for s in mc.sites %}<td class="n">{{ fmt(p.by.get(s.id)) if p.by.get(s.id) else '-' }}</td>{% endfor %}{% endif %}
+      <td class="n"><b>{{ fmt(p.total) if p.total else '-' }}</b></td>
+      {% if has_b %}<td class="n">{{ (fmt(100 * p.total / p.bought, 0) ~ '%') if p.bought else '-' }}</td>{% endif %}</tr>{% endfor %}
+    <tr class="total"><td>الإجمالي</td>{% if has_b %}{% set tb = mc.data|sum(attribute='bought') %}<td class="n">{{ fmt(tb) }}</td>{% endif %}
+      {% if multi %}{% for s in mc.sites %}{% set ns = namespace(t=0) %}{% for p in mc.data %}{% set ns.t = ns.t + (p.by.get(s.id) or 0) %}{% endfor %}<td class="n">{{ fmt(ns.t) if ns.t else '-' }}</td>{% endfor %}{% endif %}
+      <td class="n">{{ fmt(mc.total) }}</td>{% if has_b %}<td class="n">{{ (fmt(100 * mc.total / tb, 0) ~ '%') if tb else '-' }}</td>{% endif %}</tr>
+  </table></div></details>
+</div>
