@@ -642,3 +642,42 @@ def test_personal_settings(env):
     assert check_password("pass-1234", db.get(User, env["requester@example.com"]).password_hash)
     db.close()
     assert "غير صحيحة" in c.post("/account", data={"old": "wrong", "new": "x" * 8, "new2": "x" * 8}, follow_redirects=True).text
+
+
+def test_admin_edits_request_header(env):
+    """الأدمن يعدل وحدة/تاريخ/سبب طلب؛ غير الأدمن ممنوع؛ ووحدة من موقع تاني مرفوضة."""
+    from datetime import date
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["crusher"], "reason": "صيانة",
+                                            "item_id": [env["a"]], "qty": ["1"]}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+
+    # غير الأدمن ما يقدرش
+    r = c.post(f"/requests/{rid}/edit", data={"unit_id": env["asphalt"]}, follow_redirects=False)
+    assert r.status_code in (302, 303, 403)
+    db = SessionLocal()
+    assert db.get(Request, rid).unit_id == env["crusher"]
+    db.close()
+
+    login(c, env, "admin@example.com")
+    assert "تعديل بيانات الطلب" in c.get(f"/requests/{rid}").text
+    c.post(f"/requests/{rid}/edit", data={"unit_id": env["asphalt"], "work_date": "2026-09-15", "reason": "تغيير سير"})
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.unit_id == env["asphalt"] and req.work_date == date(2026, 9, 15) and req.reason == "تغيير سير"
+    assert req.status == "pending" and req.lines[0].qty == 1
+
+    # وحدة من موقع تاني مرفوضة
+    other = Site(code="OTH", name="موقع تاني")
+    db.add(other)
+    db.flush()
+    u = Unit(site_id=other.id, name="كسارة", kind="crusher")
+    db.add(u)
+    db.commit()
+    uid = u.id
+    db.close()
+    c.post(f"/requests/{rid}/edit", data={"unit_id": uid})
+    db = SessionLocal()
+    assert db.get(Request, rid).unit_id == env["asphalt"]
+    db.close()

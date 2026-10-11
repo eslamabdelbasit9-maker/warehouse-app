@@ -9,6 +9,10 @@
     <div class="f"><label>كود الموقع (بالإنجليزية، مختصر)</label><input name="site_code" dir="ltr" placeholder="NJR" required></div>
     <div class="f"><label>اسم الموقع</label><input name="site_name" placeholder="نجران" required></div>
   </div>
-  <button class="btn" style="margin-top:12px" onclick="this.textContent='جاري الاستيراد...'">استيراد</button>
+  <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px">
+    <input type="checkbox" name="replace" value="1" id="rep">
+    <span><b>استبدال بيانات الموقع الموجودة</b><br><span class="muted">يمسح النسخة اللي اتستوردت قبل كده للموقع ده (الأرصدة الافتتاحية، الوارد، وطلبات الصرف المستوردة) ويحط الملف الجديد مكانها. اللي اتعمل من جوه البرنامج ما بيتمسحش، والفواتير المرفوعة جوه البرنامج بترجع تتربط برقم الفاتورة.</span></span>
+  </label>
+  <button class="btn" style="margin-top:12px" onclick="if(document.getElementById('rep').checked&&!confirm('هيتمسح استيراد الموقع القديم ويتحط الملف الجديد. متأكد؟'))return false;this.textContent='جاري الاستيراد...'">استيراد</button>
 </form>
 {% endblock %}

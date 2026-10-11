@@ -4,7 +4,10 @@
     python -m scripts.import_excel --file "منظومة_المستودعات_نجران.xlsx" --site-code NJR --site-name "نجران"
 
 يستورد: الأصناف + الرصيد الافتتاحي (شيت الرصيد)، الوارد (شيت الوارد)، الصرف المعتمد والمرفوض (شيت الصرف).
-آمن للتشغيل مرة واحدة لكل موقع؛ يرفض التشغيل إذا كان للموقع بيانات سابقة.
+آمن للتشغيل مرة واحدة لكل موقع؛ يرفض التشغيل إذا كان للموقع بيانات سابقة —
+إلا لو replace=True: ساعتها يمسح بيانات الاستيراد القديمة للموقع (الأرصدة الافتتاحية، الوارد المستورد،
+وطلبات الصرف المستوردة) ويستورد من جديد. اللي اتعمل من جوه البرنامج نفسه (طلبات/وارد/تحويلات/عهد) ما بيتمسحش،
+والفواتير المرفوعة جوه البرنامج بترجع تتربط برقم الفاتورة.
 """
 import argparse
 import re
@@ -56,15 +59,41 @@ def table_rows(ws, table_name=None):
             yield dict(zip(head, vals))
 
 
-def run(path, site_code, site_name):
+def inv_key(x):
+    return re.sub(r"[^0-9a-z\u0600-\u06ff]", "", str(x or "").lower()).lstrip("0")
+
+
+def clear_imported(db, site):
+    """يمسح بيانات الاستيراد السابقة للموقع، ويرجّع الفواتير المرفوعة جوه البرنامج (رقم الفاتورة ← المرفق)."""
+    kept = {}
+    old = db.query(Receipt).filter(Receipt.site_id == site.id, Receipt.created_by_id.is_(None)).all()
+    for r in old:
+        if r.attachment and not r.attachment.startswith("http") and inv_key(r.invoice_no):
+            kept.setdefault(inv_key(r.invoice_no), r.attachment)
+        db.delete(r)
+    n_req = 0
+    for q in db.query(Request).filter_by(site_id=site.id, imported=True).all():
+        db.delete(q)
+        n_req += 1
+    n_ob = db.query(OpeningBalance).filter_by(site_id=site.id).delete()
+    db.flush()
+    return kept, len(old), n_req, n_ob
+
+
+def run(path, site_code, site_name, replace=False):
     init_db()
     wb = load_workbook(path, data_only=True)
     db = SessionLocal()
     site = db.query(Site).filter_by(code=site_code).first()
+    kept = {}
+    cleared = None
     if site:
-        if db.query(Request).filter_by(site_id=site.id).first() or db.query(OpeningBalance).filter_by(site_id=site.id).first():
+        has_data = db.query(Request).filter_by(site_id=site.id).first() or db.query(OpeningBalance).filter_by(site_id=site.id).first()
+        if has_data and not replace:
             db.close()
-            raise ValueError(f"الموقع {site_code} فيه بيانات بالفعل — تم الإيقاف لتجنب التكرار")
+            raise ValueError(f"الموقع {site_code} فيه بيانات بالفعل — تم الإيقاف لتجنب التكرار (علّم «استبدال» لو عايز تحط نسخة جديدة)")
+        if replace:
+            kept, *cleared = clear_imported(db, site)
     else:
         site = Site(code=site_code, name=site_name)
         db.add(site)
@@ -116,7 +145,7 @@ def run(path, site_code, site_name):
                 links[key] = url[:300]
     for (d, inv, sup), rows in groups.items():
         rec = Receipt(site_id=site.id, date=d or date.today(), invoice_no=inv, supplier=sup,
-                      attachment=links.get((d, inv, sup)))
+                      attachment=kept.get(inv_key(inv)) or links.get((d, inv, sup)))
         for r in rows:
             it = item_for(r["كود الصنف"], r.get("اسم الصنف"))
             rec.lines.append(ReceiptLine(item_id=it.id, qty=num(r.get("الكمية")), unit_price=num(r.get("سعر الوحدة"))))
@@ -168,6 +197,9 @@ def run(path, site_code, site_name):
         n_req += 1
     db.commit()
     msg = f"تم: موقع {site.name} — أصناف جديدة {n_items}، فواتير وارد {len(groups)}، طلبات صرف {n_req}، وحدات {len(units)}"
+    if cleared:
+        msg = (f"اتمسحت النسخة القديمة ({cleared[0]} فاتورة وارد، {cleared[1]} طلب صرف، {cleared[2]} رصيد افتتاحي) — "
+               f"واترجع ربط {len(kept)} فاتورة مرفوعة جوه البرنامج. " + msg)
     db.close()
     return msg
 
@@ -177,8 +209,9 @@ if __name__ == "__main__":
     ap.add_argument("--file", required=True)
     ap.add_argument("--site-code", required=True)
     ap.add_argument("--site-name", required=True)
+    ap.add_argument("--replace", action="store_true")
     a = ap.parse_args()
     try:
-        print(run(a.file, a.site_code.upper(), a.site_name))
+        print(run(a.file, a.site_code.upper(), a.site_name, replace=a.replace))
     except ValueError as e:
         sys.exit(str(e))
