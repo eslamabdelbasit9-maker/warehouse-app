@@ -19,28 +19,39 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 }
 </script>
 </head>
-<body>
+<body{% if user %} class="has-side"{% endif %}>
 {% if user %}
-<header class="top">
+{% from "_icons.html" import icon %}
+{% set alerts = (pending_n or 0) + (transfer_n or 0) %}
+<div class="mtop">
   <a href="/" class="logo-link">{% include "_logo.html" %}</a>
   <span class="title">{{ APP_NAME }}</span>
-  {% set alerts = (pending_n or 0) + (transfer_n or 0) %}
-  <button type="button" class="menu-btn" aria-label="القائمة" onclick="this.closest('header').classList.toggle('open')">☰{% if alerts %}<span class="badge-n">{{ alerts }}</span>{% endif %}</button>
-  <div class="menu">
+  <button type="button" class="menu-btn" aria-label="القائمة" onclick="document.body.classList.toggle('side-open')">☰{% if alerts %}<span class="badge-n">{{ alerts }}</span>{% endif %}</button>
+</div>
+<aside class="side">
+  <a href="/" class="side-brand">{% include "_logo.html" %}<span class="title">{{ APP_NAME }}</span></a>
   <nav class="main">
-    {% macro nl(href, label, pre) %}<a href="{{ href }}" class="{{ 'on' if (path == href or (pre and path.startswith(pre))) else '' }}">{{ label }}</a>{% endmacro %}
-    {{ nl('/', 'لوحة المتابعة', '') }}
-    <a href="/approvals" class="{{ 'on' if path.startswith('/approvals') else '' }}">الاعتمادات{% if pending_n %}<span class="badge-n">{{ pending_n }}</span>{% endif %}</a>
-    {{ nl('/requests', 'الطلبات', '/requests') }}
-    {{ nl('/stock', 'الأرصدة', '/stock') }}
-    {{ nl('/receipts', 'الوارد', '/receipts') }}
-    {% if user.has('storekeeper', 'transfer') %}<a href="/transfers" class="{{ 'on' if path.startswith('/transfers') else '' }}">التحويلات{% if transfer_n %}<span class="badge-n">{{ transfer_n }}</span>{% endif %}</a>{% endif %}
-    {{ nl('/custody', 'الأصول', '/custody') }}
-    {% if user.has('admin') %}{{ nl('/admin/users', 'الإدارة', '/admin') }}{% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', '/admin/items') }}{% endif %}
+    {% macro nl(href, label, ic, on, badge=0) %}<a href="{{ href }}" class="{{ 'on' if on }}">{{ icon(ic, 19) }}<span>{{ label }}</span>{% if badge %}<span class="badge-n">{{ badge }}</span>{% endif %}</a>{% endmacro %}
+    <div class="sg">الرئيسية</div>
+    {{ nl('/', 'لوحة المتابعة', 'home', path == '/') }}
+    {{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}
+    {{ nl('/requests', 'الطلبات', 'file', path.startswith('/requests')) }}
+    <div class="sg">المستودع</div>
+    {{ nl('/stock', 'الأرصدة', 'box', path.startswith('/stock')) }}
+    {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}
+    {{ nl('/receipts', 'الوارد', 'cart', path.startswith('/receipts')) }}
+    {% if user.has('storekeeper', 'transfer') %}{{ nl('/transfers', 'التحويلات', 'truck', path.startswith('/transfers'), transfer_n) }}{% endif %}
+    {{ nl('/custody', 'الأصول', 'star', path.startswith('/custody')) }}
+    {% if user.has('admin') %}<div class="sg">النظام</div>{{ nl('/admin/users', 'الإدارة', 'users', path.startswith('/admin')) }}
+    {% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', 'list', path.startswith('/admin/items')) }}{% endif %}
   </nav>
-  <span class="who"><a href="/account" title="الإعدادات" class="{{ 'on' if path.startswith('/account') }}">⚙ الإعدادات</a> · <span class="who-n">{{ user.name }}</span> · <a href="/logout">خروج</a></span>
+  <div class="side-foot">
+    <div class="who-n">{{ user.name }}</div>
+    <a href="/account" class="{{ 'on' if path.startswith('/account') }}">{{ icon('gear', 17) }}<span>الإعدادات</span></a>
+    <a href="/logout">{{ icon('logout', 17) }}<span>خروج</span></a>
   </div>
-</header>
+</aside>
+<div class="side-dim" onclick="document.body.classList.remove('side-open')"></div>
 {% elif approver %}{% include "_link_head.html" %}
 {% endif %}
 <main>

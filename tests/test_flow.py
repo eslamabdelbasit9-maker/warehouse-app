@@ -549,7 +549,7 @@ def test_dashboard_roles_and_stagnant(env):
     assert "الأصناف الراكدة" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
     login(c, env, "eng.crusher@example.com")
     page = c.get("/").text
-    assert "صرف قطع الغيار المعتمد" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
+    assert "صرف قطع الغيار المعتمد" in page and "/stagnant" in page and "نوع الوحدة" in page and "كسارة" in page
     assert "قيمة المشتريات" in page and "المشتريات الشهرية" in page
     # وارد «NEW-1» من 10 أيام بـ 100 (2 × 50) لازم يظهر في المشتريات الشهرية
     page = c.get(f"/?site={env['site']}").text

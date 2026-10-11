@@ -24,7 +24,6 @@
   <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (الوارد)</div><div class="s">{{ per }}</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('file') }}</span><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
   <div class="card kpi"><span class="kpi-ic">{{ icon('steps') }}</span><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد</div><div class="s">المهندس / مدير الإنتاج / النهائي</div></div>
-  <a class="card kpi" href="/stagnant{{ q }}"><span class="kpi-ic">{{ icon('archive') }}</span><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ←</div><div class="s">{{ stagnant_n }} صنف — بدون صرف منذ 6 أشهر</div></a>
 </div>
 
 {% if my_pending %}

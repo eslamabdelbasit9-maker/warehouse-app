@@ -36,8 +36,8 @@
   var first = false;
   try { first = !sessionStorage.getItem('hdrAnim'); sessionStorage.setItem('hdrAnim', '1'); } catch (_) {}
   if (first) {
-    gsap.from('header.top', { yPercent: -100, duration: 0.7, ease: EASE });
-    gsap.from('nav.main a, header.top .who, header.top .logo, header.top .title', { autoAlpha: 0, y: -10, stagger: 0.04, duration: 0.5, delay: 0.25, ease: EASE });
+    if (innerWidth > 900) gsap.from('aside.side', { xPercent: 100, duration: 0.7, ease: EASE });
+    gsap.from('aside.side nav.main > *, .side-foot > *', { autoAlpha: 0, x: 16, stagger: 0.03, duration: 0.45, delay: 0.25, ease: EASE, clearProps: 'transform' });
   }
 
   // ---------- محتوى الصفحة: بيدخل واحد ورا التاني بميلة 3D خفيفة ----------
