@@ -414,15 +414,17 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
     chart_sites = sorted((s for s in pivot_sites if any(p["by"].get(s.id) for p in purchases)), key=lambda s: s.id) if not sel else []
     if len(chart_sites) > 1:
         chart = S.stacked_chart([p["by"] for p in purchases], [s.id for s in chart_sites], bar_max=30)
+        chart2 = S.grouped_chart([p["by"] for p in purchases], [s.id for s in chart_sites], h=250, pad_t=62)
         site_color = {s.id: i % 8 for i, s in enumerate(sorted(sites, key=lambda s: s.id))}
         chart["site_c"] = site_color
         chart["legend"] = [dict(name=s.name, c=site_color[s.id], total=sum(p["by"].get(s.id, 0) for p in purchases))
                            for s in chart_sites]
-        for b in chart["bars"]:
-            for sg in b["segs"]:
-                sg["c"] = site_color[chart_sites[sg["k"]].id]
+        for ch in (chart, chart2):
+            for b in ch["bars"]:
+                for sg in b["segs"]:
+                    sg["c"] = site_color[chart_sites[sg["k"]].id]
     else:
-        chart = S.column_chart([p["total"] for p in purchases], bar_max=30)
+        chart, chart2 = S.column_chart([p["total"] for p in purchases], bar_max=30), None
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
@@ -432,7 +434,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                   my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
                   period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
                   top_items=top_items,
-                  period_purchases=period_purchases, purchases=purchases, chart=chart, MONTHS_AR=S.MONTHS_AR,
+                  period_purchases=period_purchases, purchases=purchases, chart=chart, chart2=chart2, MONTHS_AR=S.MONTHS_AR,
                   recent=recent)
 
 

@@ -271,6 +271,28 @@ def stacked_chart(stacks, keys, gap=2, **kw):
     return c
 
 
+def grouped_chart(stacks, keys, gap=2, **kw):
+    """أعمدة جنب بعض: لكل شهر عمود لكل مفتاح (فرع) بفاصل 2px — للمقارنة بين الفروع."""
+    flat = [s.get(k, 0) or 0 for s in stacks for k in keys]
+    c = column_chart([max([s.get(k, 0) or 0 for k in keys] or [0]) for s in stacks], **kw)
+    n = max(1, len(keys))
+    scale = c["plot_h"] / c["top"] if c["top"] else 0
+    for b, s in zip(c["bars"], stacks):
+        bw = min(14, (b["band"] * 0.78 - gap * (n - 1)) / n)
+        x0 = b["hit_x"] + (b["band"] - (bw * n + gap * (n - 1))) / 2
+        segs = []
+        for i, k in enumerate(keys):   # أول فرع على اليمين (عربي)
+            v = s.get(k, 0) or 0
+            x = x0 + (n - 1 - i) * (bw + gap)
+            h = v * scale
+            segs.append(dict(k=i, v=v, cx=x + bw / 2, y=c["base"] - h,
+                             path=_bar_path(x, c["base"] - h, bw, h, min(4, h, bw / 2)) if h > 0.3 else ""))
+        b["segs"] = segs
+    c["grouped"] = True
+    c["flat_max"] = max(flat or [0])
+    return c
+
+
 # ---------------- الرواكد ----------------
 STAGNANT_DAYS = (90, 180, 365)
 
