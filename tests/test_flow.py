@@ -558,7 +558,15 @@ def test_dashboard_roles_and_stagnant(env):
     assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
     page = c.get(f"/stagnant?site={env['site']}&days=90").text
     assert "الأصناف الراكدة" in page and "رواكد المشتريات الشهرية" in page
-    assert "صرف قطع الغيار الشهري" in c.get("/").text
+    page = c.get("/").text
+    assert "صرف قطع الغيار الشهري" in page and 'data-m="rk"' in page
+    # فلتر الشهر في الوارد والطلبات (روابط الرسوم)
+    from datetime import date as _d
+    ym = f"{_d.today():%Y-%m}"
+    page = c.get(f"/receipts?site={env['site']}&month={ym}").text
+    assert "الشهر:" in page and "NEW-1" in page
+    assert "NEW-1" not in c.get(f"/receipts?site={env['site']}&month=2001-01").text
+    assert "الشهر:" in c.get(f"/requests?type=spare&ok=1&month={ym}").text
 
 
 def test_stagnant_rules(env):

@@ -398,3 +398,9 @@ aside.side,body.has-side main{transition:width .25s var(--ease,ease),margin .25s
 .seg-tg button.on{background:var(--card,#fff);color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 html[data-mode=dark] .seg-tg button.on{background:#2A333F;color:#fff}
 .chart .val.sm{font-size:10.5px;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:8px;align-self:center;background:rgba(var(--brand-rgb),.09);border:1px solid rgba(var(--brand-rgb),.2);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
+.chip a{color:var(--muted);text-decoration:none;font-weight:700}.chip a:hover{color:var(--err)}
+.chart .hint{margin:0 0 4px;font-size:12.5px}
+.chart a.go{cursor:pointer}.chart a.go:hover path{filter:brightness(1.12)}
+.chart .bar[data-url]{cursor:pointer}
+.view[data-mode=grp] .bar .hit{pointer-events:none}
