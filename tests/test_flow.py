@@ -317,7 +317,7 @@ def test_approve_from_email_link(env):
     # مدير الإنتاج يرفض من رابطه — الملاحظة إجبارية
     link2 = _link_from_mail("prod.manager@example.com")
     assert "لم تحدد أي صنف" in c.post(link2, data={"action": "approve"}).text
-    assert "اكتب سبب الرفض" in c.post(link2, data={"action": "reject_all"}).text
+    assert "أدخل سبب الرفض" in c.post(link2, data={"action": "reject_all"}).text
     res = c.post(link2, data={"action": "reject_all", "comment": "غير مطلوب"})
     assert "تم تسجيل قرارك" in res.text
     db = SessionLocal()
@@ -435,7 +435,7 @@ def test_transfer_between_sites(env):
     assert "تأكيد الاستلام" in c.get("/transfers").text
     assert c.post(f"/transfers/{tid}/cancel", follow_redirects=False).status_code == 403
     r = c.post(f"/transfers/{tid}/receive", data={f"recv_{lid}": "3"}, follow_redirects=True)
-    assert "اكتب السبب" in r.text
+    assert "أدخل السبب" in r.text
     c.post(f"/transfers/{tid}/receive", data={f"recv_{lid}": "3", "note": "قطعة مكسورة"})
     db = SessionLocal()
     assert db.get(Transfer, tid).status == "received"
@@ -447,7 +447,7 @@ def test_transfer_between_sites(env):
 
     # الإلغاء قبل الاستلام يرجّع الرصيد
     login(c, env, "storekeeper@example.com")
-    assert "اتقفل" in c.post(f"/transfers/{tid}/cancel", follow_redirects=True).text
+    assert "مغلق" in c.post(f"/transfers/{tid}/cancel", follow_redirects=True).text
     r = c.post("/transfers/new", data={"from_site_id": ids["a"], "to_site_id": ids["b"], "item_id": [ids["it"]],
                                        "qty": ["2"]}, follow_redirects=False)
     tid2 = int(r.headers["location"].rsplit("/", 1)[1])
@@ -569,7 +569,7 @@ def test_personal_settings(env):
     c = TestClient(app)
     login(c, env, "requester@example.com")
     page = c.get("/account").text
-    assert "الإعدادات" in page and "المظهر بتاعك" in page and "تغيير كلمة المرور" in page
+    assert "الإعدادات" in page and "المظهر الخاص بك" in page and "تغيير كلمة المرور" in page
     # مظهر خاص بيه بس
     assert "تم حفظ المظهر" in c.post("/account/appearance", data={"primary": "#7A1F3D", "bg": "dark", "font": "Tajawal"},
                                      follow_redirects=True).text

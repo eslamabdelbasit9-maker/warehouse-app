@@ -19,6 +19,6 @@
 {% for r in mine %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ REQ_TYPES[r.type] }}</td><td>{{ r.work_date }}</td>
 <td>{{ r.site.name }}{% if r.unit %} / {{ r.unit.name }}{% endif %}</td><td>{{ r.lines|length }}</td>
 <td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — عند {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>
-{% else %}<tr><td colspan="6" class="muted">لسه ما عملتش طلبات</td></tr>{% endfor %}
+{% else %}<tr><td colspan="6" class="muted">لم تُنشئ أي طلبات بعد</td></tr>{% endfor %}
 </table></div></div>
 {% endblock %}

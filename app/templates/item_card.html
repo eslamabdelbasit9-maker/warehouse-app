@@ -14,7 +14,7 @@
 <tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th class="n">الكمية المستلمة</th><th class="n">سعر الوحدة</th><th class="n">المبلغ</th><th>الفاتورة</th></tr>
 {% for m in ins %}<tr><td>{{ m.d or '' }}</td><td><a href="{{ m.link }}">{{ m.ref or '-' }}</a></td><td>{{ m.who }}</td>
 <td class="n"><b>{{ fmt(m.inq) }}</b> {{ item.uom }}</td><td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.value) }}</td>
-<td>{% if m.att %}<a href="{{ att_url(m.att) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% else %}<span class="muted">مفيش ملف</span>{% endif %}</td></tr>{% endfor %}
+<td>{% if m.att %}<a href="{{ att_url(m.att) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% else %}<span class="muted">لا يوجد ملف</span>{% endif %}</td></tr>{% endfor %}
 <tr><td colspan="3"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(ins|sum(attribute='inq')) }}</b> {{ item.uom }}</td><td></td><td class="n"><b>{{ fmt(ins|sum(attribute='value')) }}</b></td><td></td></tr>
 </table></div></div>
 {% endif %}

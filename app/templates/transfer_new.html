@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>تحويل قطع غيار لموقع تاني</h1>
+<h1>تحويل قطع غيار إلى موقع آخر</h1>
 <form method="post" class="card" id="frm">
   <div class="meta">
     <div class="f"><label>من موقع</label>
@@ -13,10 +13,10 @@
     <div class="f"><label>المحوِّل</label><input value="{{ user.name }}" disabled></div>
   </div>
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="note"></textarea></div>
-  <p class="muted">الكمية بتتخصم من رصيد {{ sel.name }} أول ما تبعت التحويل، وبتتضاف للموقع التاني لما أمين مستودعه يأكد الاستلام.</p>
+  <p class="muted">تُخصم الكمية من رصيد {{ sel.name }} فور إرسال التحويل، وتُضاف إلى الموقع الآخر عند تأكيد أمين مستودعه للاستلام.</p>
   <datalist id="items"></datalist>
   <div class="tw"><table class="t lines" id="lines">
-    <tr><th style="width:45%">الصنف (اكتب الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th style="width:130px">الكمية المحوَّلة</th><th></th></tr>
+    <tr><th style="width:45%">الصنف (أدخل الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th style="width:130px">الكمية المحوَّلة</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
   <button class="btn">إرسال التحويل</button>

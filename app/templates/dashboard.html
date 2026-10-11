@@ -24,7 +24,7 @@
   <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (الوارد)</div><div class="s">{{ per }}</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('file') }}</span><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
   <div class="card kpi"><span class="kpi-ic">{{ icon('steps') }}</span><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد</div><div class="s">المهندس / مدير الإنتاج / النهائي</div></div>
-  <a class="card kpi" href="/stagnant{{ q }}"><span class="kpi-ic">{{ icon('archive') }}</span><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ←</div><div class="s">{{ stagnant_n }} صنف — ما اتحركتش من 6 شهور</div></a>
+  <a class="card kpi" href="/stagnant{{ q }}"><span class="kpi-ic">{{ icon('archive') }}</span><div class="v">{{ fmt(stagnant_value) }}</div><div class="l">قيمة الرواكد ←</div><div class="s">{{ stagnant_n }} صنف — بدون حركة منذ 6 أشهر</div></a>
 </div>
 
 {% if my_pending %}
@@ -54,7 +54,7 @@
     </svg></div>
     <div class="tip" hidden></div>
   </div>
-  <details class="tview"><summary>عرض كجدول (الشهور × الفروع)</summary>
+  <details class="tview"><summary>عرض كجدول (الأشهر × الفروع)</summary>
   <div class="tw"><table class="t">
     <tr><th>الشهر</th>{% if not sel %}{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}{% endif %}<th class="n">الإجمالي</th></tr>
     {% for p in purchases|reverse %}<tr><td>{{ MONTHS_AR[p.m - 1] }} {{ p.y }}</td>
@@ -66,25 +66,25 @@
 </div>
 
 <div class="grid dash-g">
-  <div class="card">{% call card_h('wrench', 'صرف قطع الغيار حسب الوحدة', per ~ ' — المعتمد بس') %}{% endcall %}<div class="tw"><table class="t">
+  <div class="card">{% call card_h('wrench', 'صرف قطع الغيار حسب الوحدة', per ~ ' — المعتمد فقط') %}{% endcall %}<div class="tw"><table class="t">
   {% if sel %}
     <tr><th>الوحدة</th><th>النوع</th><th class="n">عدد الطلبات</th><th class="n">القيمة</th></tr>
     {% for u, k, v, c in spend %}<tr><td>{{ u }}</td><td>{{ k }}</td><td class="n">{{ c }}</td><td class="n">{{ fmt(v) }}</td></tr>
-    {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="4" class="muted">لا يوجد صرف معتمد في هذه الفترة</td></tr>{% endfor %}
     {% if spend %}<tr class="total"><td colspan="3">الإجمالي</td><td class="n">{{ fmt(period_spend) }}</td></tr>{% endif %}
   {% else %}
     <tr><th>نوع الوحدة</th>{% for s in pivot_sites %}<th class="n">{{ s.name }}</th>{% endfor %}<th class="n">الإجمالي</th></tr>
     {% for kind, by in spend %}<tr><td><b>{{ kind }}</b></td>
       {% for s in pivot_sites %}<td class="n">{{ fmt(by.get(s.id)) if by.get(s.id) else '-' }}</td>{% endfor %}
       <td class="n"><b>{{ fmt(by.values()|sum) }}</b></td></tr>
-    {% else %}<tr><td colspan="{{ pivot_sites|length + 2 }}" class="muted">لا يوجد صرف معتمد في الفترة دي</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="{{ pivot_sites|length + 2 }}" class="muted">لا يوجد صرف معتمد في هذه الفترة</td></tr>{% endfor %}
     {% if spend %}<tr class="total"><td>الإجمالي</td>
       {% for s in pivot_sites %}{% set ns = namespace(t=0) %}{% for kind, by in spend %}{% set ns.t = ns.t + (by.get(s.id) or 0) %}{% endfor %}
       <td class="n">{{ fmt(ns.t) if ns.t else '-' }}</td>{% endfor %}<td class="n">{{ fmt(period_spend) }}</td></tr>{% endif %}
   {% endif %}
   </table></div></div>
 
-  <div class="card">{% call card_h('layers', 'المواد الخام المصروفة', per ~ ' — المعتمد بس') %}{% endcall %}<div class="tw"><table class="t">
+  <div class="card">{% call card_h('layers', 'المواد الخام المصروفة', per ~ ' — المعتمد فقط') %}{% endcall %}<div class="tw"><table class="t">
   {% if sel %}
     <tr><th>المادة</th><th class="n">الكمية</th><th>الوحدة</th></tr>
     {% for (n, uom), by in raw_pivot %}<tr><td>{{ n }}</td><td class="n">{{ fmt(by.values()|sum) }}</td><td>{{ uom }}</td></tr>

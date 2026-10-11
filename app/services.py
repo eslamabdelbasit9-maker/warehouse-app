@@ -474,15 +474,15 @@ def create_transfer(db: Session, *, from_site, to_site, user, tr_date, note, lin
 def receive_transfer(db: Session, tr: Transfer, user, recv: dict, note: str | None):
     """recv: dict[line_id] = الكمية المستلمة."""
     if tr.status != "in_transit":
-        raise BusinessError("التحويل ده اتقفل قبل كده")
+        raise BusinessError("تم إغلاق هذا التحويل مسبقاً")
     short = False
     for l in tr.lines:
         q = recv.get(l.id)
         if q is None or q < 0 or q > l.qty + 1e-9:
-            raise BusinessError(f"الكمية المستلمة من «{l.item.name}» لازم تكون بين 0 و {fmt(l.qty)}")
+            raise BusinessError(f"الكمية المستلمة من «{l.item.name}» يجب أن تكون بين 0 و {fmt(l.qty)}")
         short = short or q < l.qty - 1e-9
     if short and not (note or "").strip():
-        raise BusinessError("في نقص في الاستلام — اكتب السبب في الملاحظات")
+        raise BusinessError("يوجد نقص في الاستلام — أدخل السبب في الملاحظات")
     for l in tr.lines:
         l.recv_qty = recv[l.id]
     tr.status, tr.received_by_id, tr.received_at = "received", user.id, datetime.now()
@@ -493,7 +493,7 @@ def receive_transfer(db: Session, tr: Transfer, user, recv: dict, note: str | No
 
 def cancel_transfer(db: Session, tr: Transfer):
     if tr.status != "in_transit":
-        raise BusinessError("ما ينفعش يتلغي — التحويل اتقفل")
+        raise BusinessError("لا يمكن الإلغاء — التحويل مغلق")
     tr.status = "cancelled"
     db.commit()
 

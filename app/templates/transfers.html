@@ -3,7 +3,7 @@
 <h1>التحويلات — {{ sel.name }}</h1>
 <form class="filters card noprint" method="get">{% include "_site_pick.html" %}
   <div class="f"><label>بحث (رقم/موقع/صنف)</label><input data-live="#ttbl"></div><span class="right"></span>
-  {% if user.has('transfer') %}<a class="btn green" href="/transfers/new?site={{ sel.id }}">+ تحويل لموقع تاني</a>{% endif %}</form>
+  {% if user.has('transfer') %}<a class="btn green" href="/transfers/new?site={{ sel.id }}">+ تحويل إلى موقع آخر</a>{% endif %}</form>
 {% set st_cls = {'in_transit':'pending','received':'approved','cancelled':'cancelled'} %}
 <div class="card"><div class="tw"><table class="t" id="ttbl">
 <tr><th>رقم التحويل</th><th>التاريخ</th><th>الاتجاه</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">القيمة</th><th>الحالة</th></tr>
@@ -14,6 +14,6 @@
 <td class="n">{{ fmt(t.total_value) }}</td>
 <td><span class="st st-{{ st_cls[t.status] }}">{{ TRANSFER_STATUS[t.status] }}</span>
   {% if t.status == 'in_transit' and not out and user.has('storekeeper') %}<a class="btn sm green" href="/transfers/{{ t.id }}">تأكيد الاستلام</a>{% endif %}</td></tr>
-{% else %}<tr><td colspan="6" class="muted">مفيش تحويلات</td></tr>{% endfor %}
+{% else %}<tr><td colspan="6" class="muted">لا توجد تحويلات</td></tr>{% endfor %}
 </table></div></div>
 {% endblock %}

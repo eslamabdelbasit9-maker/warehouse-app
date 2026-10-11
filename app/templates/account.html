@@ -7,10 +7,10 @@
   <div class="muted">{% for r in user.role_list %}{{ ROLES.get(r, r) }}{{ '، ' if not loop.last }}{% endfor %}</div></div>
 </div>
 
-{% with action="/account/appearance", form_title="المظهر بتاعك",
-        form_sub=("انت مختار مظهر خاص بيك." if form_theme.personal else "انت دلوقتي على مظهر البرنامج الافتراضي.") ~ " التغيير هنا ليك انت بس، وما بيأثرش على حد تاني.",
-        save_note="التغيير بيظهر على طول كمعاينة، وبيتحفظ لما تدوس حفظ.",
-        reset_label="رجوع لمظهر البرنامج", reset_confirm="ترجع لمظهر البرنامج الافتراضي؟" %}{% include "_appearance_form.html" %}{% endwith %}
+{% with action="/account/appearance", form_title="المظهر الخاص بك",
+        form_sub=("لقد اخترت مظهراً خاصاً بك." if form_theme.personal else "تستخدم حالياً المظهر الافتراضي للبرنامج.") ~ " تنطبق هذه الإعدادات عليك فقط ولا تؤثر على المستخدمين الآخرين.",
+        save_note="تظهر التغييرات مباشرةً للمعاينة، وتُحفظ عند الضغط على «حفظ».",
+        reset_label="استعادة المظهر الافتراضي", reset_confirm="هل تريد استعادة المظهر الافتراضي؟" %}{% include "_appearance_form.html" %}{% endwith %}
 
 <form method="post" action="/account" class="card" id="password" style="max-width:460px">
   <h2 style="font-size:18px">تغيير كلمة المرور</h2>

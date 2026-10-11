@@ -26,12 +26,12 @@
     <tr><td colspan="6"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(t.total_value) }}</b></td><td></td></tr>
   </table></div>
   {% if can_receive %}
-    <div class="f" style="margin-top:10px"><label>ملاحظات الاستلام (إجبارية لو في نقص)</label><textarea name="note"></textarea></div>
-    <p class="muted">لو استلمت أقل من المُرسَل، اكتب الكمية الفعلية — الفرق بيرجع لرصيد {{ t.from_site.name }}.</p>
+    <div class="f" style="margin-top:10px"><label>ملاحظات الاستلام (إجبارية في حال وجود نقص)</label><textarea name="note"></textarea></div>
+    <p class="muted">إذا استلمت كمية أقل من المُرسَلة، فأدخل الكمية الفعلية — ويُعاد الفرق إلى رصيد {{ t.from_site.name }}.</p>
     <button class="btn green" style="margin-top:6px">تأكيد الاستلام</button>
   </form>{% endif %}
   <div class="noprint" style="display:flex;gap:8px;margin-top:12px">
-    {% if can_cancel %}<form method="post" action="/transfers/{{ t.id }}/cancel" onsubmit="return confirm('إلغاء التحويل؟ الكميات هترجع لرصيد {{ t.from_site.name }}')"><button class="btn red">إلغاء التحويل</button></form>{% endif %}
+    {% if can_cancel %}<form method="post" action="/transfers/{{ t.id }}/cancel" onsubmit="return confirm('هل تريد إلغاء التحويل؟ ستُعاد الكميات إلى رصيد {{ t.from_site.name }}')"><button class="btn red">إلغاء التحويل</button></form>{% endif %}
     <button class="btn sec" onclick="print()">طباعة</button>
   </div>
 </div>

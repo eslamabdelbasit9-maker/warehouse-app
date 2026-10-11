@@ -182,7 +182,7 @@ def save_upload(db, upload, images_only=False):
         return None
     ext = Path(upload.filename).suffix.lower()
     if images_only and ext not in IMAGE_EXT:
-        raise S.BusinessError("الصورة لازم تكون JPG أو PNG")
+        raise S.BusinessError("يجب أن تكون الصورة بصيغة JPG أو PNG")
     if ext not in ALLOWED_EXT:
         raise S.BusinessError("نوع المرفق غير مسموح (PDF أو صورة أو Excel أو Word)")
     data = upload.file.read()
@@ -319,14 +319,14 @@ async def account_appearance(request: Request, db: Session = Depends(get_db), us
     form = await request.form()
     if form.get("reset"):
         S.reset_user_theme(db, user.id)
-        flash(request, "رجعت لمظهر البرنامج الافتراضي")
+        flash(request, "تمت استعادة المظهر الافتراضي")
         return back("/account")
     try:
         S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"), user_id=user.id)
     except S.BusinessError as e:
         flash(request, str(e), "err")
         return back("/account")
-    flash(request, "تم حفظ المظهر بتاعك")
+    flash(request, "تم حفظ المظهر الخاص بك")
     return back("/account")
 
 
@@ -545,7 +545,7 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
             if et not in ENTITY_TYPES:
                 raise S.BusinessError("اختر نوع الجهة (مشروع / عميل)")
             if not (en or "").strip():
-                raise S.BusinessError("اكتب اسم الجهة")
+                raise S.BusinessError("أدخل اسم الجهة")
             lines.append(dict(item=item, qty=parse_float(qty), entity_type=et, entity_name=en.strip()))
         diesel = db.query(Item).filter(Item.code == DIESEL_CODE).one()
         for purpose in DIESEL_PURPOSES:
@@ -626,7 +626,7 @@ def _apply_decision(request, db, req, user, form):
         return False, "لم تحدد أي صنف للموافقة — لرفض الطلب كاملاً استخدم زر «رفض الكل»"
     has_rejects = any(l.status == "pending" and l.id not in ids for l in req.lines)
     if has_rejects and not (comment or "").strip():
-        return False, "اكتب سبب الرفض في الملاحظات"
+        return False, "أدخل سبب الرفض في الملاحظات"
     try:
         S.decide(db, req, user, ids, comment)
     except S.BusinessError as e:
@@ -930,7 +930,7 @@ def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), u
     except S.BusinessError as e:
         flash(request, str(e), "err")
         return back(f"/transfers/{tid}")
-    flash(request, f"تم إلغاء التحويل {tr.tr_no} ورجعت الكميات لرصيد {tr.from_site.name}")
+    flash(request, f"تم إلغاء التحويل {tr.tr_no} وأُعيدت الكميات إلى رصيد {tr.from_site.name}")
     return back(f"/transfers/{tid}")
 
 
@@ -1228,7 +1228,7 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
     f = form.get("file")
     code, name = (form.get("site_code") or "").strip().upper(), (form.get("site_name") or "").strip()
     if not f or not getattr(f, "filename", "") or not code or not name:
-        flash(request, "اختر الملف واكتب كود الموقع واسمه", "err")
+        flash(request, "اختر الملف وأدخل كود الموقع واسمه", "err")
         return back("/admin/import")
     try:
         msg = run_import(io.BytesIO(f.file.read()), code, name)
@@ -1324,14 +1324,14 @@ async def admin_appearance_post(request: Request, db: Session = Depends(get_db),
     if form.get("reset"):
         d = S.THEME_DEFAULT
         S.save_theme(db, d["primary"], d["bg"], d["font"])
-        flash(request, "رجعنا للشكل الافتراضي")
+        flash(request, "تمت استعادة المظهر الافتراضي")
         return back("/admin/appearance")
     try:
         S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"))
     except S.BusinessError as e:
         flash(request, str(e), "err")
         return back("/admin/appearance")
-    flash(request, "تم حفظ المظهر — اتطبق على البرنامج كله")
+    flash(request, "تم حفظ المظهر وتطبيقه على البرنامج بالكامل")
     return back("/admin/appearance")
 
 

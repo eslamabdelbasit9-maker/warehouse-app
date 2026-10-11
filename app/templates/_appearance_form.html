@@ -2,7 +2,7 @@
 <form method="post" action="{{ action }}" class="card" id="theme-form">
   {% if form_title %}<h2 style="font-size:18px">{{ form_title }}</h2>{% if form_sub %}<p class="muted">{{ form_sub }}</p>{% endif %}{% endif %}
   <h2>اللون الأساسي</h2>
-  <p class="muted">لون الشريط اللي فوق والجداول والأزرار. اختار من الجاهز أو أي لون تحبه.</p>
+  <p class="muted">لون الشريط العلوي والجداول والأزرار. اختر أحد الألوان الجاهزة أو أي لون آخر.</p>
   <div class="swatches">
     {% for hex, name in colors.items() %}
     <label class="swatch"><input type="radio" name="preset" value="{{ hex }}" {{ 'checked' if form_theme.primary|upper == hex }}>
