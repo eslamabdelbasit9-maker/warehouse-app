@@ -1234,7 +1234,7 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
         flash(request, "اختر الملف وأدخل كود الموقع واسمه", "err")
         return back("/admin/import")
     try:
-        msg = run_import(io.BytesIO(f.file.read()), code, name)
+        msg = run_import(io.BytesIO(f.file.read()), code, name, replace=form.get("replace") == "1")
     except Exception as e:  # noqa: BLE001
         flash(request, f"فشل الاستيراد: {e}", "err")
         return back("/admin/import")
