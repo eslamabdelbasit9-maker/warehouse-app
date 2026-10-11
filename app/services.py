@@ -234,11 +234,41 @@ def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, b
         r = min(4, bh, bw / 2)
         path = (f"M{x:.1f},{pad_t + plot_h:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
                 f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{pad_t + plot_h:.1f} Z") if bh > 0 else ""
-        bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band))
+        bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band, bw=bw))
     grid = [dict(y=pad_t + plot_h - plot_h * t / top, v=t) for t in ticks]
-    return dict(w=w, h=h, bars=bars, grid=grid, base=pad_t + plot_h, pad_l=pad_l, pad_t=pad_t, plot_h=plot_h,
+    return dict(w=w, h=h, bars=bars, grid=grid, base=pad_t + plot_h, pad_l=pad_l, pad_t=pad_t, plot_h=plot_h, top=top,
                 x0=pad_l, x1=w - pad_r, tick_x=w - pad_r + 8,
                 max_i=max(range(len(values)), key=lambda i: values[i]) if any(values) else None)
+
+
+def _bar_path(x, y, bw, bh, r):
+    """عمود من (x, y+bh) لفوق، بطرف علوي مدوّر r (r=0 من غير تدوير)."""
+    b = y + bh
+    if r <= 0:
+        return f"M{x:.1f},{b:.1f} V{y:.1f} H{x + bw:.1f} V{b:.1f} Z"
+    return (f"M{x:.1f},{b:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
+            f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{b:.1f} Z")
+
+
+def stacked_chart(stacks, keys, gap=2, **kw):
+    """زي column_chart بس كل عمود مقسوم لأجزاء (لكل مفتاح في keys بالترتيب من تحت لفوق) بفاصل 2px.
+    stacks: list of dict(key → value). كل جزء بياخد ترتيب المفتاح (k) عشان اللون يفضل ثابت للفرع."""
+    totals = [sum(s.get(k, 0) or 0 for k in keys) for s in stacks]
+    c = column_chart(totals, **kw)
+    scale = c["plot_h"] / c["top"] if c["top"] else 0
+    for b, s in zip(c["bars"], stacks):
+        segs, y = [], c["base"]
+        parts = [(i, s.get(k, 0) or 0) for i, k in enumerate(keys) if (s.get(k, 0) or 0) > 0]
+        for j, (i, v) in enumerate(parts):
+            h = v * scale
+            top_seg = j == len(parts) - 1
+            hh = h - (0 if j == 0 else gap)          # الفاصل بياكل من الجزء اللي فوق
+            if hh > 0.3:
+                r = min(4, hh, b["bw"] / 2) if top_seg else 0
+                segs.append(dict(k=i, path=_bar_path(b["x"], y - h, b["bw"], hh, r)))
+            y -= h
+        b["segs"] = segs
+    return c
 
 
 # ---------------- الرواكد ----------------

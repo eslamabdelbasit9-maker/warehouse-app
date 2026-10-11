@@ -20,6 +20,8 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 </script>
 </head>
 <body{% if user %} class="has-side"{% endif %}>
+{% if user %}<script>try{if(localStorage.getItem('side')==='mini')document.body.classList.add('side-mini')}catch(e){}
+function sideToggle(){var m=document.body.classList.toggle('side-mini');try{localStorage.setItem('side',m?'mini':'')}catch(e){}}</script>{% endif %}
 {% if user %}
 {% from "_icons.html" import icon %}
 {% set alerts = (pending_n or 0) + (transfer_n or 0) %}
@@ -29,9 +31,12 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
   <button type="button" class="menu-btn" aria-label="القائمة" onclick="document.body.classList.toggle('side-open')">☰{% if alerts %}<span class="badge-n">{{ alerts }}</span>{% endif %}</button>
 </div>
 <aside class="side">
-  <a href="/" class="side-brand">{% include "_logo.html" %}<span class="title">{{ APP_NAME }}</span></a>
+  <div class="side-head">
+    <a href="/" class="side-brand" title="{{ APP_NAME }}">{% include "_logo.html" %}<span class="title">{{ APP_NAME }}</span></a>
+    <button type="button" class="side-tg" aria-label="إظهار / إخفاء القائمة" title="إظهار / إخفاء القائمة" onclick="sideToggle()">{{ icon('chev', 18) }}</button>
+  </div>
   <nav class="main">
-    {% macro nl(href, label, ic, on, badge=0) %}<a href="{{ href }}" class="{{ 'on' if on }}">{{ icon(ic, 19) }}<span>{{ label }}</span>{% if badge %}<span class="badge-n">{{ badge }}</span>{% endif %}</a>{% endmacro %}
+    {% macro nl(href, label, ic, on, badge=0) %}<a href="{{ href }}" class="{{ 'on' if on }}" title="{{ label }}">{{ icon(ic, 19) }}<span>{{ label }}</span>{% if badge %}<span class="badge-n">{{ badge }}</span>{% endif %}</a>{% endmacro %}
     <div class="sg">الرئيسية</div>
     {{ nl('/', 'لوحة المتابعة', 'home', path == '/') }}
     {{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}
@@ -47,8 +52,8 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
   </nav>
   <div class="side-foot">
     <div class="who-n">{{ user.name }}</div>
-    <a href="/account" class="{{ 'on' if path.startswith('/account') }}">{{ icon('gear', 17) }}<span>الإعدادات</span></a>
-    <a href="/logout">{{ icon('logout', 17) }}<span>خروج</span></a>
+    <a href="/account" class="{{ 'on' if path.startswith('/account') }}" title="الإعدادات">{{ icon('gear', 17) }}<span>الإعدادات</span></a>
+    <a href="/logout" title="خروج">{{ icon('logout', 17) }}<span>خروج</span></a>
   </div>
 </aside>
 <div class="side-dim" onclick="document.body.classList.remove('side-open')"></div>

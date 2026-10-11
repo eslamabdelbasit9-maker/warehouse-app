@@ -353,3 +353,42 @@ body.has-side main>*{max-width:1280px;margin-left:auto;margin-right:auto}
   body.has-side main{margin-right:0;padding:12px 10px}
 }
 @media print{aside.side,.mtop,.side-dim{display:none}body.has-side main{margin:0}}
+/* المشتريات حسب الفرع: ألوان ثابتة لكل فرع (متحققة للعمى اللوني) */
+.chart .bar path.s0,.sw.s0{fill:#2a78d6;background:#2a78d6}.chart .bar path.s1,.sw.s1{fill:#eb6834;background:#eb6834}
+.chart .bar path.s2,.sw.s2{fill:#1baf7a;background:#1baf7a}.chart .bar path.s3,.sw.s3{fill:#eda100;background:#eda100}
+.chart .bar path.s4,.sw.s4{fill:#e87ba4;background:#e87ba4}.chart .bar path.s5,.sw.s5{fill:#008300;background:#008300}
+.chart .bar path.s6,.sw.s6{fill:#6250d6;background:#6250d6}.chart .bar path.s7,.sw.s7{fill:#e34948;background:#e34948}
+html[data-mode=dark] .chart .bar path.s0,html[data-mode=dark] .sw.s0{fill:#3987e5;background:#3987e5}
+html[data-mode=dark] .chart .bar path.s1,html[data-mode=dark] .sw.s1{fill:#d95926;background:#d95926}
+html[data-mode=dark] .chart .bar path.s2,html[data-mode=dark] .sw.s2{fill:#199e70;background:#199e70}
+html[data-mode=dark] .chart .bar path.s3,html[data-mode=dark] .sw.s3{fill:#c98500;background:#c98500}
+html[data-mode=dark] .chart .bar path.s4,html[data-mode=dark] .sw.s4{fill:#d55181;background:#d55181}
+html[data-mode=dark] .chart .bar path.s6,html[data-mode=dark] .sw.s6{fill:#9085e9;background:#9085e9}
+html[data-mode=dark] .chart .bar path.s7,html[data-mode=dark] .sw.s7{fill:#e66767;background:#e66767}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:2px 0 10px;font-size:13px;color:var(--muted)}
+.legend .lg{display:inline-flex;align-items:center;gap:6px}.legend b{color:var(--text,#1f2937);font-weight:700}
+html[data-mode=dark] .legend b{color:#F3F4F6}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+.chart .tip .ts{display:flex;align-items:center;gap:6px}.chart .tip .sw{box-shadow:0 0 0 1px rgba(255,255,255,.5)}
+.chart .val{font-size:11.5px}
+/* القائمة المصغّرة: أيقونات بس، والشعار فاضل ظاهر */
+.side-head{display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,.12);padding-left:8px}
+.side-head .side-brand{border-bottom:0;flex:1;min-width:0}
+.side-tg{flex:none;background:rgba(255,255,255,.12);border:0;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;display:grid;place-items:center;transition:background .2s,transform .3s}
+.side-tg:hover{background:rgba(255,255,255,.22)}
+.side-tg .ic{transform:rotate(180deg);transition:transform .3s}
+aside.side,body.has-side main{transition:width .25s var(--ease,ease),margin .25s var(--ease,ease)}
+@media (min-width:901px){
+  body.side-mini aside.side{width:80px}
+  body.side-mini main{margin-right:80px}
+  body.side-mini .side-head{flex-direction:column;padding:12px 0 10px;gap:10px}
+  body.side-mini .side-brand{padding:0;justify-content:center}
+  body.side-mini .side-brand .logo{height:auto;width:60px;max-width:60px}
+  body.side-mini aside.side .title,body.side-mini aside.side nav.main a span:not(.badge-n),body.side-mini .side-foot a span,
+  body.side-mini aside.side .who-n{display:none}
+  body.side-mini aside.side .sg{font-size:0;padding:6px 0;margin:4px 14px;border-top:1px solid rgba(255,255,255,.14)}
+  body.side-mini aside.side nav.main a,body.side-mini .side-foot a{justify-content:center;padding:10px 0}
+  body.side-mini aside.side .badge-n{position:absolute;top:2px;left:8px;margin:0;font-size:10px;min-width:16px;padding:0 4px}
+  body.side-mini .side-tg .ic{transform:none}
+}
+@media (max-width:900px){.side-tg{display:none}}

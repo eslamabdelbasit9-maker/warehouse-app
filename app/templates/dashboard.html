@@ -37,15 +37,18 @@
 
 <div class="card">
   {% call card_h('cart', 'المشتريات الشهرية', 'قيمة الوارد في آخر 12 شهر' ~ (' — ' ~ sel.name if sel else ' — كل المواقع')) %}{% endcall %}
+  {% if chart.legend %}<div class="legend">{% for l in chart.legend %}<span class="lg"><i class="sw s{{ l.c }}"></i>{{ l.name }} <b class="num">{{ fmt(l.total, 0) }}</b></span>{% endfor %}</div>{% endif %}
+  {% set sc = chart.site_c or {} %}
   <div class="chart" id="pchart">
     <div class="scroll"><svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="رسم أعمدة لقيمة المشتريات الشهرية">
       {% for g in chart.grid %}<line class="grid" x1="{{ chart.x0 }}" x2="{{ chart.x1 }}" y1="{{ g.y }}" y2="{{ g.y }}"/>
       <text class="tick num" x="{{ chart.tick_x }}" y="{{ g.y + 4 }}" text-anchor="start">{{ fmt(g.v, 0) }}</text>{% endfor %}
       {% for b in chart.bars %}{% set p = purchases[loop.index0] %}
-      <g class="bar" data-tip="{{ MONTHS_AR[p.m - 1] }} {{ p.y }}|{{ fmt(p.total) }}{% for s in pivot_sites %}{% if p.by.get(s.id) %}|{{ s.name }}: {{ fmt(p.by[s.id]) }}{% endif %}{% endfor %}">
+      <g class="bar" data-tip="{{ MONTHS_AR[p.m - 1] }} {{ p.y }}|{{ fmt(p.total) }}{% for s in pivot_sites %}{% if p.by.get(s.id) %}|{{ sc.get(s.id, '') }}~{{ s.name }}: {{ fmt(p.by[s.id]) }}{% endif %}{% endfor %}">
         <rect class="hit" x="{{ b.hit_x }}" y="{{ chart.pad_t }}" width="{{ b.band }}" height="{{ chart.plot_h }}"/>
-        {% if b.path %}<path d="{{ b.path }}"/>{% endif %}
-        {% if loop.index0 == chart.max_i or loop.last %}{% if b.v %}<text class="val num" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle">{{ fmt(b.v, 0) }}</text>{% endif %}{% endif %}
+        {% if b.segs is defined %}{% for sg in b.segs %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endfor %}
+        {% elif b.path %}<path d="{{ b.path }}"/>{% endif %}
+        {% if b.v %}<text class="val num" x="{{ b.cx }}" y="{{ b.y - 6 }}" text-anchor="middle">{{ fmt(b.v, 0) }}</text>{% endif %}
         <text class="mlabel" x="{{ b.cx }}" y="{{ chart.base + 18 }}" text-anchor="middle">{{ MONTHS_AR[p.m - 1] }}</text>
         {% if p.m == 1 or loop.first %}<text class="ylabel num" x="{{ b.cx }}" y="{{ chart.base + 34 }}" text-anchor="middle">{{ p.y }}</text>{% endif %}
       </g>{% endfor %}
@@ -118,7 +121,7 @@
   var tip = box.querySelector('.tip');
   function show(g, e){
     var parts = g.dataset.tip.split('|');
-    tip.innerHTML = '<b>' + parts[0] + '</b><div class="tv">' + parts[1] + '</div>' + parts.slice(2).map(function(x){ return '<div class="ts">' + x + '</div>'; }).join('');
+    tip.innerHTML = '<b>' + parts[0] + '</b><div class="tv">' + parts[1] + '</div>' + parts.slice(2).map(function(x){ var p = x.split('~'); return '<div class="ts">' + (p[0] !== '' ? '<i class="sw s' + p[0] + '"></i>' : '') + p[1] + '</div>'; }).join('');
     tip.hidden = false;
     var r = box.getBoundingClientRect(), hr = g.querySelector('.hit').getBoundingClientRect();
     var x = hr.left + hr.width / 2 - r.left, w = tip.offsetWidth;

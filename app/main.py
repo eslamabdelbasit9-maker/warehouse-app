@@ -410,17 +410,28 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         cell = monthly[(d.year, d.month)]
         cell[sid] = cell.get(sid, 0) + (v or 0)
     purchases = [dict(y=y, m=m, by=monthly[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
-    chart = S.column_chart([p["total"] for p in purchases])
+    # كل الفروع: العمود مقسوم بالفرع (لون ثابت لكل فرع حسب ترتيبه)؛ فرع واحد: عمود واحد
+    chart_sites = sorted((s for s in pivot_sites if any(p["by"].get(s.id) for p in purchases)), key=lambda s: s.id) if not sel else []
+    if len(chart_sites) > 1:
+        chart = S.stacked_chart([p["by"] for p in purchases], [s.id for s in chart_sites], bar_max=30)
+        site_color = {s.id: i % 8 for i, s in enumerate(sorted(sites, key=lambda s: s.id))}
+        chart["site_c"] = site_color
+        chart["legend"] = [dict(name=s.name, c=site_color[s.id], total=sum(p["by"].get(s.id, 0) for p in purchases))
+                           for s in chart_sites]
+        for b in chart["bars"]:
+            for sg in b["segs"]:
+                sg["c"] = site_color[chart_sites[sg["k"]].id]
+    else:
+        chart = S.column_chart([p["total"] for p in purchases], bar_max=30)
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
                  .group_by(Item.code, Item.name, Item.uom).order_by(func.sum(RequestLine.value).desc()).limit(10).all())
-    stagnant = S.stagnant_items(db, ids)
     recent = base.order_by(Req.created_at.desc()).limit(8).all()
     return render(request, "dashboard.html", user, sites=sites, sel=sel, d_from=d_from, d_to=d_to,
                   my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
                   period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
-                  top_items=top_items, stagnant_value=sum(x["value"] for x in stagnant), stagnant_n=len(stagnant),
+                  top_items=top_items,
                   period_purchases=period_purchases, purchases=purchases, chart=chart, MONTHS_AR=S.MONTHS_AR,
                   recent=recent)
 
