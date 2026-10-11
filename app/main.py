@@ -575,7 +575,47 @@ def request_detail(rid: int, request: Request, db: Session = Depends(get_db), us
     st, iss = _spare_ctx(db, req)
     return render(request, "request_detail.html", user, r=req, approvers=approvers, st=st, iss=iss,
                   can_approve=S.can_approve(db, user, req),
-                  can_cancel=req.status == "pending" and req.requester_id == user.id and not req.decisions)
+                  can_cancel=req.status == "pending" and req.requester_id == user.id and not req.decisions,
+                  can_edit=user.has("admin"),
+                  units=db.query(Unit).filter_by(site_id=req.site_id).order_by(Unit.active.desc(), Unit.name).all()
+                  if user.has("admin") else [])
+
+
+@app.post("/requests/{rid}/edit")
+async def request_edit(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """تعديل بيانات رأس الطلب (الوحدة، التاريخ، طالب الصرف، السبب) — للأدمن فقط، ما بيغيرش الكميات ولا الاعتماد."""
+    req = db.get(Req, rid)
+    if not req:
+        raise Forbidden()
+    form = await request.form()
+    changes = []
+    uid = form.get("unit_id")
+    if uid and str(uid).isdigit() and int(uid) != req.unit_id:
+        unit = db.get(Unit, int(uid))
+        if not unit or unit.site_id != req.site_id:
+            flash(request, "الوحدة لازم تكون من نفس الموقع", "err")
+            return back(f"/requests/{rid}")
+        changes.append(f"الوحدة: {req.unit.name if req.unit else '—'} ← {unit.name}")
+        req.unit_id = unit.id
+    d = parse_date(form.get("work_date"))
+    if d and d != req.work_date:
+        changes.append(f"التاريخ: {req.work_date} ← {d}")
+        req.work_date = d
+    if not req.requester_id:
+        name = (form.get("requester_name") or "").strip()
+        if name and name != (req.requester_name or ""):
+            changes.append("طالب الصرف")
+            req.requester_name = name[:150]
+    reason = (form.get("reason") or "").strip()
+    if reason and reason != (req.reason or ""):
+        changes.append("السبب")
+        req.reason = reason
+    if not changes:
+        flash(request, "مفيش تعديل")
+        return back(f"/requests/{rid}")
+    db.commit()
+    flash(request, "تم التعديل — " + "، ".join(changes))
+    return back(f"/requests/{rid}")
 
 
 @app.post("/requests/{rid}/cancel")

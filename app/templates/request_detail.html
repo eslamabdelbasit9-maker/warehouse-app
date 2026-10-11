@@ -27,5 +27,20 @@
     {% if can_cancel %}<form method="post" action="/requests/{{ r.id }}/cancel" onsubmit="return confirm('إلغاء الطلب؟')"><button class="btn red">إلغاء الطلب</button></form>{% endif %}
     <button class="btn sec" onclick="print()">طباعة</button>
   </div>
+  {% if can_edit %}
+  <details class="noprint" style="margin-top:14px">
+    <summary class="btn sec" style="display:inline-block">تعديل بيانات الطلب</summary>
+    <form method="post" action="/requests/{{ r.id }}/edit" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px">
+      <label>الوحدة<select name="unit_id">
+        {% for u in units %}<option value="{{ u.id }}" {{ 'selected' if u.id==r.unit_id }}>{{ u.name }}{{ ' (موقوفة)' if not u.active }}</option>{% endfor %}
+      </select></label>
+      <label>التاريخ<input type="date" name="work_date" value="{{ r.work_date }}"></label>
+      {% if not r.requester_id %}<label>طالب الصرف<input name="requester_name" value="{{ r.requester_name or '' }}"></label>{% endif %}
+      <label style="grid-column:1/-1">السبب<textarea name="reason" rows="2">{{ r.reason or '' }}</textarea></label>
+      <div><button class="btn">حفظ التعديل</button></div>
+    </form>
+    <p class="muted">التعديل هنا للبيانات بس — الكميات والاعتماد بيتعملوا من صفحة الاعتمادات.</p>
+  </details>
+  {% endif %}
 </div>
 {% endblock %}
