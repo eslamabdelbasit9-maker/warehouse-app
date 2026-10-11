@@ -749,13 +749,13 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
             continue
         if q and q.strip().lower() not in it.name.lower() and q.strip().lower() not in it.code.lower():
             continue
-        if only == "zero" and r["cur"] > 0:
+        if only == "zero" and r["bal"] > 1e-9:
             continue
-        if only == "has" and r["cur"] <= 0:
+        if only == "has" and r["bal"] <= 1e-9:
             continue
         rows.append((it, r))
     rows.sort(key=lambda x: x[0].code)
-    total_value = sum(r["value"] for _, r in rows)
+    total_value = sum(r["bal_value"] for _, r in rows)
     return render(request, "stock.html", user, sites=sites, sel=sel, rows=rows, q=q, only=only, total_value=total_value)
 
 
@@ -780,6 +780,11 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
         moves.append(dict(d=l.request.work_date, kind="صرف", ref=l.request.req_no, inq=0, outq=l.qty, price=l.unit_cost,
                           who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}",
                           value=l.value))
+    for l in (db.query(RequestLine).join(Req).filter(Req.site_id == sel.id, RequestLine.item_id == item_id,
+                                                      RequestLine.status == "pending", Req.status == "pending")):
+        moves.append(dict(d=l.request.work_date, kind="صرف (قيد الاعتماد)", ref=l.request.req_no, inq=0, outq=l.qty,
+                          price=None, who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}",
+                          value=None))
     for tl in (db.query(TransferLine).join(Transfer).filter(
             TransferLine.item_id == item_id, Transfer.status.in_(["in_transit", "received"]),
             or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))):
@@ -1449,8 +1454,8 @@ def export_stock(site: str | None = None, db: Session = Depends(get_db), user: U
     sites, sel = pick_site(db, user, site)
     st = S.stock_table(db, sel.id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(st.keys())), Item.category == "spare")}
-    rows = [[it.code, it.name, it.uom, r["location"] or "", r["open_qty"], r["in_qty"], r["out_qty"], r["cur"],
-             round(r["avg"], 4), round(r["value"], 2), r["pending_qty"], r["tr_in_qty"], r["tr_out_qty"]]
+    rows = [[it.code, it.name, it.uom, r["location"] or "", r["open_qty"], r["in_qty"], r["out_qty"], r["bal"],
+             round(r["avg"], 4), round(r["bal_value"], 2), r["pending_qty"], r["tr_in_qty"], r["tr_out_qty"]]
             for iid, r in sorted(st.items(), key=lambda x: items[x[0]].code if x[0] in items else "")
             if (it := items.get(iid))]
     h = ["كود الصنف", "اسم الصنف", "الوحدة", "الموقع", "الرصيد الافتتاحي", "إجمالي الوارد", "المنصرف المعتمد",
@@ -1518,8 +1523,8 @@ def export_csv(table: str, key: str = "", db: Session = Depends(get_db)):
                 if not it:
                     continue
                 rows.append([site.name, it.code, it.name, it.uom or "", round(t["open_qty"], 4), round(t["in_qty"], 4),
-                             round(t["out_qty"], 4), round(t["pending_qty"], 4), round(t["cur"], 4),
-                             round(t["avg"], 4), round(t["value"], 2),
+                             round(t["out_qty"], 4), round(t["pending_qty"], 4), round(t["bal"], 4),
+                             round(t["avg"], 4), round(t["bal_value"], 2),
                              last[iid].isoformat() if last.get(iid) else ""])
         head = ["المستودع", "كود الصنف", "اسم الصنف", "وحدة القياس", "الرصيد الافتتاحي", "إجمالي الوارد",
                 "المنصرف المعتمد", "تحت الاعتماد", "الرصيد الحالي", "متوسط السعر", "قيمة الرصيد", "آخر تاريخ صرف"]

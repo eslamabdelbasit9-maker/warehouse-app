@@ -3,10 +3,10 @@
 <h1>كرت الصنف: {{ item.code }} — {{ item.name }}</h1>
 <form class="filters card noprint" method="get">{% include "_site_pick.html" %}</form>
 <div class="grid g4">
-  <div class="card kpi"><div class="v">{{ fmt(st.cur if st else 0) }} {{ item.uom }}</div><div class="l">الرصيد الحالي</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.bal if st else 0) }} {{ item.uom }}</div><div class="l">الرصيد الحالي</div></div>
   <div class="card kpi"><div class="v">{{ fmt(st.avg if st else 0) }}</div><div class="l">متوسط السعر المرجح</div></div>
-  <div class="card kpi"><div class="v">{{ fmt(st.value if st else 0) }}</div><div class="l">قيمة الرصيد</div></div>
-  <div class="card kpi"><div class="v">{{ fmt(st.pending_qty if st else 0) }}</div><div class="l">قيد الاعتماد</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.bal_value if st else 0) }}</div><div class="l">قيمة الرصيد</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.pending_qty if st else 0) }}</div><div class="l">منها قيد الاعتماد (محسوبة مصروفة)</div></div>
 </div>
 {% set ins = moves|selectattr('kind', 'equalto', 'وارد')|list %}
 {% if ins %}
