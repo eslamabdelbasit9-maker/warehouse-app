@@ -169,10 +169,6 @@ def stock_table(db: Session, site_id: int, item_ids=None):
         r["cur"] = r["open_qty"] + r["in_qty"] + r["tr_in_qty"] - r["out_qty"] - r["tr_out_qty"]
         r["available"] = r["cur"] - r["pending_qty"]
         r["value"] = r["cur"] * r["avg"]
-        # للعرض: الكميات المعلقة في الاعتماد محسوبة مصروفة («cur» يفضل للتحقق وقت الاعتماد)
-        r["out_all"] = r["out_qty"] + r["pending_qty"]
-        r["bal"] = r["available"]
-        r["bal_value"] = r["available"] * r["avg"]
     return t
 
 

@@ -64,12 +64,7 @@ def test_spare_full_cycle(env):
     mail = db.query(MailLog).order_by(MailLog.id.desc()).first()
     assert "eng.crusher@example.com" in mail.to and f"/approvals/{rid}" in mail.html
     la, lb = req.lines
-    st = S.stock_table(db, env["site"])
-    assert abs(st[env["a"]]["bal"] - (st[env["a"]]["cur"] - 3)) < 1e-9         # المعلق محسوب مصروف
-    assert st[env["a"]]["out_all"] == st[env["a"]]["out_qty"] + 3
     db.close()
-    page = c.get(f"/stock/{env['a']}?site={env['site']}").text
-    assert "صرف (قيد الاعتماد)" in page and "محسوبة مصروفة" in page
 
     # مهندس الاسفلت لا يستطيع اعتماد طلب كسارة
     login(c, env, "eng.asphalt@example.com")
