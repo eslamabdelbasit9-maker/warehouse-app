@@ -589,6 +589,19 @@ def test_stagnant_rules(env):
     db.commit()
     rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=date(2031, 12, 1))}
     assert rows["ST_A"]["last"] == date(2031, 5, 1) and rows["ST_A"]["added_qty"] == 0
+    # طلب قيد الاعتماد على ST_C بكل رصيده (5): محسوب مصروف → يخرج من الرواكد
+    pend = Request(req_no="SP-ST-2", type="spare", site_id=site.id, unit_id=unit.id, work_date=date(2031, 6, 1),
+                   status="pending", current_stage=1)
+    pend.lines = [RequestLine(item_id=c.id, qty=5, status="pending")]
+    # وطلب معلق على جزء من ST_A (2 من 4): الباقي بس راكد، والعد من تاريخ الطلب
+    pend2 = Request(req_no="SP-ST-3", type="spare", site_id=site.id, unit_id=unit.id, work_date=date(2031, 6, 1),
+                    status="pending", current_stage=1)
+    pend2.lines = [RequestLine(item_id=a.id, qty=2, status="pending")]
+    db.add_all([pend, pend2])
+    db.commit()
+    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=date(2031, 12, 1))}
+    assert "ST_C" not in rows
+    assert rows["ST_A"]["cur"] == 2 and rows["ST_A"]["last"] == date(2031, 6, 1)
     db.close()
 
 

@@ -256,7 +256,8 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
     out = []
     for site in db.query(Site).filter(Site.id.in_(list(site_ids))).order_by(Site.name):
         st = stock_table(db, site.id)
-        live = [iid for iid, r in st.items() if r["cur"] > 1e-9]
+        # الكميات المعلقة (طلبات قيد الاعتماد) محسوبة مصروفة: الباقي بس هو اللي راكد
+        live = [iid for iid, r in st.items() if r["available"] > 1e-9]
         if not live:
             continue
         last_out = {}
@@ -268,6 +269,9 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
         bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
              .filter(Request.site_id == site.id, Request.status.in_(["approved", "partial"]),
                      RequestLine.status == "approved", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
+        bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
+             .filter(Request.site_id == site.id, Request.status == "pending",
+                     RequestLine.status == "pending", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
         bump(db.query(TransferLine.item_id, func.max(Transfer.date)).join(Transfer)
              .filter(Transfer.status.in_(["in_transit", "received"]), TransferLine.item_id.in_(live),
                      Transfer.from_site_id == site.id).group_by(TransferLine.item_id))
@@ -300,7 +304,7 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
             if idle < days:
                 continue
             r = st[iid]
-            out.append(dict(site=site, item=it, cur=r["cur"], avg=r["avg"], value=r["value"],
+            out.append(dict(site=site, item=it, cur=r["available"], avg=r["avg"], value=r["available"] * r["avg"],
                             last=last_out.get(iid), since=since, idle_days=idle,
                             added_qty=sum(q for _, q in added), added_last=max((d for d, _ in added), default=None)))
     out.sort(key=lambda x: -x["value"])
