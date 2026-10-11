@@ -128,8 +128,12 @@ def test_raw_materials(env):
     g = db.query(Item).filter_by(code="RM-G34").one().id
     bit = db.query(Item).filter_by(code="RM-BIT").one().id
     db.close()
+    base = {"site_id": env["site"], "unit_id": env["asphalt"], "entity_type": "مشروع", "entity_name": "س",
+            "item_id": g, "qty": "5"}
+    r = c.post("/requests/new/raw", data=base, follow_redirects=True)   # من غير إنتاج الأسفلت: مرفوض
+    assert "الكمية المنتجة من الأسفلت" in r.text
     r = c.post("/requests/new/raw", data={
-        "site_id": env["site"], "unit_id": env["asphalt"],
+        "site_id": env["site"], "unit_id": env["asphalt"], "asphalt_tons": "500",
         "entity_type": ["مشروع", "عميل"], "entity_name": ["طريق الملك فهد", "مؤسسة الأمل"],
         "item_id": [g, bit], "qty": ["120", "6.5"], "diesel_تشغيل": "900", "diesel_تسخين": "350"},
         follow_redirects=False)
@@ -139,6 +143,7 @@ def test_raw_materials(env):
     req = db.get(Request, rid)
     assert req.type == "raw" and len(req.lines) == 4
     assert {l.diesel_purpose for l in req.lines} == {None, "تشغيل", "تسخين"}
+    assert req.asphalt_tons == 500 and req.diesel_liters == 1250 and abs(req.liters_per_ton - 2.5) < 1e-9
     mail = db.query(MailLog).order_by(MailLog.id.desc()).first()
     assert "eng.asphalt@example.com" in mail.to
     ids = [l.id for l in req.lines]
@@ -149,6 +154,10 @@ def test_raw_materials(env):
     db = SessionLocal()
     assert db.get(Request, rid).status == "approved"
     db.close()
+    page = c.get(f"/requests/{rid}").text
+    assert "الأسفلت المنتج" in page and "2.50" in page and "لتر/طن" in page
+    login(c, env, "requester@example.com")
+    assert 'id="tons"' in c.get("/requests/new/raw").text
     assert "طريق الملك فهد" in c.get("/").text or True
 
 
@@ -521,12 +530,13 @@ def test_dashboard_roles_and_stagnant(env):
     rec.lines = [ReceiptLine(item_id=new.id, qty=2, unit_price=50)]
     db.add(rec)
     db.commit()
-    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180)}
+    y = date.today().year
+    end = date(y, 12, 31)
+    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=end)}
+    # رصيد افتتاحي وما اتصرفش منه: العد من بداية السنة
     assert "SP_OLD" in rows and rows["SP_OLD"]["value"] == 400 and rows["SP_OLD"]["last"] is None
-    assert "SP_NEW" not in rows
-    # بعد 200 يوم الصنف اللي اتورد من 10 أيام برضه بيبقى راكد
-    later = {r["item"].code for r in S.stagnant_items(db, [site.id], 180, today=date.today() + timedelta(days=200))}
-    assert "SP_NEW" in later
+    assert rows["SP_OLD"]["since"] == date(y, 1, 1) and rows["SP_OLD"]["idle_days"] == 364
+    assert rows["SP_OLD"]["added_qty"] == 0
     db.close()
 
     c = TestClient(app)
@@ -536,7 +546,7 @@ def test_dashboard_roles_and_stagnant(env):
     assert c.get("/stagnant", follow_redirects=False).status_code == 403
     login(c, env, "storekeeper@example.com")
     assert "طلباتي" in c.get("/").text            # أمين المستودع: اللوحة المختصرة
-    assert "صنف راكد" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
+    assert "الأصناف الراكدة" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
     login(c, env, "eng.crusher@example.com")
     page = c.get("/").text
     assert "صرف قطع الغيار المعتمد" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
@@ -546,7 +556,40 @@ def test_dashboard_roles_and_stagnant(env):
     assert "100" in page.split("المشتريات الشهرية", 1)[1]
     page = c.get(f"/?site={env['site']}&date_from=2000-01-01&date_to=2099-12-31").text
     assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
-    assert "صنف راكد" in c.get(f"/stagnant?site={env['site']}&days=90").text
+    assert "الأصناف الراكدة" in c.get(f"/stagnant?site={env['site']}&days=90").text
+
+
+def test_stagnant_rules(env):
+    from datetime import date
+    db = SessionLocal()
+    site = db.get(Site, env["site"])
+    a = Item(code="ST_A", name="رصيد وجاله وارد", uom="قطعة")     # افتتاحي + فاتورة بعد كده، ما اتصرفش
+    b = Item(code="ST_B", name="صنف جديد", uom="قطعة")            # أول وارد في نص السنة
+    c = Item(code="ST_C", name="جديد وجاله وارد تاني", uom="قطعة")
+    db.add_all([a, b, c])
+    db.flush()
+    db.add(OpeningBalance(site_id=site.id, item_id=a.id, qty=3, value=300))
+    for d, it, q in [(date(2031, 3, 1), a, 2), (date(2031, 9, 1), b, 5), (date(2031, 2, 1), c, 1), (date(2031, 4, 1), c, 4)]:
+        rec = Receipt(site_id=site.id, date=d, invoice_no=f"ST-{it.code}-{d}")
+        rec.lines = [ReceiptLine(item_id=it.id, qty=q, unit_price=10)]
+        db.add(rec)
+    db.commit()
+    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=date(2031, 12, 1))}
+    assert rows["ST_A"]["since"] == date(2031, 1, 1) and rows["ST_A"]["idle_days"] == 334
+    assert rows["ST_A"]["added_qty"] == 2                       # جاله وارد بعد آخر صرف → أحمر
+    assert "ST_B" not in rows                                   # جديد: العد من أول وارد (91 يوم)
+    assert rows["ST_C"]["since"] == date(2031, 2, 1) and rows["ST_C"]["added_qty"] == 4
+    # بعد صرف من ST_A العداد بيبدأ من تاريخ الصرف والأحمر بيروح
+    from app.models import RequestLine
+    unit = db.query(Unit).filter_by(site_id=site.id).first()
+    req = Request(req_no="SP-ST-1", type="spare", site_id=site.id, unit_id=unit.id, work_date=date(2031, 5, 1),
+                  status="approved", current_stage=3)
+    req.lines = [RequestLine(item_id=a.id, qty=1, status="approved")]
+    db.add(req)
+    db.commit()
+    rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=date(2031, 12, 1))}
+    assert rows["ST_A"]["last"] == date(2031, 5, 1) and rows["ST_A"]["added_qty"] == 0
+    db.close()
 
 
 def test_greet_name():

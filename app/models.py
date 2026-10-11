@@ -169,6 +169,7 @@ class Request(Base):
     requester_name: Mapped[str | None] = mapped_column(String(150))  # للبيانات المستوردة
     work_date: Mapped[date] = mapped_column(Date)
     reason: Mapped[str | None] = mapped_column(Text)
+    asphalt_tons: Mapped[float | None] = mapped_column(Float)  # الإنتاج اليومي للخلاطة (مواد خام)
     status: Mapped[str] = mapped_column(String(15), default="pending")
     current_stage: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -189,6 +190,14 @@ class Request(Base):
     @property
     def total_value(self):
         return sum(l.value or 0 for l in self.lines if l.status == "approved")
+
+    @property
+    def diesel_liters(self):
+        return sum(l.qty or 0 for l in self.lines if l.diesel_purpose and l.status != "rejected")
+
+    @property
+    def liters_per_ton(self):
+        return self.diesel_liters / self.asphalt_tons if self.asphalt_tons else None
 
 
 class RequestLine(Base):

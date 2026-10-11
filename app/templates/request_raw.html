@@ -15,6 +15,9 @@
     <div class="f"><label>طالب الصرف</label><input value="{{ user.name }}" disabled></div>
   </div>
 
+  <div class="f" style="margin-top:12px;max-width:280px"><label>الكمية المنتجة من الأسفلت (طن) *</label>
+    <input type="number" step="any" min="0" name="asphalt_tons" id="tons" required></div>
+
   <h2 style="margin-top:16px">المواد حسب الجهة</h2>
   <div class="tw"><table class="t lines" id="lines">
     <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th><th></th></tr>
@@ -23,8 +26,9 @@
 
   <h2>الديزل (إجمالي اليوم) — لتر</h2>
   <div class="row" style="display:flex;gap:14px;flex-wrap:wrap">
-    {% for p in DIESEL_PURPOSES %}<div class="f"><label>ديزل {{ p }}</label><input type="number" step="any" min="0" name="diesel_{{ p }}"></div>{% endfor %}
+    {% for p in DIESEL_PURPOSES %}<div class="f"><label>ديزل {{ p }}</label><input type="number" step="any" min="0" name="diesel_{{ p }}" class="dsl"></div>{% endfor %}
   </div>
+  <div class="dpt" id="dpt" hidden>معدل استهلاك الديزل: <b id="dptv"></b> لتر لكل طن</div>
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="reason"></textarea></div>
   <button class="btn" style="margin-top:10px">إرسال للاعتماد</button>
 </form>
@@ -48,5 +52,17 @@ function addRow() {
   tb.appendChild(tr);
 }
 addRow();
+// معدل الديزل لكل طن: إجمالي لترات الديزل ÷ الأسفلت المنتج
+(function () {
+  const tons = document.getElementById('tons'), box = document.getElementById('dpt'), out = document.getElementById('dptv');
+  function calc() {
+    let l = 0; document.querySelectorAll('.dsl').forEach(i => l += parseFloat(i.value) || 0);
+    const t = parseFloat(tons.value) || 0;
+    box.hidden = !(l > 0 && t > 0);
+    if (!box.hidden) out.textContent = (l / t).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+  document.querySelectorAll('.dsl').forEach(i => i.addEventListener('input', calc));
+  tons.addEventListener('input', calc);
+})();
 </script>
 {% endblock %}

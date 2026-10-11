@@ -6,6 +6,10 @@
   <div><b>التاريخ</b>{{ r.work_date }}</div>
   <div><b>طالب الصرف</b>{{ r.requester_display }}</div>
   <div><b>الحالة</b><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}</span></div>
+  {% if r.type == 'raw' and r.asphalt_tons %}
+  <div><b>الأسفلت المنتج</b>{{ fmt(r.asphalt_tons) }} طن</div>
+  <div><b>الديزل لكل طن</b>{{ '%.2f'|format(r.liters_per_ton) }} لتر/طن</div>
+  {% endif %}
   <div><b>أُنشئ في</b>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
 </div>
 {% if r.reason %}<p><b class="muted">{{ 'السبب' if r.type=='spare' else 'ملاحظات' }}:</b> {{ r.reason }}</p>{% endif %}

@@ -306,3 +306,14 @@ html[data-mode=dark] .chart .val{fill:#F3F4F6}
 html[data-mode=dark] .chart .base{stroke:#3B4654}
 html[data-mode=dark] .ic-chip{color:#93C5FD;background:rgba(147,197,253,.12)}
 html[data-mode=dark] .chart .mlabel{fill:#D1D5DB}
+
+/* الرواكد: أصناف جالها وارد بعد آخر صرف */
+table.t tr.stg-red td{background:#fdecec;color:#9b1c1c}
+table.t tr.stg-red td a{color:#b42318;font-weight:700}
+.stg-red-key{background:#fdecec;color:#9b1c1c;padding:1px 8px;border-radius:6px;font-weight:600}
+html[data-mode=dark] table.t tr.stg-red td{background:rgba(220,60,60,.18);color:#ffb4b4}
+html[data-mode=dark] table.t tr.stg-red td a{color:#ff9b9b}
+html[data-mode=dark] .stg-red-key{background:rgba(220,60,60,.22);color:#ffb4b4}
+/* صرف الأسفلت: معدل الديزل لكل طن */
+.dpt{display:inline-block;margin-top:10px;padding:8px 14px;border-radius:10px;background:rgba(var(--brand-rgb),.08);border:1px solid rgba(var(--brand-rgb),.18);font-weight:600}
+.dpt b{font-size:1.15em;direction:ltr;unicode-bidi:isolate}

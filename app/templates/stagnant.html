@@ -5,20 +5,21 @@
   <div class="f"><label>الموقع</label>
     <select name="site" onchange="this.form.submit()"><option value="">كل المواقع</option>
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}</select></div>
-  <div class="f"><label>بدون حركة منذ</label>
+  <div class="f"><label>بدون صرف منذ</label>
     <select name="days" onchange="this.form.submit()">{% for d in day_opts %}<option value="{{ d }}" {{ 'selected' if d == days }}>{{ {90:'3 أشهر',180:'6 أشهر',365:'سنة'}[d] }}</option>{% endfor %}</select></div>
   <div class="f"><label>بحث</label><input data-live="#sgtbl" placeholder="كود أو صنف"></div>
 </form>
 <div class="card">
-  <p class="muted" style="margin-top:0">الصنف الراكد: صنف له رصيد ولم يُسجَّل عليه صرف أو وارد أو تحويل منذ {{ {90:'3 أشهر',180:'6 أشهر',365:'سنة'}[days] }} أو أكثر.</p>
+  <p class="muted" style="margin-top:0">الصنف الراكد: صنف له رصيد ولم يُصرف منه (صرف أو تحويل صادر) منذ {{ {90:'3 أشهر',180:'6 أشهر',365:'سنة'}[days] }} أو أكثر. تُحسب المدة من آخر صرف، وإذا لم يُصرف منه شيء فمن بداية السنة. <span class="stg-red-key">الصفوف الحمراء</span>: أصناف وردت عليها فواتير إضافة بعد آخر صرف.</p>
   <div class="muted">{{ rows|length }} صنف — القيمة: <b>{{ fmt(total) }}</b></div>
   <div class="tw"><table class="t" id="sgtbl">
-  <tr>{% if not sel %}<th>الموقع</th>{% endif %}<th>الكود</th><th>الصنف</th><th class="n">الرصيد</th><th>الوحدة</th><th class="n">متوسط السعر</th><th class="n">القيمة</th><th>آخر حركة</th><th class="n">عدد الأيام</th></tr>
-  {% for r in rows %}<tr>{% if not sel %}<td>{{ r.site.name }}</td>{% endif %}
+  <tr>{% if not sel %}<th>الموقع</th>{% endif %}<th>الكود</th><th>الصنف</th><th class="n">الرصيد</th><th>الوحدة</th><th class="n">متوسط السعر</th><th class="n">القيمة</th><th>آخر صرف</th><th class="n">عدد الأيام</th><th class="n">وارد بعد آخر صرف</th></tr>
+  {% for r in rows %}<tr{% if r.added_qty %} class="stg-red"{% endif %}>{% if not sel %}<td>{{ r.site.name }}</td>{% endif %}
     <td><a href="/stock/{{ r.item.id }}?site={{ r.site.id }}">{{ r.item.code }}</a></td><td>{{ r.item.name }}</td>
     <td class="n">{{ fmt(r.cur) }}</td><td>{{ r.item.uom }}</td><td class="n">{{ fmt(r.avg) }}</td><td class="n"><b>{{ fmt(r.value) }}</b></td>
-    <td>{{ r.last or 'رصيد افتتاحي — بدون حركة' }}</td><td class="n">{{ r.idle_days if r.idle_days is not none else '-' }}</td></tr>
-  {% else %}<tr><td colspan="9" class="muted">لا توجد أصناف راكدة</td></tr>{% endfor %}
+    <td>{{ r.last or ('لا يوجد صرف منذ ' ~ r.since) }}</td><td class="n">{{ r.idle_days }}</td>
+    <td class="n">{% if r.added_qty %}<b>{{ fmt(r.added_qty) }}</b> <span class="muted nw">(آخرها {{ r.added_last }})</span>{% else %}-{% endif %}</td></tr>
+  {% else %}<tr><td colspan="10" class="muted">لا توجد أصناف راكدة</td></tr>{% endfor %}
   </table></div>
 </div>
 {% endblock %}

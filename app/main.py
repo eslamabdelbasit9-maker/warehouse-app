@@ -85,7 +85,7 @@ DIESEL_CODE = "RM-DSL"
 
 # ---------------- تهيئة ----------------
 # أعمدة اتضافت لجداول موجودة — create_all ما بيضيفهاش، فبنضيفها هنا مرة واحدة
-NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)")]
+NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT")]
 
 
 def _add_missing_columns():
@@ -534,6 +534,9 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
         unit = db.get(Unit, int(form.get("unit_id") or 0))
         if not unit or unit.site_id != sel.id or unit.kind != "asphalt":
             raise S.BusinessError("اختر خلاطة الاسفلت")
+        tons = parse_float(form.get("asphalt_tons"))
+        if not tons or tons <= 0:
+            raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن)")
         lines = []
         for et, en, iid, qty in zip(form.getlist("entity_type"), form.getlist("entity_name"),
                                     form.getlist("item_id"), form.getlist("qty")):
@@ -554,7 +557,7 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                 lines.append(dict(item=diesel, qty=q, diesel_purpose=purpose))
         req = S.create_request(db, rtype="raw", site=sel, unit=unit, requester=user,
                                work_date=parse_date(form.get("work_date"), date.today()),
-                               reason=form.get("reason"), lines=lines)
+                               reason=form.get("reason"), lines=lines, asphalt_tons=tons)
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
@@ -1388,14 +1391,15 @@ def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str 
         r = l.request
         base = [r.req_no, r.work_date, r.site.name, r.unit.name if r.unit else "", l.item.code, l.item.name, l.qty, l.item.uom]
         if r.type == "raw":
-            base += [l.entity_type or "", l.entity_name or "", l.diesel_purpose or ""]
+            base += [l.entity_type or "", l.entity_name or "", l.diesel_purpose or "", r.asphalt_tons or "",
+                     round(r.liters_per_ton, 2) if r.liters_per_ton else ""]
         else:
             base += [l.unit_cost, l.value]
         base += [r.requester_display, r.reason or "", REQ_STATUS[r.status], LINE_STATUS[l.status],
                  STAGES.get(l.rejected_stage, "") if l.rejected_stage else ""]
         rows.append(base)
     h = ["رقم الطلب", "التاريخ", "الموقع", "الوحدة", "كود الصنف", "اسم الصنف", "الكمية", "الوحدة"]
-    h += ["نوع الجهة", "اسم الجهة", "غرض الديزل"] if type == "raw" else ["سعر الوحدة", "القيمة"]
+    h += ["نوع الجهة", "اسم الجهة", "غرض الديزل", "الأسفلت المنتج (طن)", "ديزل لكل طن (لتر)"] if type == "raw" else ["سعر الوحدة", "القيمة"]
     h += ["طالب الصرف", "السبب", "حالة الطلب", "حالة الصنف", "رُفض في مرحلة"]
     return _send_xlsx(_xlsx(h, rows, "الصرف"), f"صرف_{REQ_TYPES.get(type, '')}.xlsx")
 

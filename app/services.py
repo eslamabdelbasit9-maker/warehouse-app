@@ -246,39 +246,63 @@ STAGNANT_DAYS = (90, 180, 365)
 
 
 def stagnant_items(db: Session, site_ids, days=180, today=None):
-    """أصناف قطع غيار ليها رصيد ومتحركتش (لا صرف ولا وارد ولا تحويل) من `days` يوم أو أكتر.
-    يرجع list of dict(site, item, cur, avg, value, last, idle_days) مرتبة بالقيمة."""
-    from datetime import date as _date, timedelta
+    """أصناف قطع غيار ليها رصيد وما اتصرفش منها (لا صرف ولا تحويل صادر) من `days` يوم أو أكتر.
+    العد من آخر صرف؛ ولو مفيش صرف خالص: من بداية السنة (أو من أول وارد لو الصنف جديد السنة دي).
+    الوارد ما بيصفّرش العداد — ولو جت فواتير وارد بعد آخر صرف الصنف بيتعلّم (added_qty > 0).
+    يرجع list of dict(site, item, cur, avg, value, last, since, idle_days, added_qty, added_last) مرتبة بالقيمة."""
+    from datetime import date as _date
     today = today or _date.today()
-    limit = today - timedelta(days=days)
+    year_start = _date(today.year, 1, 1)
     out = []
     for site in db.query(Site).filter(Site.id.in_(list(site_ids))).order_by(Site.name):
         st = stock_table(db, site.id)
         live = [iid for iid, r in st.items() if r["cur"] > 1e-9]
         if not live:
             continue
-        last = defaultdict(lambda: None)
+        last_out = {}
 
         def bump(rows):
             for iid, d in rows:
-                if d and (last[iid] is None or d > last[iid]):
-                    last[iid] = d
+                if d and (iid not in last_out or d > last_out[iid]):
+                    last_out[iid] = d
         bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
              .filter(Request.site_id == site.id, Request.status.in_(["approved", "partial"]),
                      RequestLine.status == "approved", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
-        bump(db.query(ReceiptLine.item_id, func.max(Receipt.date)).join(Receipt)
-             .filter(Receipt.site_id == site.id, ReceiptLine.item_id.in_(live)).group_by(ReceiptLine.item_id))
         bump(db.query(TransferLine.item_id, func.max(Transfer.date)).join(Transfer)
              .filter(Transfer.status.in_(["in_transit", "received"]), TransferLine.item_id.in_(live),
-                     (Transfer.from_site_id == site.id) | (Transfer.to_site_id == site.id)).group_by(TransferLine.item_id))
+                     Transfer.from_site_id == site.id).group_by(TransferLine.item_id))
+        receipts = defaultdict(list)   # فواتير الوارد
+        for iid, d, q in (db.query(ReceiptLine.item_id, Receipt.date, ReceiptLine.qty).join(Receipt)
+                          .filter(Receipt.site_id == site.id, ReceiptLine.item_id.in_(live))):
+            receipts[iid].append((d, q or 0))
+        first_in = {}                  # أول إضافة (وارد أو تحويل وارد) — للأصناف الجديدة
+        for iid, lst in receipts.items():
+            first_in[iid] = min(d for d, _ in lst)
+        for iid, d in (db.query(TransferLine.item_id, func.min(Transfer.date)).join(Transfer)
+                       .filter(Transfer.status == "received", Transfer.to_site_id == site.id,
+                               TransferLine.item_id.in_(live)).group_by(TransferLine.item_id)):
+            if d and (iid not in first_in or d < first_in[iid]):
+                first_in[iid] = d
+        opening = {iid for (iid,) in db.query(OpeningBalance.item_id)
+                   .filter(OpeningBalance.site_id == site.id, OpeningBalance.qty > 0, OpeningBalance.item_id.in_(live))}
         items = {i.id: i for i in db.query(Item).filter(Item.id.in_(live), Item.category == "spare")}
         for iid in live:
             it = items.get(iid)
-            if not it or (last[iid] is not None and last[iid] > limit):
+            if not it:
+                continue
+            if iid in last_out:
+                since, added = last_out[iid], [(d, q) for d, q in receipts[iid] if d > last_out[iid]]
+            elif iid in opening or iid not in first_in or first_in[iid] <= year_start:
+                since, added = year_start, [(d, q) for d, q in receipts[iid] if d >= year_start]
+            else:
+                since, added = first_in[iid], [(d, q) for d, q in receipts[iid] if d > first_in[iid]]
+            idle = (today - since).days
+            if idle < days:
                 continue
             r = st[iid]
-            out.append(dict(site=site, item=it, cur=r["cur"], avg=r["avg"], value=r["value"], last=last[iid],
-                            idle_days=(today - last[iid]).days if last[iid] else None))
+            out.append(dict(site=site, item=it, cur=r["cur"], avg=r["avg"], value=r["value"],
+                            last=last_out.get(iid), since=since, idle_days=idle,
+                            added_qty=sum(q for _, q in added), added_last=max((d for d, _ in added), default=None)))
     out.sort(key=lambda x: -x["value"])
     return out
 
@@ -323,7 +347,7 @@ def can_approve(db: Session, user: User, req: Request):
     return any(u.id == user.id for u in approvers_for(db, req, req.current_stage))
 
 
-def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines):
+def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None):
     """lines: list of dict(item, qty, entity_type, entity_name, diesel_purpose)"""
     if not lines:
         raise BusinessError("أضف صنفاً واحداً على الأقل")
@@ -349,7 +373,7 @@ def create_request(db: Session, *, rtype, site, unit, requester, work_date, reas
 
     req = Request(req_no=next_req_no(db, rtype, site, work_date.year), type=rtype, site_id=site.id,
                   unit_id=unit.id if unit else None, requester_id=requester.id, work_date=work_date,
-                  reason=(reason or "").strip() or None, status="pending", current_stage=1)
+                  reason=(reason or "").strip() or None, asphalt_tons=asphalt_tons, status="pending", current_stage=1)
     req.site, req.unit, req.requester = site, unit, requester
     for l in lines:
         req.lines.append(RequestLine(item_id=l["item"].id, item=l["item"], qty=l["qty"],
