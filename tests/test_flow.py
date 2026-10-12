@@ -890,7 +890,7 @@ def test_suppliers_statement(env):
     db.commit()
     db.close()
     page = c.get("/suppliers").text
-    assert "الشامل الجديد" in page and "صبيا" in page and "خميس مشيط" in page and "تحويل من نجران" not in page
+    assert "الشامل الجديد" in page and "أسماء مختلفة مدمجة" in page and "تحويل من نجران" not in page
     st = c.get("/suppliers/statement", params={"k": "الشامل الجديد"}).text
     assert "SH-1" in st and "SH-2" in st and "SH-3" not in st and 'href="https://x/inv1"' in st and "230" in st
 

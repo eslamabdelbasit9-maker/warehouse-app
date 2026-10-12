@@ -91,7 +91,7 @@ def run(path, site_code, site_name, replace=False):
         has_data = db.query(Request).filter_by(site_id=site.id).first() or db.query(OpeningBalance).filter_by(site_id=site.id).first()
         if has_data and not replace:
             db.close()
-            raise ValueError(f"الموقع {site_code} فيه بيانات بالفعل — تم الإيقاف لتجنب التكرار (علّم «استبدال» لو عايز تحط نسخة جديدة)")
+            raise ValueError(f"الموقع {site_code} فيه بيانات بالفعل — تم الإيقاف لتجنب التكرار (حدّد «استبدال» لاستيراد نسخة جديدة)")
         if replace:
             kept, *cleared = clear_imported(db, site)
     else:
@@ -198,8 +198,8 @@ def run(path, site_code, site_name, replace=False):
     db.commit()
     msg = f"تم: موقع {site.name} — أصناف جديدة {n_items}، فواتير وارد {len(groups)}، طلبات صرف {n_req}، وحدات {len(units)}"
     if cleared:
-        msg = (f"اتمسحت النسخة القديمة ({cleared[0]} فاتورة وارد، {cleared[1]} طلب صرف، {cleared[2]} رصيد افتتاحي) — "
-               f"واترجع ربط {len(kept)} فاتورة مرفوعة جوه البرنامج. " + msg)
+        msg = (f"حُذفت النسخة السابقة ({cleared[0]} فاتورة وارد، {cleared[1]} طلب صرف، {cleared[2]} رصيد افتتاحي) — "
+               f"وأُعيد ربط {len(kept)} فاتورة مرفوعة داخل البرنامج. " + msg)
     db.close()
     return msg
 

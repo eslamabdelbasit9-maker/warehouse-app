@@ -56,7 +56,7 @@ def test_import_replace():
         assert "استبدال" in str(e)
 
     msg = run(book(extra_issue=True, receipts=2), "TST", "تست", replace=True)
-    assert "اتمسحت النسخة القديمة" in msg
+    assert "حُذفت النسخة السابقة" in msg
     db = SessionLocal()
     site = db.query(Site).filter_by(code="TST").one()
     assert db.query(OpeningBalance).filter_by(site_id=site.id).count() == 1

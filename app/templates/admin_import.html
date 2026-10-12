@@ -11,14 +11,14 @@
   </div>
   <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px">
     <input type="checkbox" name="replace" value="1" id="rep">
-    <span><b>استبدال بيانات الموقع الموجودة</b><br><span class="muted">يمسح النسخة اللي اتستوردت قبل كده للموقع ده (الأرصدة الافتتاحية، الوارد، وطلبات الصرف المستوردة) ويحط الملف الجديد مكانها. اللي اتعمل من جوه البرنامج ما بيتمسحش، والفواتير المرفوعة جوه البرنامج بترجع تتربط برقم الفاتورة.</span></span>
+    <span><b>استبدال بيانات الموقع الموجودة</b><br><span class="muted">يحذف البيانات المستوردة سابقًا لهذا الموقع (الأرصدة الافتتاحية، والوارد، وطلبات الصرف المستوردة) ويستبدلها بالملف الجديد. لا تُحذف البيانات المُدخلة من داخل البرنامج، وتُعاد الفواتير المرفوعة داخل البرنامج إلى فواتيرها حسب رقم الفاتورة.</span></span>
   </label>
-  <button class="btn" style="margin-top:12px" onclick="if(document.getElementById('rep').checked&&!confirm('هيتمسح استيراد الموقع القديم ويتحط الملف الجديد. متأكد؟'))return false;this.textContent='جاري الاستيراد...'">استيراد</button>
+  <button class="btn" style="margin-top:12px" onclick="if(document.getElementById('rep').checked&&!confirm('سيتم حذف البيانات المستوردة سابقًا لهذا الموقع واستبدالها بالملف الجديد. هل تريد المتابعة؟'))return false;this.textContent='جارٍ الاستيراد...'">استيراد</button>
 </form>
 <h2 style="margin-top:20px">استيراد العهد (الأصول / أدوات السلامة)</h2>
 <form method="post" action="/admin/import/custody" enctype="multipart/form-data" class="card">
-  <p class="muted">ارفع شيت الأصول أو شيت أدوات السلامة (أو الاتنين مع بعض). الفرع بيتربط بالموقع بالاسم، وروابط الصور والمرفقات بتتحفظ زي ما هي. البنود المتسجلة قبل كده بتتخطى — مفيش حاجة بتتمسح.</p>
+  <p class="muted">ارفع ملف الأصول أو ملف أدوات السلامة أو كليهما. يُربط كل فرع بالموقع المطابق لاسمه، وتُحفظ روابط الصور والمرفقات كما هي، ويُتجاوز ما سبق تسجيله دون حذف أي بيانات.</p>
   <div class="f"><label>ملفات Excel</label><input type="file" name="files" accept=".xlsx" multiple required></div>
-  <button class="btn" style="margin-top:12px" onclick="this.textContent='جاري الاستيراد...'">استيراد العهد</button>
+  <button class="btn" style="margin-top:12px" onclick="this.textContent='جارٍ الاستيراد...'">استيراد العهد</button>
 </form>
 {% endblock %}

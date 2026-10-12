@@ -17,8 +17,7 @@
 {% else %}<tr><td colspan="6" class="muted">لا توجد تحويلات</td></tr>{% endfor %}
 </table></div></div>
 {% if history %}
-<h2 style="margin-top:18px">تحويلات مسجلة من الشيتات (قبل البرنامج)</h2>
-<p class="muted">دي اتسجلت في الشيت كوارد «تحويل من…» أو صرف على وحدة «تحويل لفرع»، وهي محسوبة في الرصيد بالفعل — للعرض بس.</p>
+<h2 style="margin-top:18px">التحويلات السابقة (المستوردة من ملفات Excel)</h2>
 <div class="card"><div class="tw"><table class="t">
 <tr><th>التاريخ</th><th>الاتجاه</th><th>البيان</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">القيمة</th></tr>
 {% for kind, d, label, ref, lines in history %}<tr>

@@ -97,7 +97,7 @@ def run(fileobj, user_id=None):
                 notes = [x for x in (v("الوظيفة"), v("القسم")) if x]
                 if not d:
                     no_date += 1
-                    notes.append("تاريخ الاستلام مش مسجل في الشيت")
+                    notes.append("تاريخ الاستلام غير مسجل في الملف")
                 code = v("كود الأصل")
                 db.add(CustodyRecord(
                     site_id=site.id, employee_no=emp_no, employee_name=v("اسم الموظف") or emp_no, category=cat,
@@ -111,11 +111,11 @@ def run(fileobj, user_id=None):
         db.commit()
     finally:
         db.close()
-    msg = f"تم: اتسجل {added} بند عهدة"
+    msg = f"تم تسجيل {added} بند عهدة"
     if skipped:
-        msg += f"، واتخطّى {skipped} متسجل قبل كده"
+        msg += f"، وتجاوز {skipped} بند مسجل سابقًا"
     if no_date:
-        msg += f" — {no_date} بند من غير تاريخ استلام اتسجل بتاريخ النهارده"
+        msg += f" — سُجّل {no_date} بند بلا تاريخ استلام بتاريخ اليوم"
     if missing_sites:
-        msg += f" — فروع مش لاقي لها موقع: {'، '.join(sorted(missing_sites))}"
+        msg += f" — فروع لا يوجد لها موقع مطابق: {'، '.join(sorted(missing_sites))}"
     return msg

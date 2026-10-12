@@ -112,6 +112,10 @@ def _add_missing_columns():
 def init_db():
     Base.metadata.create_all(engine)
     _add_missing_columns()
+    with engine.begin() as con:  # توحيد صياغة ملاحظة العهد المستوردة قبل كده
+        con.execute(text("UPDATE custody_records SET notes = REPLACE(notes, :o, :n) WHERE notes LIKE :l"),
+                    {"o": "تاريخ الاستلام مش مسجل في الشيت", "n": "تاريخ الاستلام غير مسجل في الملف",
+                     "l": "%تاريخ الاستلام مش مسجل في الشيت%"})
     db = SessionLocal()
     try:
         if not db.query(User).first():
@@ -867,7 +871,7 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
     if uid and str(uid).isdigit() and int(uid) != req.unit_id:
         unit = db.get(Unit, int(uid))
         if not unit or unit.site_id != req.site_id:
-            flash(request, "الوحدة لازم تكون من نفس الموقع", "err")
+            flash(request, "يجب أن تكون الوحدة من الموقع نفسه", "err")
             return back(f"/requests/{rid}")
         changes.append(f"الوحدة: {req.unit.name if req.unit else '—'} ← {unit.name}")
         req.unit_id = unit.id
@@ -885,10 +889,10 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
         changes.append("السبب")
         req.reason = reason
     if not changes:
-        flash(request, "مفيش تعديل")
+        flash(request, "لم يتم إجراء أي تعديل")
         return back(f"/requests/{rid}")
     db.commit()
-    flash(request, "تم التعديل — " + "، ".join(changes))
+    flash(request, "تم التعديل: " + "، ".join(changes))
     return back(f"/requests/{rid}")
 
 
@@ -1712,7 +1716,7 @@ async def admin_import_custody(request: Request, user: User = Depends(require("a
         try:
             msgs.append(f"{f.filename}: " + run_custody(io.BytesIO(f.file.read()), user.id))
         except Exception as e:  # noqa: BLE001
-            msgs.append(f"{f.filename}: فشل — {e}")
+            msgs.append(f"{f.filename}: تعذّر الاستيراد — {e}")
     flash(request, " | ".join(msgs))
     return back("/admin/import")
 
