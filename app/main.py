@@ -68,7 +68,7 @@ def _asset_version():
     """رقم نسخة لملفات التصميم والحركة — بيتغير مع أي تعديل، فالمتصفح ياخد النسخة الجديدة بعد كل Deploy."""
     import hashlib
     h = hashlib.md5()
-    for f in ("static/style.css", "static/anim.js", "static/charts.js"):
+    for f in ("static/style.css", "static/anim.js", "static/charts.js", "static/picker.js"):
         h.update((APP_DIR / f).read_bytes())
     return h.hexdigest()[:10]
 
@@ -384,15 +384,25 @@ def month_after(ym):
     return date(y + (m == 12), m % 12 + 1, 1)
 
 
-def monthly_charts(rows, months, sel, pivot_sites, sites, link=None):
-    """rows: (site_id, date, value) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
-    فرع واحد (أو فرع واحد فيه بيانات): رسم واحد. لون كل فرع ثابت حسب ترتيبه."""
+SUB_COLORS = {"asphalt": 3, "crusher": 4, "concrete": 5, "transport": 6, "other": 7}   # ألوان أنواع الوحدات (غير ألوان الفروع)
+
+
+def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None):
+    """rows: (site_id, date, value[, sub]) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
+    subs (اختياري، dict مفتاح → اسم، زي أنواع الوحدات): في المقارنة كل عمود فرع بيتقسم بالـ subs، ولفرع واحد
+    المقارنة بتبقى عمود لكل sub. لون كل فرع ثابت حسب ترتيبه."""
     monthly = {k: {} for k in months}
-    for sid, d, v in rows:
+    sub_m = {k: {} for k in months}
+    for row in rows:
+        sid, d, v = row[0], row[1], row[2]
         if d and (d.year, d.month) in monthly:
             cell = monthly[(d.year, d.month)]
             cell[sid] = cell.get(sid, 0) + (v or 0)
-    data = [dict(y=y, m=m, by=monthly[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
+            if subs:
+                sk = row[3] if row[3] in subs else "other"
+                sc_ = sub_m[(d.year, d.month)].setdefault(sid, {})
+                sc_[sk] = sc_.get(sk, 0) + (v or 0)
+    data = [dict(y=y, m=m, by=monthly[(y, m)], sub=sub_m[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
     names = {s.id: s.name for s in pivot_sites}
     for p in data:
         p["by_named"] = [(sid, (names[sid], p["by"][sid])) for sid in sorted(p["by"]) if sid in names and p["by"][sid]]
@@ -400,23 +410,42 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None):
             p["url"] = link(sel.id if sel else (pivot_sites[0].id if len(pivot_sites) == 1 else None), p["y"], p["m"])
     chart_sites = sorted((s for s in pivot_sites if any(p["by"].get(s.id) for p in data)),
                          key=lambda s: s.id) if not sel else []
+    site_color = {s.id: i % 8 for i, s in enumerate(sorted(sites, key=lambda s: s.id))}
+    sub_keys = [k for k in (subs or {}) if any(sid_v.get(k) for p in data for sid_v in p["sub"].values())]
+    sub_legend = [dict(name=subs[k], c=SUB_COLORS.get(k, 7),
+                       total=sum(v.get(k, 0) for p in data for v in p["sub"].values())) for k in sub_keys]
+    chart2, legend = None, []
     if len(chart_sites) > 1:
         keys = [s.id for s in chart_sites]
-        chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=30)
-        chart2 = S.grouped_chart([p["by"] for p in data], keys, h=250, pad_t=62)
-        site_color = {s.id: i % 8 for i, s in enumerate(sorted(sites, key=lambda s: s.id))}
-        for ch in (chart, chart2):
-            for b, p in zip(ch["bars"], data):
-                for sg in b["segs"]:
-                    sid = chart_sites[sg["k"]].id
-                    sg["c"] = site_color[sid]
-                    if link:
-                        sg["url"] = link(sid, p["y"], p["m"])
+        chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=34, h=260)
+        if sub_keys:
+            chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=300, pad_t=56, bar_max=26)
+        else:
+            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=300, pad_t=56, bar_max=26)
+        for b in chart["bars"]:
+            for sg in b["segs"]:
+                sg["c"] = site_color[chart_sites[sg["k"]].id]
+        for b, p in zip(chart2["bars"], data):
+            for col in b["segs"]:
+                sid = chart_sites[col["k"]].id
+                col["c"], col["label"] = site_color[sid], names.get(sid, "")
+                col["url"] = link(sid, p["y"], p["m"]) if link else None
+                for part in col["parts"]:
+                    part["c"] = SUB_COLORS.get(sub_keys[part["s"]], 7)
         legend = [dict(name=s.name, c=site_color[s.id], total=sum(p["by"].get(s.id, 0) for p in data)) for s in chart_sites]
     else:
-        chart, chart2, site_color, legend = S.column_chart([p["total"] for p in data], bar_max=30), None, {}, []
+        chart = S.column_chart([p["total"] for p in data], bar_max=34, h=260)
+        if len(sub_keys) > 1:   # فرع واحد: عمود لكل نوع وحدة
+            per = [{k: sum(v.get(k, 0) for v in p["sub"].values()) for k in sub_keys} for p in data]
+            chart2 = S.grouped_chart(per, sub_keys, h=300, pad_t=56, bar_max=26)
+            for b, p in zip(chart2["bars"], data):
+                for col in b["segs"]:
+                    k = sub_keys[col["k"]]
+                    col["c"], col["label"] = SUB_COLORS.get(k, 7), subs[k]
+                    col["url"] = p.get("url")
     return dict(data=data, chart=chart, chart2=chart2, site_c=site_color, legend=legend, sites=pivot_sites,
-                total=sum(p["total"] for p in data))
+                total=sum(p["total"] for p in data), sub_legend=sub_legend if chart2 and sub_keys else [],
+                cmp_label="مقارنة الفروع" if len(chart_sites) > 1 else "حسب نوع الوحدة")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -488,10 +517,11 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
     # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
     issues = monthly_charts(
-        db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value)).select_from(RequestLine).join(Req)
+        db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
+        .outerjoin(Unit, Unit.id == Req.unit_id)
         .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]),
                 RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
-        .group_by(Req.id, Req.site_id, Req.work_date), months, sel, pivot_sites, sites,
+        .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind), months, sel, pivot_sites, sites, subs=UNIT_KINDS,
         link=lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
@@ -960,15 +990,42 @@ async def approval_link_post(token: str, request: Request, db: Session = Depends
 
 # ---------------- الأرصدة ----------------
 @app.get("/stock", response_class=HTMLResponse)
-def stock(request: Request, site: str | None = None, q: str = "", only: str = "", db: Session = Depends(get_db),
-          user: User = Depends(current_user)):
+def stock(request: Request, site: str | None = None, q: str = "", only: str = "", date_from: str = "", date_to: str = "",
+          unit: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from datetime import timedelta
     sites, sel = pick_site(db, user, site)
-    st = S.stock_table(db, sel.id)
+    d_from, d_to = parse_date(date_from), parse_date(date_to)
+    if d_from and d_to and d_to < d_from:
+        d_from, d_to = d_to, d_from
+    st = S.stock_table(db, sel.id, upto=d_to)
+    if d_from:   # حركة الفترة = (لحد آخر الفترة) − (لحد قبل أولها)، والافتتاحي = رصيد أول الفترة
+        before = S.stock_table(db, sel.id, upto=d_from - timedelta(days=1))
+        for iid, r in st.items():
+            b0 = before.get(iid)
+            if not b0:
+                continue
+            r["open_qty"] = b0["cur"]
+            for k in ("in_qty", "out_qty", "tr_in_qty", "tr_out_qty"):
+                r[k] -= b0[k]
+    units = [u for u in sel.units if u.active]
+    sel_unit = next((u for u in units if str(u.id) == unit), None)
+    unit_out = {}
+    if sel_unit:   # الأصناف المصروفة للوحدة دي (المعتمد) في الفترة
+        qy = (db.query(RequestLine.item_id, func.sum(RequestLine.qty), func.sum(RequestLine.value)).join(Req)
+              .filter(Req.unit_id == sel_unit.id, Req.type == "spare", Req.status.in_(["approved", "partial"]),
+                      RequestLine.status == "approved"))
+        if d_from:
+            qy = qy.filter(Req.work_date >= d_from)
+        if d_to:
+            qy = qy.filter(Req.work_date <= d_to)
+        unit_out = {iid: (qty or 0, val or 0) for iid, qty, val in qy.group_by(RequestLine.item_id)}
     items = {i.id: i for i in db.query(Item).filter(Item.category == "spare").all()}
     rows = []
     for iid, r in st.items():
         it = items.get(iid)
         if not it or it.category != "spare":
+            continue
+        if sel_unit and iid not in unit_out:
             continue
         if q and q.strip().lower() not in it.name.lower() and q.strip().lower() not in it.code.lower():
             continue
@@ -976,20 +1033,37 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
             continue
         if only == "has" and r["cur"] <= 0:
             continue
+        r["unit_out"] = unit_out.get(iid)
         rows.append((it, r))
     rows.sort(key=lambda x: x[0].code)
     total_value = sum(r["value"] for _, r in rows)
-    return render(request, "stock.html", user, sites=sites, sel=sel, rows=rows, q=q, only=only, total_value=total_value)
+    return render(request, "stock.html", user, sites=sites, sel=sel, rows=rows, q=q, only=only, total_value=total_value,
+                  d_from=d_from, d_to=d_to, units=units, sel_unit=sel_unit,
+                  unit_total=sum(v for _, v in unit_out.values()))
 
 
 @app.get("/raw-stock", response_class=HTMLResponse)
-def raw_stock(request: Request, site: str | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+def raw_stock(request: Request, site: str | None = None, date_from: str = "", date_to: str = "",
+              db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from datetime import timedelta
     sites, sel = pick_site(db, user, site)
-    st = S.raw_stock_table(db, sel.id)
+    d_from, d_to = parse_date(date_from), parse_date(date_to)
+    if d_from and d_to and d_to < d_from:
+        d_from, d_to = d_to, d_from
+    st = S.raw_stock_table(db, sel.id, upto=d_to)
+    if d_from:   # حركة الفترة، والافتتاحي = رصيد أول الفترة
+        before = S.raw_stock_table(db, sel.id, upto=d_from - timedelta(days=1))
+        for iid, r in st.items():
+            b0 = before.get(iid)
+            if b0:
+                r["open_qty"] = b0["cur"]
+                for k in ("prod_qty", "in_qty", "out_qty", "out_asphalt", "out_concrete", "out_sale"):
+                    r[k] -= b0[k]
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
-    empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0)
+    empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0,
+                 out_asphalt=0, out_concrete=0, out_sale=0)
     rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
-    return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows)
+    return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows, d_from=d_from, d_to=d_to)
 
 
 @app.get("/stock/{item_id}", response_class=HTMLResponse)

@@ -1,4 +1,13 @@
 // الرسوم الشهرية: تبديل «الإجمالي / مقارنة الفروع / الرواكد» + تلميح فوق العمود (الماوس أو الصباع)
+// كروت الرسوم بتفتح وتقفل بالضغط، والبرنامج بيفتكر آخر حالة
+document.querySelectorAll('details.mcard').forEach(function (d) {
+  var k = 'mcopen:' + d.id;
+  try { var s = localStorage.getItem(k); if (s === '1') d.open = true; else if (s === '0') d.open = false; } catch (e) {}
+  d.addEventListener('toggle', function () {
+    try { localStorage.setItem(k, d.open ? '1' : '0'); } catch (e) {}
+    if (d.open) d.querySelectorAll('.view:not([hidden]) .scroll').forEach(function (sc) { if (sc.scrollWidth > sc.clientWidth) sc.scrollLeft = -sc.scrollWidth; });
+  });
+});
 document.querySelectorAll('.mchart').forEach(function (box) {
   var tip = box.querySelector('.tip'), key = 'mc:' + box.id;
   function toEnd() { box.querySelectorAll('.view:not([hidden]) .scroll').forEach(function (sc) { if (sc.scrollWidth > sc.clientWidth) sc.scrollLeft = -sc.scrollWidth; }); }

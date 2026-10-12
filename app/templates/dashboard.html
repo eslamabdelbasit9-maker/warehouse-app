@@ -31,8 +31,8 @@
 {% endif %}
 
 {% set scope = ' — ' ~ sel.name if sel else ' — كل المواقع' %}
-{% with mc=purchases, mc_extra=none, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
-{% with mc=issues, mc_extra=none, mc_id='ichart', mc_icon='wrench', mc_title='صرف قطع الغيار الشهري', mc_sub='قيمة الصرف المعتمد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
+{% with mc=purchases, mc_extra=none, mc_open=false, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
+{% with mc=issues, mc_extra=none, mc_open=false, mc_id='ichart', mc_icon='wrench', mc_title='صرف قطع الغيار الشهري', mc_sub='قيمة الصرف المعتمد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
 
 <div class="grid dash-g">
   <div class="card">{% call card_h('wrench', 'صرف قطع الغيار حسب الوحدة', per ~ ' — المعتمد فقط') %}{% endcall %}<div class="tw"><table class="t">

@@ -9,7 +9,7 @@
     <select name="days" onchange="this.form.submit()">{% for d in day_opts %}<option value="{{ d }}" {{ 'selected' if d == days }}>{{ {90:'3 أشهر',180:'6 أشهر',365:'سنة'}[d] }}</option>{% endfor %}</select></div>
   <div class="f"><label>بحث</label><input data-live="#sgtbl" placeholder="كود أو صنف"></div>
 </form>
-{% with mc=unissued, mc_extra=none, mc_id='uchart', mc_icon='cart', mc_title='رواكد المشتريات الشهرية', mc_sub='قيمة ما لم يُصرف من وارد كل شهر (آخر 12 شهر)' ~ (' — ' ~ sel.name if sel else ' — كل المواقع') %}{% include "_mchart.html" %}{% endwith %}
+{% with mc=unissued, mc_extra=none, mc_open=true, mc_id='uchart', mc_icon='cart', mc_title='رواكد المشتريات الشهرية', mc_sub='قيمة ما لم يُصرف من وارد كل شهر (آخر 12 شهر)' ~ (' — ' ~ sel.name if sel else ' — كل المواقع') %}{% include "_mchart.html" %}{% endwith %}
 <div class="card">
   <p class="muted" style="margin-top:0">الصنف الراكد: صنف له رصيد ولم يُصرف منه (صرف أو تحويل صادر) منذ {{ {90:'3 أشهر',180:'6 أشهر',365:'سنة'}[days] }} أو أكثر. تُحسب المدة من آخر صرف، وإذا لم يُصرف منه شيء فمن بداية السنة. <span class="stg-red-key">الصفوف الحمراء</span>: أصناف وردت عليها فواتير إضافة بعد آخر صرف.</p>
   <div class="muted">{{ rows|length }} صنف — القيمة: <b>{{ fmt(total) }}</b></div>

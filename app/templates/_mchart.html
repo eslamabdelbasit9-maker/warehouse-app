@@ -8,7 +8,9 @@
     {% for b in ch.bars %}{% set p = data[loop.index0] %}
     <g class="bar" data-tip="{{ MONTHS_AR[p.m - 1] }} {{ p.y }}|{{ fmt(p.total) }}{% if multi %}{% for k, v in p.by_named %}|{{ sc.get(k, '') }}~{{ v[0] }}: {{ fmt(v[1]) }}{% endfor %}{% endif %}"{% if p.url and not ch.grouped and not multi %} data-url="{{ p.url }}"{% endif %}>
       <rect class="hit" x="{{ b.hit_x }}" y="{{ ch.pad_t }}" width="{{ b.band }}" height="{{ ch.plot_h }}"/>
-      {% if ch.grouped %}{% for sg in b.segs %}{% if sg.path %}<a href="{{ sg.url }}" class="go"><title>افتح الصفحة</title><path class="s{{ sg.c }}" d="{{ sg.path }}"/>
+      {% if ch.grouped %}{% for sg in b.segs %}{% if sg.path %}<a{% if sg.url %} href="{{ sg.url }}"{% endif %} class="go"><title>{{ sg.label }}: {{ fmt(sg.v) }}</title>
+        {% if sg.parts %}{% for pt in sg.parts %}<path class="s{{ pt.c }}" d="{{ pt.path }}"/>{% endfor %}{% else %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endif %}
+        {% if sg.label and sg.h > (sg.label|length) * 6.2 + 12 and sg.bw >= 14 %}<text class="inlab" transform="translate({{ sg.cx + 4 }},{{ ch.base - 6 }}) rotate(-90)" text-anchor="end">{{ sg.label }}</text>{% endif %}
         <text class="val sm num" transform="translate({{ sg.cx + 3.5 }},{{ sg.y - 5 }}) rotate(-90)" text-anchor="start">{{ fmt(sg.v, 0) }}</text></a>{% endif %}{% endfor %}
       {% else %}
       {% if b.segs is defined %}{% for sg in b.segs %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endfor %}
@@ -38,21 +40,23 @@
   </table></div></details>
 {% endmacro %}
 {% set multi = mc.legend|length > 1 %}
-<div class="card">
-  {% call card_h(mc_icon, mc_title, mc_sub) %}{% endcall %}
+<details class="card mcard" id="{{ mc_id }}-card"{% if mc_open %} open{% endif %}>
+  <summary class="mc-sum">{% call card_h(mc_icon, mc_title, mc_sub) %}{% endcall %}
+    <span class="mc-tot"><b class="num">{{ fmt(mc.total, 0) }}</b><small>إجمالي 12 شهر</small></span><span class="mc-chev" aria-hidden="true"></span></summary>
   <div class="chart mchart" id="{{ mc_id }}">
     {% if mc.chart2 or mc_extra %}<div class="seg-tg" role="tablist">
       <button type="button" class="on" data-m="stk">الإجمالي</button>
-      {% if mc.chart2 %}<button type="button" data-m="grp">مقارنة الفروع</button>{% endif %}
+      {% if mc.chart2 %}<button type="button" data-m="grp">{{ mc.cmp_label or 'مقارنة الفروع' }}</button>{% endif %}
       {% if mc_extra %}<button type="button" data-m="rk">الرواكد</button>{% endif %}
     </div>{% endif %}
     <div class="view" data-mode="stk">{{ legend(mc) }}{{ draw(mc.chart, mc.data, mc.site_c, multi, mc_title) }}{{ table(mc) }}</div>
-    {% if mc.chart2 %}<div class="view" data-mode="grp" hidden>{{ legend(mc) }}
-      <p class="muted hint">اضغط على أي عمود لفتح تفاصيله.</p>
+    {% if mc.chart2 %}<div class="view" data-mode="grp" hidden>
+      {% if mc.sub_legend %}<div class="legend">{% for l in mc.sub_legend %}<span class="lg"><i class="sw s{{ l.c }}"></i>{{ l.name }} <b class="num">{{ fmt(l.total, 0) }}</b></span>{% endfor %}</div>{% elif multi %}{{ legend(mc) }}{% endif %}
+      <p class="muted hint">{{ 'اسم الفرع مكتوب على كل عمود، والألوان أنواع الوحدات. ' if mc.sub_legend and multi }}اضغط على أي عمود لفتح تفاصيله.</p>
       {{ draw(mc.chart2, mc.data, mc.site_c, multi, mc_title) }}{{ table(mc) }}</div>{% endif %}
     {% if mc_extra %}<div class="view" data-mode="rk" hidden>
       <p class="muted hint">قيمة ما لم يُصرف من وارد كل شهر — <a href="/stagnant{{ '?site=' ~ sel.id if sel }}">صفحة الأصناف الراكدة ←</a></p>
       {{ legend(mc_extra) }}{{ draw(mc_extra.chart, mc_extra.data, mc_extra.site_c, mc_extra.legend|length > 1, 'رواكد المشتريات') }}{{ table(mc_extra) }}</div>{% endif %}
     <div class="tip" hidden></div>
   </div>
-</div>
+</details>

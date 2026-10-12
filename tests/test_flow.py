@@ -753,7 +753,8 @@ def test_raw_materials_production_concrete_sale(env):
     db = SessionLocal()
     req = db.get(Request, rid)
     assert req.status == "approved" and req.lines[0].unit_cost == 12.95 and req.lines[0].value == 518
-    assert S.raw_stock_table(db, env["site"])[gid]["cur"] == base - 40
+    rs = S.raw_stock_table(db, env["site"])
+    assert rs[gid]["cur"] == base - 40 and rs[gid]["out_concrete"] == 40
     db.close()
     # بيع: اسم العميل والسعر والقيمة — مدير الإنتاج ثم النهائي
     login(c, env, "requester@example.com")
@@ -774,3 +775,17 @@ def test_raw_materials_production_concrete_sale(env):
     db = SessionLocal()
     assert db.get(Request, rid).status == "approved"
     db.close()
+    login(c, env, "eng.crusher@example.com")
+    page = c.get(f"/raw-stock?site={env['site']}&date_from=2000-01-01").text
+    assert "الخرسانة" in page and "رصيد أول الفترة" in page
+
+
+def test_stock_period_and_unit_filter(env):
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    page = c.get(f"/stock?site={env['site']}&date_to=2000-01-01").text
+    assert "الرصيد في 2000-01-01" in page
+    page = c.get(f"/stock?site={env['site']}&unit={env['crusher']}&date_from=2000-01-01").text
+    assert "الأصناف المصروفة لـ" in page and "منصرف للوحدة" in page
+    assert 'src="/static/picker.js' in c.get(f"/requests/new/spare?site={env['site']}").text
+

@@ -452,3 +452,28 @@ aside.side nav.main>.sg:first-child{margin-top:0;padding-top:6px}
 @keyframes logo-pop{0%{transform:none}35%{transform:scale(1.1) rotate(-4deg);box-shadow:0 0 0 2px var(--accent),0 8px 22px rgba(0,0,0,.35)}
   65%{transform:scale(1.04) rotate(2deg)}100%{transform:none}}
 @media (prefers-reduced-motion:reduce){.side-brand:hover .logo{animation:none}}
+/* قائمة اختيار الصنف */
+.pick-box{position:absolute;z-index:60;max-height:300px;overflow-y:auto;background:var(--card,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(16,24,40,.18);padding:4px}
+.pick-o{padding:10px 12px;border-radius:7px;cursor:pointer;font-size:14px;line-height:1.4}
+.pick-o:hover,.pick-o.on{background:rgba(var(--brand-rgb),.10)}
+html[data-mode=dark] .pick-box{background:#1E252E;border-color:#323C48}
+html[data-mode=dark] .pick-o:hover,html[data-mode=dark] .pick-o.on{background:#2A333F}
+/* كروت الرسوم: زرار كبير يفتح الرسم */
+details.mcard{padding:0;overflow:hidden}
+details.mcard>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:14px;padding:18px 20px;transition:background .2s}
+details.mcard>summary::-webkit-details-marker{display:none}
+details.mcard>summary:hover{background:rgba(var(--brand-rgb),.05)}
+details.mcard>summary .card-h{margin:0;flex:1}
+details.mcard .mc-tot{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2}
+details.mcard .mc-tot b{font-size:22px}details.mcard .mc-tot small{color:var(--muted);font-size:12px}
+details.mcard .mc-chev{width:34px;height:34px;border-radius:50%;background:rgba(var(--brand-rgb),.08);flex:none;position:relative;transition:transform .3s}
+details.mcard .mc-chev::before{content:"";position:absolute;inset:0;margin:auto;width:9px;height:9px;border-left:2px solid var(--brand);border-bottom:2px solid var(--brand);transform:translateY(-2px) rotate(-45deg)}
+details.mcard[open] .mc-chev{transform:rotate(180deg)}
+details.mcard[open]>summary{border-bottom:1px solid var(--line)}
+details.mcard>.chart{padding:16px 20px 18px}
+html[data-mode=dark] details.mcard .mc-chev::before{border-color:#fff}
+.chart svg{max-width:1200px}
+.chart .inlab{fill:#fff;font-size:11px;font-weight:700;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.25);stroke-width:2px}
+@media (max-width:700px){details.mcard>summary{padding:14px;flex-wrap:wrap}details.mcard .mc-tot b{font-size:18px}}
+table.t th.grp-in{background:rgba(15,123,63,.10)}table.t th.grp-out{background:rgba(180,35,24,.08)}
+html[data-mode=dark] table.t th.grp-in{background:rgba(15,123,63,.22)}html[data-mode=dark] table.t th.grp-out{background:rgba(180,35,24,.22)}

@@ -111,7 +111,7 @@ def reset_user_theme(db: Session, user_id):
 
 
 # ---------------- الأرصدة ----------------
-def stock_table(db: Session, site_id: int, item_ids=None):
+def stock_table(db: Session, site_id: int, item_ids=None, upto=None):
     """يرجع dict[item_id] = {open_qty, open_val, in_qty, in_val, out_qty, pending_qty, cur, avg, value}
     متوسط التكلفة المرجح = (قيمة الافتتاحي + قيمة الوارد) / (كمية الافتتاحي + كمية الوارد)."""
     t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, in_qty=0.0, in_val=0.0,
@@ -128,6 +128,8 @@ def stock_table(db: Session, site_id: int, item_ids=None):
 
     q = (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
          .join(Receipt).filter(Receipt.site_id == site_id))
+    if upto:   # الرصيد لحد تاريخ معيّن
+        q = q.filter(Receipt.date <= upto)
     if item_ids is not None:
         q = q.filter(ReceiptLine.item_id.in_(item_ids))
     for iid, qty, val in q.group_by(ReceiptLine.item_id):
@@ -137,6 +139,8 @@ def stock_table(db: Session, site_id: int, item_ids=None):
     q = (db.query(RequestLine.item_id, RequestLine.status, Request.status,
                   func.sum(RequestLine.qty), func.sum(RequestLine.value))
          .join(Request).filter(Request.site_id == site_id, Request.type == "spare"))
+    if upto:
+        q = q.filter(Request.work_date <= upto)
     if item_ids is not None:
         q = q.filter(RequestLine.item_id.in_(item_ids))
     for iid, lstatus, rstatus, qty, val in q.group_by(RequestLine.item_id, RequestLine.status, Request.status):
@@ -152,6 +156,8 @@ def stock_table(db: Session, site_id: int, item_ids=None):
                   Transfer.status, Transfer.from_site_id)
          .join(Transfer).filter(Transfer.status.in_(["in_transit", "received"]),
                                 (Transfer.from_site_id == site_id) | (Transfer.to_site_id == site_id)))
+    if upto:
+        q = q.filter(Transfer.date <= upto)
     if item_ids is not None:
         q = q.filter(TransferLine.item_id.in_(item_ids))
     for iid, qty, recv, cost, status, from_id in q:
@@ -193,29 +199,34 @@ def set_crusher_price(db: Session, site_id: int, price: float):
         db.add(AppSetting(key=key, value=str(price)))
 
 
-def raw_stock_table(db: Session, site_id: int):
+def raw_stock_table(db: Session, site_id: int, upto=None):
     """أرصدة المواد الخام (كميات): افتتاحي + إنتاج الكسارة + وارد (فواتير) − صرف معتمد، والمعلق في الاعتماد لوحده.
     سعر الوحدة: نواتج الكسارة بالسعر الثابت للموقع، والباقي (زي البيتومين والديزل) بمتوسط سعر الافتتاحي والفواتير."""
     from .models import CrusherProduction, CrusherProductionLine
     t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, prod_qty=0.0, in_qty=0.0, in_val=0.0,
-                                 out_qty=0.0, pending_qty=0.0))
+                                 out_qty=0.0, pending_qty=0.0, out_asphalt=0.0, out_concrete=0.0, out_sale=0.0))
     raw_ids = select(Item.id).where(Item.category == "raw")
     for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(raw_ids)):
         t[ob.item_id]["open_qty"] += ob.qty or 0
         t[ob.item_id]["open_val"] += ob.value or 0
     for iid, q in (db.query(CrusherProductionLine.item_id, func.sum(CrusherProductionLine.qty)).join(CrusherProduction)
-                   .filter(CrusherProduction.site_id == site_id).group_by(CrusherProductionLine.item_id)):
+                   .filter(CrusherProduction.site_id == site_id, *([CrusherProduction.date <= upto] if upto else []))
+                   .group_by(CrusherProductionLine.item_id)):
         t[iid]["prod_qty"] += q or 0
     for iid, q, v in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
-                      .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids))
+                      .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids),
+                                            *([Receipt.date <= upto] if upto else []))
                       .group_by(ReceiptLine.item_id)):
         t[iid]["in_qty"] += q or 0
         t[iid]["in_val"] += v or 0
-    for iid, ls, rs, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, func.sum(RequestLine.qty))
-                           .join(Request).filter(Request.site_id == site_id, Request.type == "raw")
-                           .group_by(RequestLine.item_id, RequestLine.status, Request.status)):
+    for iid, ls, rs, dest, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest,
+                                          func.sum(RequestLine.qty))
+                                 .join(Request).filter(Request.site_id == site_id, Request.type == "raw",
+                                                       *([Request.work_date <= upto] if upto else []))
+                                 .group_by(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest)):
         if ls == "approved" and rs in ("approved", "partial"):
             t[iid]["out_qty"] += q or 0
+            t[iid]["out_" + (dest if dest in ("asphalt", "concrete", "sale") else "asphalt")] += q or 0
         elif ls == "pending" and rs == "pending":
             t[iid]["pending_qty"] += q or 0
     price = crusher_price(db, site_id)
@@ -328,25 +339,39 @@ def stacked_chart(stacks, keys, gap=2, **kw):
     return c
 
 
-def grouped_chart(stacks, keys, gap=2, **kw):
-    """أعمدة جنب بعض: لكل شهر عمود لكل مفتاح (فرع) بفاصل 2px — للمقارنة بين الفروع."""
-    flat = [s.get(k, 0) or 0 for s in stacks for k in keys]
-    c = column_chart([max([s.get(k, 0) or 0 for k in keys] or [0]) for s in stacks], **kw)
+def grouped_chart(stacks, keys, gap=2, subs=None, bar_max=22, **kw):
+    """أعمدة جنب بعض: لكل شهر عمود لكل مفتاح (فرع) بفاصل 2px — للمقارنة بين الفروع.
+    stacks: list of dict(key → value)، أو لو subs متحدد: dict(key → dict(sub → value)) والعمود بيتقسم بالـ subs
+    (زي نوع الوحدة جوه كل فرع). كل عمود فيه k (ترتيب الفرع) والأجزاء فيها s (ترتيب الـ sub)."""
+    def total(s, k):
+        v = s.get(k, 0) or 0
+        return sum(x or 0 for x in v.values()) if isinstance(v, dict) else v
+    c = column_chart([max([total(s, k) for k in keys] or [0]) for s in stacks], **kw)
     n = max(1, len(keys))
     scale = c["plot_h"] / c["top"] if c["top"] else 0
     for b, s in zip(c["bars"], stacks):
-        bw = min(14, (b["band"] * 0.78 - gap * (n - 1)) / n)
+        bw = min(bar_max, (b["band"] * 0.84 - gap * (n - 1)) / n)
         x0 = b["hit_x"] + (b["band"] - (bw * n + gap * (n - 1))) / 2
-        segs = []
+        cols = []
         for i, k in enumerate(keys):   # أول فرع على اليمين (عربي)
-            v = s.get(k, 0) or 0
+            v = total(s, k)
             x = x0 + (n - 1 - i) * (bw + gap)
             h = v * scale
-            segs.append(dict(k=i, v=v, cx=x + bw / 2, y=c["base"] - h,
+            parts = []
+            if subs and isinstance(s.get(k), dict):
+                y = c["base"]
+                vals = [(j, s[k].get(sk, 0) or 0) for j, sk in enumerate(subs) if (s[k].get(sk, 0) or 0) > 0]
+                for jj, (j, sv) in enumerate(vals):
+                    sh = sv * scale
+                    hh = sh - (0 if jj == 0 else gap)
+                    if hh > 0.3:
+                        r = min(4, hh, bw / 2) if jj == len(vals) - 1 else 0
+                        parts.append(dict(s=j, v=sv, path=_bar_path(x, y - sh, bw, hh, r)))
+                    y -= sh
+            cols.append(dict(k=i, v=v, x=x, bw=bw, cx=x + bw / 2, y=c["base"] - h, h=h, parts=parts,
                              path=_bar_path(x, c["base"] - h, bw, h, min(4, h, bw / 2)) if h > 0.3 else ""))
-        b["segs"] = segs
+        b["segs"] = cols
     c["grouped"] = True
-    c["flat_max"] = max(flat or [0])
     return c
 
 
