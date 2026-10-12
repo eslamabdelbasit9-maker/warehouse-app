@@ -1203,7 +1203,17 @@ def transfers(request: Request, site: str | None = None, db: Session = Depends(g
     sites, sel = pick_site(db, user, site)
     rows = (db.query(Transfer).filter(or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))
             .order_by((Transfer.status == "in_transit").desc(), Transfer.date.desc(), Transfer.id.desc()).limit(500).all())
-    return render(request, "transfers.html", user, sites=sites, sel=sel, rows=rows)
+    # التحويلات اللي جت من شيتات Excel قبل البرنامج: وارد مورده «تحويل...» + صرف على وحدة «تحويل...»
+    old_in = (db.query(Receipt).filter(Receipt.site_id == sel.id, Receipt.created_by_id.is_(None),
+                                       Receipt.supplier.like("تحويل%")).order_by(Receipt.date.desc()).all())
+    old_out = (db.query(Req).join(Unit, Unit.id == Req.unit_id)
+               .filter(Req.site_id == sel.id, Req.imported.is_(True), Req.status.in_(("approved", "partial")),
+                       Unit.name.like("تحويل%")).order_by(Req.work_date.desc()).all())
+    history = sorted([("in", r.date, r.supplier, r.invoice_no, [(l.item, l.qty, l.total) for l in r.lines]) for r in old_in] +
+                     [("out", q.work_date, q.reason or q.unit.name, q.req_no,
+                       [(l.item, l.qty, l.value or 0) for l in q.lines if l.status == "approved"]) for q in old_out],
+                     key=lambda x: x[1], reverse=True)
+    return render(request, "transfers.html", user, sites=sites, sel=sel, rows=rows, history=history)
 
 
 # إنشاء التحويل: صلاحية «تحويل بين الفروع» + الربط بالموقع المرسِل فقط (مش لازم الربط بالموقع المستلِم).
@@ -1592,6 +1602,24 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
         flash(request, f"فشل الاستيراد: {e}", "err")
         return back("/admin/import")
     flash(request, msg)
+    return back("/admin/import")
+
+
+@app.post("/admin/import/custody")
+async def admin_import_custody(request: Request, user: User = Depends(require("admin"))):
+    from scripts.import_custody import run as run_custody
+    form = await request.form()
+    files = [f for f in form.getlist("files") if getattr(f, "filename", "")]
+    if not files:
+        flash(request, "اختر ملف العهد", "err")
+        return back("/admin/import")
+    msgs = []
+    for f in files:
+        try:
+            msgs.append(f"{f.filename}: " + run_custody(io.BytesIO(f.file.read()), user.id))
+        except Exception as e:  # noqa: BLE001
+            msgs.append(f"{f.filename}: فشل — {e}")
+    flash(request, " | ".join(msgs))
     return back("/admin/import")
 
 

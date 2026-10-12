@@ -15,4 +15,10 @@
   </label>
   <button class="btn" style="margin-top:12px" onclick="if(document.getElementById('rep').checked&&!confirm('هيتمسح استيراد الموقع القديم ويتحط الملف الجديد. متأكد؟'))return false;this.textContent='جاري الاستيراد...'">استيراد</button>
 </form>
+<h2 style="margin-top:20px">استيراد العهد (الأصول / أدوات السلامة)</h2>
+<form method="post" action="/admin/import/custody" enctype="multipart/form-data" class="card">
+  <p class="muted">ارفع شيت الأصول أو شيت أدوات السلامة (أو الاتنين مع بعض). الفرع بيتربط بالموقع بالاسم، وروابط الصور والمرفقات بتتحفظ زي ما هي. البنود المتسجلة قبل كده بتتخطى — مفيش حاجة بتتمسح.</p>
+  <div class="f"><label>ملفات Excel</label><input type="file" name="files" accept=".xlsx" multiple required></div>
+  <button class="btn" style="margin-top:12px" onclick="this.textContent='جاري الاستيراد...'">استيراد العهد</button>
+</form>
 {% endblock %}
