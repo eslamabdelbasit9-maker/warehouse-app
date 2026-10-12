@@ -149,7 +149,7 @@ class Receipt(Base):
 
     @property
     def is_transfer(self):
-        return (self.supplier or "").startswith("تحويل")
+        return (self.supplier or "").startswith("تحويل") or "تحويل" in (self.invoice_no or "")
 
     @property
     def net(self):

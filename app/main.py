@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import bindparam, func, inspect, or_, select, text
+from sqlalchemy import and_, bindparam, func, inspect, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -494,7 +494,8 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
 
     # التحويلات القديمة من شيتات Excel (صرف على وحدة «تحويل...» ووارد من مورد «تحويل...») مش صرف ولا مشتريات
     not_tr_req = or_(Req.unit_id.is_(None), ~Req.unit_id.in_(select(Unit.id).where(Unit.name.like("تحويل%"))))
-    not_tr_rec = or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%"))
+    not_tr_rec = and_(or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%")),
+                      or_(Receipt.invoice_no.is_(None), ~Receipt.invoice_no.like("%تحويل%")))
     # صرف قطع الغيار: حسب الوحدة (موقع واحد) أو جدول نوع الوحدة × الفروع (كل المواقع)
     rows = (db.query(Req.site_id, Unit.kind, Unit.name, func.sum(RequestLine.value), func.count(func.distinct(Req.id)))
             .select_from(RequestLine).join(Req).outerjoin(Unit, Unit.id == Req.unit_id)
@@ -1225,11 +1226,12 @@ def transfers(request: Request, site: str | None = None, db: Session = Depends(g
             .order_by((Transfer.status == "in_transit").desc(), Transfer.date.desc(), Transfer.id.desc()).limit(500).all())
     # التحويلات اللي جت من شيتات Excel قبل البرنامج: وارد مورده «تحويل...» + صرف على وحدة «تحويل...»
     old_in = (db.query(Receipt).filter(Receipt.site_id == sel.id, Receipt.created_by_id.is_(None),
-                                       Receipt.supplier.like("تحويل%")).order_by(Receipt.date.desc()).all())
+                                       or_(Receipt.supplier.like("تحويل%"), Receipt.invoice_no.like("%تحويل%")))
+              .order_by(Receipt.date.desc()).all())
     old_out = (db.query(Req).join(Unit, Unit.id == Req.unit_id)
                .filter(Req.site_id == sel.id, Req.imported.is_(True), Req.status.in_(("approved", "partial")),
                        Unit.name.like("تحويل%")).order_by(Req.work_date.desc()).all())
-    history = sorted([("in", r.date, r.supplier, r.invoice_no, [(l.item, l.qty, l.total) for l in r.lines]) for r in old_in] +
+    history = sorted([("in", r.date, r.supplier or r.invoice_no, r.invoice_no if r.supplier else "", [(l.item, l.qty, l.total) for l in r.lines]) for r in old_in] +
                      [("out", q.work_date, q.reason or q.unit.name, q.req_no,
                        [(l.item, l.qty, l.value or 0) for l in q.lines if l.status == "approved"]) for q in old_out],
                      key=lambda x: x[1], reverse=True)
@@ -1325,7 +1327,8 @@ def _supplier_receipts(db, user, site, d_from, d_to):
     ids = [x.id for x in sites]
     sel = next((x for x in sites if str(x.id) == str(site)), None)
     q = (db.query(Receipt).filter(Receipt.site_id.in_([sel.id] if sel else ids),
-                                  or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%"))))
+                                  or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%")),
+                                  or_(Receipt.invoice_no.is_(None), ~Receipt.invoice_no.like("%تحويل%"))))
     if d_from:
         q = q.filter(Receipt.date >= d_from)
     if d_to:

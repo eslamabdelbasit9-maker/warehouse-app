@@ -893,3 +893,19 @@ def test_suppliers_statement(env):
     assert "الشامل الجديد" in page and "صبيا" in page and "خميس مشيط" in page and "تحويل من نجران" not in page
     st = c.get("/suppliers/statement", params={"k": "الشامل الجديد"}).text
     assert "SH-1" in st and "SH-2" in st and "SH-3" not in st and 'href="https://x/inv1"' in st and "230" in st
+
+
+def test_transfer_by_invoice_no_not_a_supplier(env):
+    """وارد رقم فاتورته «استلام تحويل من الدار» ومورده فاضي = تحويل: مالوش ضريبة ومش في الموردين."""
+    from datetime import date
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    db = SessionLocal()
+    r = Receipt(site_id=env["site"], date=date(2026, 4, 30), invoice_no="استلام تحويل من الدار", supplier=None)
+    r.lines.append(ReceiptLine(item_id=env["a"], qty=1, unit_price=50))
+    db.add(r)
+    db.commit()
+    assert r.is_transfer and r.vat == 0
+    db.close()
+    assert "استلام تحويل من الدار" not in c.get("/suppliers/statement", params={"k": ""}).text
+    assert "استلام تحويل من الدار" in c.get("/transfers").text
