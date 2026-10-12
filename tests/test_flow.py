@@ -559,7 +559,7 @@ def test_dashboard_roles_and_stagnant(env):
     page = c.get(f"/stagnant?site={env['site']}&days=90").text
     assert "الأصناف الراكدة" in page and "رواكد المشتريات الشهرية" in page
     page = c.get("/").text
-    assert "صرف قطع الغيار الشهري" in page and 'data-m="rk"' in page
+    assert "صرف قطع الغيار الشهري" in page and 'data-m="rk"' not in page and 'href="/requests/new/spare"' not in page
     # فلتر الشهر في الوارد والطلبات (روابط الرسوم)
     from datetime import date as _d
     ym = f"{_d.today():%Y-%m}"

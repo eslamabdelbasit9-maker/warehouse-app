@@ -20,8 +20,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 </script>
 </head>
 <body{% if user %} class="has-side"{% endif %}>
-{% if user %}<script>try{if(localStorage.getItem('side')==='mini')document.body.classList.add('side-mini')}catch(e){}
-function sideToggle(){var m=document.body.classList.toggle('side-mini');try{localStorage.setItem('side',m?'mini':'')}catch(e){}}</script>{% endif %}
+
 {% if user %}
 {% from "_icons.html" import icon %}
 {% set alerts = (pending_n or 0) + (transfer_n or 0) %}
@@ -33,14 +32,16 @@ function sideToggle(){var m=document.body.classList.toggle('side-mini');try{loca
 <aside class="side">
   <div class="side-head">
     <a href="/" class="side-brand" title="{{ APP_NAME }}">{% include "_logo.html" %}<span class="title">{{ APP_NAME }}</span></a>
-    <button type="button" class="side-tg" aria-label="إظهار / إخفاء القائمة" title="إظهار / إخفاء القائمة" onclick="sideToggle()">{{ icon('chev', 18) }}</button>
   </div>
   <nav class="main">
     {% macro nl(href, label, ic, on, badge=0) %}<a href="{{ href }}" class="{{ 'on' if on }}" title="{{ label }}">{{ icon(ic, 19) }}<span>{{ label }}</span>{% if badge %}<span class="badge-n">{{ badge }}</span>{% endif %}</a>{% endmacro %}
     <div class="sg">الرئيسية</div>
     {{ nl('/', 'لوحة المتابعة', 'home', path == '/') }}
     {{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}
-    {{ nl('/requests', 'الطلبات', 'file', path.startswith('/requests')) }}
+    {{ nl('/requests', 'الطلبات', 'file', path == '/requests' or (path.startswith('/requests/') and not path.startswith('/requests/new'))) }}
+    {% if user.has('requester', 'storekeeper') %}<div class="sg">الصرف</div>
+    {{ nl('/requests/new/spare', 'طلب صرف قطع غيار', 'wrench', path.startswith('/requests/new/spare')) }}
+    {{ nl('/requests/new/raw', 'صرف مواد خام', 'layers', path.startswith('/requests/new/raw')) }}{% endif %}
     <div class="sg">المستودع</div>
     {{ nl('/stock', 'الأرصدة', 'box', path.startswith('/stock')) }}
     {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}

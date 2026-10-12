@@ -10,11 +10,6 @@
   <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from }}"></div>
   <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
   <button class="btn">عرض</button>
-  <span class="right"></span>
-  {% if user.has('requester','storekeeper') %}
-  <a class="btn green" href="/requests/new/spare">+ طلب صرف قطع غيار</a>
-  <a class="btn green" href="/requests/new/raw">+ صرف مواد خام</a>
-  {% endif %}
 </form>
 {% set q = '?site=' ~ (sel.id if sel else '') %}
 {% set per %}من <bdi class="nw">{{ d_from }}</bdi> إلى <bdi class="nw">{{ d_to }}</bdi>{% endset %}
@@ -36,7 +31,7 @@
 {% endif %}
 
 {% set scope = ' — ' ~ sel.name if sel else ' — كل المواقع' %}
-{% with mc=purchases, mc_extra=stale, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
+{% with mc=purchases, mc_extra=none, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
 {% with mc=issues, mc_extra=none, mc_id='ichart', mc_icon='wrench', mc_title='صرف قطع الغيار الشهري', mc_sub='قيمة الصرف المعتمد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
 
 <div class="grid dash-g">

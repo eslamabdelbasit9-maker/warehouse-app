@@ -404,3 +404,22 @@ html[data-mode=dark] .seg-tg button.on{background:#2A333F;color:#fff}
 .chart a.go{cursor:pointer}.chart a.go:hover path{filter:brightness(1.12)}
 .chart .bar[data-url]{cursor:pointer}
 .view[data-mode=grp] .bar .hit{pointer-events:none}
+/* القائمة ثابتة مفتوحة: شعار أكبر بحركة، وتلوين واضح للعناصر مع الماوس */
+.side-head{padding-left:0}
+.side-brand{padding:18px 16px 16px;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.side-brand .logo{height:58px;transition:transform .5s cubic-bezier(.34,1.56,.64,1),box-shadow .4s}
+.side-brand:hover .logo{transform:scale(1.08) rotate(-3deg);box-shadow:0 0 0 2px var(--accent),0 8px 22px rgba(0,0,0,.35)}
+.side-brand .logo::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);transform:translateX(-120%);pointer-events:none}
+.side-brand:hover .logo::after{transform:translateX(120%);transition:transform .8s ease}
+.side-brand .logo{position:relative;overflow:hidden}
+.side-brand .title{font-size:15.5px}
+aside.side nav.main a,.side-foot a{transition:background .2s,color .2s,padding .2s}
+aside.side nav.main a:hover,.side-foot a:hover{background:rgba(245,179,1,.16);color:var(--accent);padding-right:16px}
+aside.side nav.main a:hover .ic,.side-foot a:hover .ic{color:var(--accent);opacity:1}
+aside.side nav.main a.on:hover{color:#fff;padding-right:12px}
+/* شريط الترحيب: بعرض الصفحة وأعلى */
+body.has-side main>.hero{max-width:none;min-height:220px;padding:30px 36px}
+body.has-side main>.hero .hero-art{width:62%;background-size:auto 120%}
+body.has-side main>.hero .hero-hi{font-size:30px}
+body.has-side main>.hero .hero-sub{font-size:15px}
+@media (max-width:700px){body.has-side main>.hero{min-height:140px;padding:18px}body.has-side main>.hero .hero-hi{font-size:21px}body.has-side main>.hero .hero-art{width:100%}}

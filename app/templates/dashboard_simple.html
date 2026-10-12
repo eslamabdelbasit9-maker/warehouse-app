@@ -1,12 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
 {% with hero_sub = 'متابعة طلباتك' %}{% include "_hero.html" %}{% endwith %}
-{% if user.has('requester','storekeeper') %}
-<div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
-  <a class="btn green" href="/requests/new/spare">+ طلب صرف قطع غيار</a>
-  <a class="btn green" href="/requests/new/raw">+ صرف مواد خام</a>
-</div>
-{% endif %}
 {% if incoming %}
 <div class="card"><h2>تحويلات واردة بانتظار تأكيد الاستلام</h2><div class="tw"><table class="t">
 <tr><th>رقم التحويل</th><th>التاريخ</th><th>من</th><th>إلى</th><th></th></tr>

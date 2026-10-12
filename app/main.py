@@ -472,9 +472,6 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                 RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
         .group_by(Req.id, Req.site_id, Req.work_date), months, sel, pivot_sites, sites,
         link=lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
-    # رواكد المشتريات (نفس كارت المشتريات): اللي لسه ما اتصرفش من وارد كل شهر
-    stale = monthly_charts(((sid, d, v) for sid, d, v, _ in S.unissued_purchases(db, ids, first)), months, sel,
-                           pivot_sites, sites, link=lambda sid, y, m: "/stagnant" + (f"?site={sid}" if sid else ""))
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
@@ -484,7 +481,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                   my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
                   period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
                   top_items=top_items,
-                  period_purchases=period_purchases, purchases=purchases, issues=issues, stale=stale,
+                  period_purchases=period_purchases, purchases=purchases, issues=issues,
                   recent=recent)
 
 
