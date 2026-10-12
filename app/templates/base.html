@@ -49,6 +49,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     <div class="sg">المستودع</div>
     {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}
     {{ nl('/receipts', 'الوارد', 'cart', path.startswith('/receipts')) }}
+    {% if user.has('storekeeper', 'engineer', 'manager', 'final', 'admin') %}{{ nl('/suppliers', 'الموردين', 'list', path.startswith('/suppliers')) }}{% endif %}
     {% if user.has('storekeeper', 'transfer') %}{{ nl('/transfers', 'التحويلات', 'truck', path.startswith('/transfers'), transfer_n) }}{% endif %}
     {{ nl('/custody', 'الأصول', 'star', path.startswith('/custody')) }}
     {% if user.has('admin') %}<div class="sg">النظام</div>{{ nl('/admin/users', 'الإدارة', 'users', path.startswith('/admin')) }}

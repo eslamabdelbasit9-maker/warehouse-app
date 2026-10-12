@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>كشف حساب — {{ sup_name }}</h1>
+<form class="filters card noprint" method="get"><input type="hidden" name="k" value="{{ k }}">
+  <div class="f"><label>الموقع</label><select name="site" onchange="this.form.submit()">
+    <option value="">كل المواقع</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>من</label><input type="date" name="from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى</label><input type="date" name="to" value="{{ d_to or '' }}"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <a class="btn sec" href="/suppliers{% if sel %}?site={{ sel.id }}{% endif %}">← الموردين</a>
+  <button type="button" class="btn sec" onclick="print()">طباعة</button></form>
+{% if variants|length > 1 %}<p class="muted">الأسماء المتجمعة: {{ variants|join(' / ') }}</p>{% endif %}
+<div class="card"><div class="tw"><table class="t">
+<tr><th>#</th><th>التاريخ</th><th>رقم الفاتورة</th><th>الموقع</th><th>فرع المورد</th><th class="n">بدون ضريبة</th><th class="n">الضريبة 15%</th><th class="n">شامل الضريبة</th><th class="n">الرصيد التراكمي</th><th>الفاتورة</th></tr>
+{% set ns = namespace(run=0) %}
+{% for r, region in rows %}{% set ns.run = ns.run + r.gross %}<tr>
+<td>{{ loop.index }}</td><td>{{ r.date }}</td><td><a href="/receipts/{{ r.id }}">{{ r.invoice_no or '—' }}</a></td><td>{{ r.site.name }}</td><td>{{ region }}</td>
+<td class="n">{{ fmt(r.net) }}</td><td class="n">{{ fmt(r.vat) }}</td><td class="n"><b>{{ fmt(r.gross) }}</b></td><td class="n">{{ fmt(ns.run) }}</td>
+<td>{% if r.attachment %}<a href="{{ att_url(r.attachment) }}" target="_blank" rel="noopener">📄 عرض</a>{% else %}<span class="muted">مفيش مرفق</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="10" class="muted">لا يوجد</td></tr>{% endfor %}
+{% if rows %}<tr><td colspan="5"><b>الإجمالي ({{ rows|length }} فاتورة)</b></td><td class="n"><b>{{ fmt(total.net) }}</b></td><td class="n"><b>{{ fmt(total.vat) }}</b></td><td class="n"><b>{{ fmt(total.gross) }}</b></td><td colspan="2"></td></tr>{% endif %}
+</table></div></div>
+{% endblock %}

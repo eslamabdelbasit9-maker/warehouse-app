@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1317,6 +1317,73 @@ def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), u
         return back(f"/transfers/{tid}")
     flash(request, f"تم إلغاء التحويل {tr.tr_no} وأُعيدت الكميات إلى رصيد {tr.from_site.name}")
     return back(f"/transfers/{tid}")
+
+
+# ---------------- الموردين ----------------
+def _supplier_receipts(db, user, site, d_from, d_to):
+    sites = user_sites(db, user)
+    ids = [x.id for x in sites]
+    sel = next((x for x in sites if str(x.id) == str(site)), None)
+    q = (db.query(Receipt).filter(Receipt.site_id.in_([sel.id] if sel else ids),
+                                  or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%"))))
+    if d_from:
+        q = q.filter(Receipt.date >= d_from)
+    if d_to:
+        q = q.filter(Receipt.date <= d_to)
+    return sites, sel, q.order_by(Receipt.date, Receipt.id).all()
+
+
+def _sup_key(name):
+    key, region, clean_name = S.supplier_parts(name)
+    return ("" if key in ("المورد", "-", "—") else key), region, clean_name
+
+
+@app.get("/suppliers", response_class=HTMLResponse)
+def suppliers(request: Request, site: str | None = None, d_from: str | None = Query(None, alias="from"),
+              d_to: str | None = Query(None, alias="to"), db: Session = Depends(get_db),
+              user: User = Depends(require("storekeeper", "engineer", "manager", "final", "admin"))):
+    f, t = parse_date(d_from), parse_date(d_to)
+    sites, sel, recs = _supplier_receipts(db, user, site, f, t)
+    groups = {}
+    for r in recs:
+        key, region, nm = _sup_key(r.supplier)
+        g = groups.setdefault(key, {"key": key, "names": {}, "regions": set(), "sites": set(), "n": 0,
+                                    "net": 0.0, "vat": 0.0, "gross": 0.0, "last": None, "no_att": 0})
+        g["names"][nm] = g["names"].get(nm, 0) + 1
+        if region:
+            g["regions"].add(region)
+        g["sites"].add(r.site.name)
+        g["n"] += 1
+        g["net"] += r.net
+        g["vat"] += r.vat
+        g["gross"] += r.gross
+        g["last"] = max(g["last"], r.date) if g["last"] else r.date
+        g["no_att"] += 0 if r.attachment else 1
+    rows = sorted(groups.values(), key=lambda g: (g["key"] == "", -g["gross"]))
+    for g in rows:
+        g["name"] = max(g["names"].items(), key=lambda x: (x[1], len(x[0])))[0] if g["key"] else "مورد غير محدد"
+    return render(request, "suppliers.html", user, sites=sites, sel=sel, rows=rows, d_from=f, d_to=t,
+                  total={k: sum(g[k] for g in rows) for k in ("n", "net", "vat", "gross")})
+
+
+@app.get("/suppliers/statement", response_class=HTMLResponse)
+def supplier_statement(request: Request, k: str = "", site: str | None = None,
+                       d_from: str | None = Query(None, alias="from"), d_to: str | None = Query(None, alias="to"),
+                       db: Session = Depends(get_db),
+                       user: User = Depends(require("storekeeper", "engineer", "manager", "final", "admin"))):
+    f, t = parse_date(d_from), parse_date(d_to)
+    sites, sel, recs = _supplier_receipts(db, user, site, f, t)
+    rows, names = [], {}
+    for r in recs:
+        key, region, nm = _sup_key(r.supplier)
+        if key != k:
+            continue
+        names[nm] = names.get(nm, 0) + 1
+        rows.append((r, region))
+    name = (max(names.items(), key=lambda x: (x[1], len(x[0])))[0] if names else k) if k else "مورد غير محدد"
+    total = {"net": sum(r.net for r, _ in rows), "vat": sum(r.vat for r, _ in rows), "gross": sum(r.gross for r, _ in rows)}
+    return render(request, "supplier_statement.html", user, sites=sites, sel=sel, k=k, sup_name=name, rows=rows,
+                  variants=sorted(names), total=total, d_from=f, d_to=t)
 
 
 # ---------------- العهد ----------------

@@ -1,4 +1,5 @@
 """منطق العمل: الأرصدة ومتوسط التكلفة، ترقيم الطلبات، مسار الاعتماد، الإشعارات."""
+import re
 from collections import defaultdict
 from datetime import datetime
 from html import escape
@@ -795,3 +796,23 @@ def notify_requester(db: Session, req: Request):
     html = _wrap(f"نتيجة الطلب: {REQ_STATUS[req.status]}",
                  _req_header(req) + _lines_table(req) + notes + f"<p><a href='{link}'>عرض الطلب</a></p>")
     send_mail(to, f"الطلب {req.req_no}: {REQ_STATUS[req.status]}", html)
+
+
+# ---------------- الموردين ----------------
+_SUP_PREFIX = re.compile(r"^(شركة|شركه|مؤسسة|مؤسسه|مصنع)\s+")
+_SUP_SUFFIX = re.compile(r"\s+(التجارية|التجاريه|للتجارة|للتجاره|المحدودة|المحدوده)$")
+
+
+def supplier_parts(name):
+    """يرجّع (مفتاح المورد الموحّد، المنطقة/الفرع اللي بين القوسين).
+    «الشامل الجديد التجارية (صبيا)» و«الشامل الجديد (خميس مشيط)» → نفس المورد «الشامل الجديد»."""
+    s = (name or "").strip()
+    s = re.split(r"\s+[—–-]\s+", s, maxsplit=1)[0]          # ملاحظة بعد « — »
+    region = "، ".join(x.strip() for x in re.findall(r"\(([^)]*)\)", s) if x.strip())
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    key = s.replace("ة", "ه").replace("ى", "ي").replace("أ", "ا").replace("إ", "ا")
+    key = _SUP_PREFIX.sub("", key)
+    for _ in range(2):
+        key = _SUP_SUFFIX.sub("", key)
+    return key.strip(), region, s

@@ -874,3 +874,22 @@ def test_receipt_vat_display_only(env):
     db.close()
     page = c.get(f"/receipts/{rid}").text
     assert "الإجمالي شامل الضريبة" in page and "230" in page
+
+
+def test_suppliers_statement(env):
+    """الموردين: الأسماء اللي فيها منطقة بتتجمع، وكشف الحساب فيه الموقع والضريبة والمرفق."""
+    from datetime import date
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    db = SessionLocal()
+    for inv, sup, att in (("SH-1", "الشامل الجديد التجارية (صبيا)", "https://x/inv1"), ("SH-2", "الشامل الجديد (خميس مشيط)", None),
+                          ("SH-3", "تحويل من نجران", None)):
+        r = Receipt(site_id=env["site"], date=date(2026, 9, 1), invoice_no=inv, supplier=sup, attachment=att)
+        r.lines.append(ReceiptLine(item_id=env["a"], qty=1, unit_price=100))
+        db.add(r)
+    db.commit()
+    db.close()
+    page = c.get("/suppliers").text
+    assert "الشامل الجديد" in page and "صبيا" in page and "خميس مشيط" in page and "تحويل من نجران" not in page
+    st = c.get("/suppliers/statement", params={"k": "الشامل الجديد"}).text
+    assert "SH-1" in st and "SH-2" in st and "SH-3" not in st and 'href="https://x/inv1"' in st and "230" in st

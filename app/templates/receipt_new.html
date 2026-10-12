@@ -15,6 +15,12 @@
     <tr><th style="width:45%">الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة (بدون ضريبة)</th><th class="n">الإجمالي</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
+  <div class="meta" id="sums" style="margin:6px 0 12px">
+    <div><b>الإجمالي بدون ضريبة</b><span id="s_net">0</span></div>
+    <div><b>الضريبة 15%</b><span id="s_vat">0</span></div>
+    <div><b>الإجمالي شامل الضريبة</b><span id="s_gross">0</span></div>
+  </div>
+  <p class="muted" style="margin-top:0">الأسعار بتتسجل من غير ضريبة، ومتوسط السعر والصرف بيتحسبوا من غير ضريبة. الضريبة بتظهر في المشتريات وكشف حساب المورد بس.</p>
   <button class="btn">حفظ الوارد</button>
 </form>
 {% endblock %}
@@ -30,8 +36,16 @@ function addRow() {
   tr.querySelector('.it').addEventListener('input', e => { const i = BY[e.target.value];
     tr.querySelector('[name=item_id]').value = i ? i.id : ''; tr.querySelector('.uom').textContent = i ? i.uom : ''; });
   tr.addEventListener('input', () => { const q = +tr.querySelector('[name=qty]').value || 0, p = +tr.querySelector('[name=unit_price]').value || 0;
-    tr.querySelector('.tot').textContent = (q * p).toLocaleString('en', {maximumFractionDigits: 2}); });
+    tr.querySelector('.tot').textContent = (q * p).toLocaleString('en', {maximumFractionDigits: 2}); sums(); });
 }
+function sums() {
+  let n = 0; document.querySelectorAll('#lines tr').forEach(tr => { const q = tr.querySelector('[name=qty]'), p = tr.querySelector('[name=unit_price]');
+    if (q && p) n += (+q.value || 0) * (+p.value || 0); });
+  const tr = (document.querySelector('[name=supplier]').value || '').trim().startsWith('تحويل'), v = tr ? 0 : n * 0.15, f = x => x.toLocaleString('en', {maximumFractionDigits: 2});
+  document.getElementById('s_net').textContent = f(n); document.getElementById('s_vat').textContent = f(v); document.getElementById('s_gross').textContent = f(n + v);
+}
+document.querySelector('[name=supplier]').addEventListener('input', sums);
+document.getElementById('lines').addEventListener('click', () => setTimeout(sums));
 addRow(); addRow();
 document.getElementById('frm').addEventListener('submit', e => {
   for (const tr of document.querySelectorAll('#lines tr')) { const t = tr.querySelector('.it'); if (!t) continue;
