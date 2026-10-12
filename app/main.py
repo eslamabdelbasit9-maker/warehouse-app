@@ -387,7 +387,21 @@ def month_after(ym):
 SUB_COLORS = {"asphalt": 3, "crusher": 4, "concrete": 5, "transport": 6, "other": 7}   # ألوان أنواع الوحدات (غير ألوان الفروع)
 
 
-def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None):
+def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None):
+    """رسم شهري منفصل لكل نوع وحدة (الكسارات، الخلاطات، ...) — وجوه كل رسم مقارنة الفروع.
+    rows: (site_id, date, value, kind)."""
+    rows = list(rows)
+    out = []
+    for k, name in kinds.items():
+        sub = [(r[0], r[1], r[2]) for r in rows if (r[3] if r[3] in kinds else "other") == k]
+        if not any(r[2] for r in sub):
+            continue
+        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=link, h2=300)
+        out.append(dict(key=k, name=name, c=SUB_COLORS.get(k, 7), total=mc["total"], mc=mc))
+    return out
+
+
+def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, h2=380):
     """rows: (site_id, date, value[, sub]) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
     subs (اختياري، dict مفتاح → اسم، زي أنواع الوحدات): في المقارنة كل عمود فرع بيتقسم بالـ subs، ولفرع واحد
     المقارنة بتبقى عمود لكل sub. لون كل فرع ثابت حسب ترتيبه."""
@@ -404,6 +418,7 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None):
                 sc_[sk] = sc_.get(sk, 0) + (v or 0)
     data = [dict(y=y, m=m, by=monthly[(y, m)], sub=sub_m[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
     names = {s.id: s.name for s in pivot_sites}
+    short = {s.id: (s.name.split()[0] if s.name.split() else s.name) for s in pivot_sites}   # «الكدمي جازان» ← «الكدمي»
     for p in data:
         p["by_named"] = [(sid, (names[sid], p["by"][sid])) for sid in sorted(p["by"]) if sid in names and p["by"][sid]]
         if link:   # الشهر كله (لفرع واحد: الفرع ده)
@@ -419,16 +434,16 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None):
         keys = [s.id for s in chart_sites]
         chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=34, h=260)
         if sub_keys:
-            chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=300, pad_t=56, bar_max=26)
+            chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=400, pad_t=100, bar_max=30)
         else:
-            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=300, pad_t=56, bar_max=26)
+            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=h2, pad_t=100, bar_max=30)
         for b in chart["bars"]:
             for sg in b["segs"]:
                 sg["c"] = site_color[chart_sites[sg["k"]].id]
         for b, p in zip(chart2["bars"], data):
             for col in b["segs"]:
                 sid = chart_sites[col["k"]].id
-                col["c"], col["label"] = site_color[sid], names.get(sid, "")
+                col["c"], col["label"] = site_color[sid], short.get(sid, "")
                 col["url"] = link(sid, p["y"], p["m"]) if link else None
                 for part in col["parts"]:
                     part["c"] = SUB_COLORS.get(sub_keys[part["s"]], 7)
@@ -516,13 +531,14 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         .group_by(Receipt.id, Receipt.site_id, Receipt.date), months, sel, pivot_sites, sites,
         link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
     # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
-    issues = monthly_charts(
-        db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
-        .outerjoin(Unit, Unit.id == Req.unit_id)
-        .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]),
-                RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
-        .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind), months, sel, pivot_sites, sites, subs=UNIT_KINDS,
-        link=lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
+    issue_rows = (db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
+                  .outerjoin(Unit, Unit.id == Req.unit_id)
+                  .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]),
+                          RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
+                  .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind).all())
+    issue_link = lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else "")
+    issues = monthly_charts([(r[0], r[1], r[2]) for r in issue_rows], months, sel, pivot_sites, sites, link=issue_link)
+    issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link)
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)

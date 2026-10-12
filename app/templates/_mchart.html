@@ -10,8 +10,10 @@
       <rect class="hit" x="{{ b.hit_x }}" y="{{ ch.pad_t }}" width="{{ b.band }}" height="{{ ch.plot_h }}"/>
       {% if ch.grouped %}{% for sg in b.segs %}{% if sg.path %}<a{% if sg.url %} href="{{ sg.url }}"{% endif %} class="go"><title>{{ sg.label }}: {{ fmt(sg.v) }}</title>
         {% if sg.parts %}{% for pt in sg.parts %}<path class="s{{ pt.c }}" d="{{ pt.path }}"/>{% endfor %}{% else %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endif %}
-        {% if sg.label and sg.h > (sg.label|length) * 6.2 + 12 and sg.bw >= 14 %}<text class="inlab" transform="translate({{ sg.cx + 4 }},{{ ch.base - 6 }}) rotate(-90)" text-anchor="end">{{ sg.label }}</text>{% endif %}
-        <text class="val sm num" transform="translate({{ sg.cx + 3.5 }},{{ sg.y - 5 }}) rotate(-90)" text-anchor="start">{{ fmt(sg.v, 0) }}</text></a>{% endif %}{% endfor %}
+        {% set vtxt = fmt(sg.v, 0) %}{% set fits = sg.label and sg.h > (sg.label|length) * 6.6 + 12 and sg.bw >= 14 %}
+        {% if fits %}<text class="inlab" transform="translate({{ sg.cx + 4 }},{{ ch.base - 6 }}) rotate(-90)" text-anchor="end">{{ sg.label }}</text>{% endif %}
+        <text class="val sm num" transform="translate({{ sg.cx + 3.5 }},{{ sg.y - 5 }}) rotate(-90)" text-anchor="start">{{ vtxt }}</text>
+        {% if sg.label and not fits %}<text class="outlab" transform="translate({{ sg.cx + 4 }},{{ sg.y - 9 - (vtxt|length) * 6.2 }}) rotate(-90)" text-anchor="end">{{ sg.label }}</text>{% endif %}</a>{% endif %}{% endfor %}
       {% else %}
       {% if b.segs is defined %}{% for sg in b.segs %}<path class="s{{ sg.c }}" d="{{ sg.path }}"/>{% endfor %}
       {% elif b.path %}<path d="{{ b.path }}"/>{% endif %}
@@ -44,9 +46,10 @@
   <summary class="mc-sum">{% call card_h(mc_icon, mc_title, mc_sub) %}{% endcall %}
     <span class="mc-tot"><b class="num">{{ fmt(mc.total, 0) }}</b><small>إجمالي 12 شهر</small></span><span class="mc-chev" aria-hidden="true"></span></summary>
   <div class="chart mchart" id="{{ mc_id }}">
-    {% if mc.chart2 or mc_extra %}<div class="seg-tg" role="tablist">
+    {% if mc.chart2 or mc_extra or mc.kinds %}<div class="seg-tg" role="tablist">
       <button type="button" class="on" data-m="stk">الإجمالي</button>
       {% if mc.chart2 %}<button type="button" data-m="grp">{{ mc.cmp_label or 'مقارنة الفروع' }}</button>{% endif %}
+      {% if mc.kinds %}<button type="button" data-m="units">حسب الوحدة</button>{% endif %}
       {% if mc_extra %}<button type="button" data-m="rk">الرواكد</button>{% endif %}
     </div>{% endif %}
     <div class="view" data-mode="stk">{{ legend(mc) }}{{ draw(mc.chart, mc.data, mc.site_c, multi, mc_title) }}{{ table(mc) }}</div>
@@ -54,6 +57,15 @@
       {% if mc.sub_legend %}<div class="legend">{% for l in mc.sub_legend %}<span class="lg"><i class="sw s{{ l.c }}"></i>{{ l.name }} <b class="num">{{ fmt(l.total, 0) }}</b></span>{% endfor %}</div>{% elif multi %}{{ legend(mc) }}{% endif %}
       <p class="muted hint">{{ 'اسم الفرع مكتوب على كل عمود، والألوان أنواع الوحدات. ' if mc.sub_legend and multi }}اضغط على أي عمود لفتح تفاصيله.</p>
       {{ draw(mc.chart2, mc.data, mc.site_c, multi, mc_title) }}{{ table(mc) }}</div>{% endif %}
+    {% if mc.kinds %}<div class="view" data-mode="units" hidden>
+      <p class="muted hint">رسم لكل نوع وحدة، وجوه كل رسم الفروع. اضغط على أي عمود لفتح تفاصيله.</p>
+      {% for kd in mc.kinds %}{% set km = kd.mc %}{% set kmulti = km.legend|length > 1 %}
+      <div class="kind-chart">
+        <div class="kind-h"><i class="sw s{{ kd.c }}"></i><b>{{ kd.name }}</b><span class="muted">إجمالي 12 شهر:</span> <b class="num">{{ fmt(kd.total, 0) }}</b>
+          {% if kmulti %}<span class="kind-sites">{% for l in km.legend %}<span class="lg"><i class="sw s{{ l.c }}"></i>{{ l.name }} <b class="num">{{ fmt(l.total, 0) }}</b></span>{% endfor %}</span>{% endif %}</div>
+        {{ draw(km.chart2 if km.chart2 else km.chart, km.data, km.site_c, kmulti, kd.name) }}
+      </div>{% endfor %}
+    </div>{% endif %}
     {% if mc_extra %}<div class="view" data-mode="rk" hidden>
       <p class="muted hint">قيمة ما لم يُصرف من وارد كل شهر — <a href="/stagnant{{ '?site=' ~ sel.id if sel }}">صفحة الأصناف الراكدة ←</a></p>
       {{ legend(mc_extra) }}{{ draw(mc_extra.chart, mc_extra.data, mc_extra.site_c, mc_extra.legend|length > 1, 'رواكد المشتريات') }}{{ table(mc_extra) }}</div>{% endif %}
