@@ -354,7 +354,16 @@ def grouped_chart(stacks, keys, gap=2, **kw):
 STAGNANT_DAYS = (90, 180, 365)
 
 
-def stagnant_items(db: Session, site_ids, days=180, today=None):
+def cached_stock(db: Session, site_id: int, cache=None):
+    """stock_table مرة واحدة لكل موقع في نفس الطلب (cache = dict من الصفحة)."""
+    if cache is None:
+        return stock_table(db, site_id)
+    if site_id not in cache:
+        cache[site_id] = stock_table(db, site_id)
+    return cache[site_id]
+
+
+def stagnant_items(db: Session, site_ids, days=180, today=None, cache=None):
     """أصناف قطع غيار ليها رصيد وما اتصرفش منها (لا صرف ولا تحويل صادر) من `days` يوم أو أكتر.
     العد من آخر صرف؛ ولو مفيش صرف خالص: من بداية السنة (أو من أول وارد لو الصنف جديد السنة دي).
     الوارد ما بيصفّرش العداد — ولو جت فواتير وارد بعد آخر صرف الصنف بيتعلّم (added_qty > 0).
@@ -363,8 +372,10 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
     today = today or _date.today()
     year_start = _date(today.year, 1, 1)
     out = []
+    # من غير «IN (آلاف الأصناف)» في الاستعلامات — أسرع بكتير؛ الفلترة على الأصناف اللي ليها رصيد بتحصل هنا
+    spare_items = {i.id: i for i in db.query(Item).filter(Item.category == "spare")}
     for site in db.query(Site).filter(Site.id.in_(list(site_ids))).order_by(Site.name):
-        st = stock_table(db, site.id)
+        st = cached_stock(db, site.id, cache)
         # الكميات المعلقة (طلبات قيد الاعتماد) محسوبة مصروفة: الباقي بس هو اللي راكد
         live = [iid for iid, r in st.items() if r["available"] > 1e-9]
         if not live:
@@ -377,28 +388,27 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
                     last_out[iid] = d
         bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
              .filter(Request.site_id == site.id, Request.status.in_(["approved", "partial"]),
-                     RequestLine.status == "approved", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
+                     RequestLine.status == "approved").group_by(RequestLine.item_id))
         bump(db.query(RequestLine.item_id, func.max(Request.work_date)).join(Request)
              .filter(Request.site_id == site.id, Request.status == "pending",
-                     RequestLine.status == "pending", RequestLine.item_id.in_(live)).group_by(RequestLine.item_id))
+                     RequestLine.status == "pending").group_by(RequestLine.item_id))
         bump(db.query(TransferLine.item_id, func.max(Transfer.date)).join(Transfer)
-             .filter(Transfer.status.in_(["in_transit", "received"]), TransferLine.item_id.in_(live),
+             .filter(Transfer.status.in_(["in_transit", "received"]),
                      Transfer.from_site_id == site.id).group_by(TransferLine.item_id))
         receipts = defaultdict(list)   # فواتير الوارد
         for iid, d, q in (db.query(ReceiptLine.item_id, Receipt.date, ReceiptLine.qty).join(Receipt)
-                          .filter(Receipt.site_id == site.id, ReceiptLine.item_id.in_(live))):
+                          .filter(Receipt.site_id == site.id)):
             receipts[iid].append((d, q or 0))
         first_in = {}                  # أول إضافة (وارد أو تحويل وارد) — للأصناف الجديدة
         for iid, lst in receipts.items():
             first_in[iid] = min(d for d, _ in lst)
         for iid, d in (db.query(TransferLine.item_id, func.min(Transfer.date)).join(Transfer)
-                       .filter(Transfer.status == "received", Transfer.to_site_id == site.id,
-                               TransferLine.item_id.in_(live)).group_by(TransferLine.item_id)):
+                       .filter(Transfer.status == "received", Transfer.to_site_id == site.id).group_by(TransferLine.item_id)):
             if d and (iid not in first_in or d < first_in[iid]):
                 first_in[iid] = d
         opening = {iid for (iid,) in db.query(OpeningBalance.item_id)
-                   .filter(OpeningBalance.site_id == site.id, OpeningBalance.qty > 0, OpeningBalance.item_id.in_(live))}
-        items = {i.id: i for i in db.query(Item).filter(Item.id.in_(live), Item.category == "spare")}
+                   .filter(OpeningBalance.site_id == site.id, OpeningBalance.qty > 0)}
+        items = spare_items
         for iid in live:
             it = items.get(iid)
             if not it:
@@ -420,13 +430,13 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
     return out
 
 
-def unissued_purchases(db: Session, site_ids, since):
+def unissued_purchases(db: Session, site_ids, since, cache=None):
     """المشتريات اللي دخلت وما اتصرفتش: الصرف (المعتمد + المعلق في الاعتماد + التحويل الصادر) بيتخصم
     بالأقدمية (الافتتاحي الأول، وبعده الوارد بالتاريخ). يرجع لكل سطر وارد من `since`:
     (site_id, date, قيمة الباقي، قيمة الوارد)."""
     out = []
     for sid in site_ids:
-        st = stock_table(db, sid)
+        st = cached_stock(db, sid, cache)
         inflow = defaultdict(list)   # item → [(date, qty, price, is_receipt)]
         for iid, r in st.items():
             if r["open_qty"] > 0:

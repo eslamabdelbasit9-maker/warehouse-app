@@ -1,4 +1,5 @@
 import io
+import time
 import json
 import uuid
 from datetime import date, datetime
@@ -9,7 +10,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import bindparam, func, inspect, or_, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import services as S
@@ -34,6 +36,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title=settings.APP_NAME, docs_url=None, redoc_url=None, lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)   # الصفحات الكبيرة (الأرصدة) بتنزل أصغر 5-10 مرات
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60 * 60 * 12,
                    https_only=settings.BASE_URL.startswith("https"), same_site="lax")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -503,6 +506,9 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                   recent=recent)
 
 
+_STAGNANT_CACHE = {}
+
+
 @app.get("/stagnant", response_class=HTMLResponse)
 def stagnant(request: Request, site: str | None = None, days: int = 180, db: Session = Depends(get_db),
              user: User = Depends(current_user)):
@@ -512,10 +518,20 @@ def stagnant(request: Request, site: str | None = None, days: int = 180, db: Ses
     sel = next((s for s in sites if str(s.id) == str(site)), None)
     days = days if days in S.STAGNANT_DAYS else 180
     ids = [sel.id] if sel else [s.id for s in sites]
-    rows = S.stagnant_items(db, ids, days)
-    # رواكد المشتريات: قيمة اللي لسه ما اتصرفش من وارد كل شهر (آخر 12 شهر)
+    # الحساب تقيل (كل حركات المواقع)، فبيتحفظ دقيقة واحدة: لو كذا حد فتح الصفحة في نفس الوقت تتحسب مرة واحدة
     months = last_12_months(date.today())
-    left = S.unissued_purchases(db, ids, date(*months[0], 1))
+    key = (tuple(sorted(ids)), days, date.today())
+    hit = _STAGNANT_CACHE.get(key)
+    if hit and time.monotonic() - hit[0] < 60:
+        rows, left = hit[1], hit[2]
+    else:
+        cache = {}
+        rows = S.stagnant_items(db, ids, days, cache=cache)
+        # رواكد المشتريات: قيمة اللي لسه ما اتصرفش من وارد كل شهر (آخر 12 شهر)
+        left = S.unissued_purchases(db, ids, date(*months[0], 1), cache=cache)
+        for k in [k for k, v in _STAGNANT_CACHE.items() if time.monotonic() - v[0] >= 60]:
+            del _STAGNANT_CACHE[k]
+        _STAGNANT_CACHE[key] = (time.monotonic(), rows, left)
     unissued = monthly_charts(((sid, d, v) for sid, d, v, _ in left), months, sel, sites if not sel else [sel], sites)
     bought = {}
     for sid, d, _, v in left:
@@ -569,7 +585,9 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
                              Req.lines.any(RequestLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
     total = qry.count()
     per = 50
-    rows = qry.order_by(Req.work_date.desc(), Req.id.desc()).offset((page - 1) * per).limit(per).all()
+    rows = (qry.options(selectinload(Req.lines).selectinload(RequestLine.item), selectinload(Req.site), selectinload(Req.unit),
+                        selectinload(Req.requester))
+            .order_by(Req.work_date.desc(), Req.id.desc()).offset((page - 1) * per).limit(per).all())
     return render(request, "requests_list.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
                   sites=sites, f=dict(type=type, status=status, site=site, q=q, mine=mine, month=month if mon else "", ok=ok),
                   month_label=month_label(mon))
@@ -946,7 +964,7 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
           user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     st = S.stock_table(db, sel.id)
-    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(st.keys()))).all()}
+    items = {i.id: i for i in db.query(Item).filter(Item.category == "spare").all()}
     rows = []
     for iid, r in st.items():
         it = items.get(iid)
@@ -1030,7 +1048,8 @@ def receipts(request: Request, site: str | None = None, q: str = "", month: str 
         like = f"%{q.strip()}%"
         qry = qry.filter(or_(Receipt.invoice_no.ilike(like), Receipt.supplier.ilike(like),
                              Receipt.lines.any(ReceiptLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
-    rows = qry.order_by(Receipt.date.desc(), Receipt.id.desc()).limit(500).all()
+    rows = (qry.options(selectinload(Receipt.lines).selectinload(ReceiptLine.item))
+            .order_by(Receipt.date.desc(), Receipt.id.desc()).limit(500).all())
     return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q,
                   month=month if mon else "", month_label=month_label(mon))
 
@@ -1668,7 +1687,7 @@ def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str 
 def export_stock(site: str | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     st = S.stock_table(db, sel.id)
-    items = {i.id: i for i in db.query(Item).filter(Item.id.in_(list(st.keys())), Item.category == "spare")}
+    items = {i.id: i for i in db.query(Item).filter(Item.category == "spare")}
     rows = [[it.code, it.name, it.uom, r["location"] or "", r["open_qty"], r["in_qty"], r["out_qty"], r["cur"],
              round(r["avg"], 4), round(r["value"], 2), r["pending_qty"], r["tr_in_qty"], r["tr_out_qty"]]
             for iid, r in sorted(st.items(), key=lambda x: items[x[0]].code if x[0] in items else "")
