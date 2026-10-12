@@ -431,3 +431,10 @@ html[data-mode=dark] aside.side a,html[data-mode=dark] .mtop a{color:#dbe6ff}
 html[data-mode=dark] .side-brand,html[data-mode=dark] .side-brand .title{color:#fff}
 html[data-mode=dark] aside.side nav.main a:hover,html[data-mode=dark] .side-foot a:hover{color:var(--accent)}
 html[data-mode=dark] aside.side nav.main a.on{color:#fff}
+/* حجم أهدأ: المحتوى بحد أقصى معقول وبنفس العرض للشريط والكروت */
+body.has-side main>*,body.has-side main>.hero{max-width:1440px;margin-left:auto;margin-right:auto}
+body.has-side main>.hero{min-height:170px;padding:24px 30px}
+body.has-side main>.hero .hero-hi{font-size:26px}
+body.has-side main>.hero .hero-sub{font-size:14px}
+/* الأرقام في الجداول في نص الخانة */
+table.t td.n,table.t th.n{text-align:center}

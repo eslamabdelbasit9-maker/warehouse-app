@@ -836,6 +836,16 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
     return render(request, "stock.html", user, sites=sites, sel=sel, rows=rows, q=q, only=only, total_value=total_value)
 
 
+@app.get("/raw-stock", response_class=HTMLResponse)
+def raw_stock(request: Request, site: str | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    sites, sel = pick_site(db, user, site)
+    st = S.raw_stock_table(db, sel.id)
+    items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
+    empty = dict(open_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0)
+    rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
+    return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows)
+
+
 @app.get("/stock/{item_id}", response_class=HTMLResponse)
 def item_card(item_id: int, request: Request, site: str | None = None, db: Session = Depends(get_db),
               user: User = Depends(current_user)):

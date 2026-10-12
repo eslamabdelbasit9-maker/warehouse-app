@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>أرصدة المواد الخام — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}</form>
+<div class="card">
+  <div class="tw sticky"><table class="t">
+  <thead><tr><th>الكود</th><th>المادة</th><th>الوحدة</th><th class="n">افتتاحي</th><th class="n">وارد (فواتير)</th><th class="n">منصرف</th><th class="n">الرصيد الحالي</th><th class="n">قيد الاعتماد</th></tr></thead>
+  <tbody>
+  {% for it, r in rows %}<tr><td>{{ it.code }}</td><td>{{ it.name }}</td><td>{{ it.uom or '' }}</td>
+    <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{{ fmt(r.out_qty) }}</td>
+    <td class="n {{ 'low' if r.cur < 0 }}"><b>{{ fmt(r.cur) }}</b></td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td></tr>
+  {% else %}<tr><td colspan="8" class="muted">لا توجد مواد خام مسجلة</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

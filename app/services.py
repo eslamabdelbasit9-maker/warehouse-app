@@ -172,6 +172,27 @@ def stock_table(db: Session, site_id: int, item_ids=None):
     return t
 
 
+def raw_stock_table(db: Session, site_id: int):
+    """أرصدة المواد الخام (كميات): افتتاحي + وارد (فواتير) − صرف معتمد، والمعلق في الاعتماد لوحده."""
+    t = defaultdict(lambda: dict(open_qty=0.0, in_qty=0.0, out_qty=0.0, pending_qty=0.0))
+    raw_ids = select(Item.id).where(Item.category == "raw")
+    for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(raw_ids)):
+        t[ob.item_id]["open_qty"] += ob.qty or 0
+    for iid, q in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty)).join(Receipt)
+                   .filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids)).group_by(ReceiptLine.item_id)):
+        t[iid]["in_qty"] += q or 0
+    for iid, ls, rs, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, func.sum(RequestLine.qty))
+                           .join(Request).filter(Request.site_id == site_id, Request.type == "raw")
+                           .group_by(RequestLine.item_id, RequestLine.status, Request.status)):
+        if ls == "approved" and rs in ("approved", "partial"):
+            t[iid]["out_qty"] += q or 0
+        elif ls == "pending" and rs == "pending":
+            t[iid]["pending_qty"] += q or 0
+    for r in t.values():
+        r["cur"] = r["open_qty"] + r["in_qty"] - r["out_qty"]
+    return t
+
+
 def issued_summary(db: Session, site_id: int, item_ids, ref_date, exclude_request_id=None):
     """المنصرف المعتمد من كل صنف في الموقع خلال شهر وسنة ref_date.
     يرجع dict[item_id] = {m_qty, m_n, y_qty, y_n} (n = عدد الطلبات)."""

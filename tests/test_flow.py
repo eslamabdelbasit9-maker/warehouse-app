@@ -158,6 +158,12 @@ def test_raw_materials(env):
     assert "الأسفلت المنتج" in page and "2.50" in page and "لتر/طن" in page
     login(c, env, "requester@example.com")
     assert 'id="tons"' in c.get("/requests/new/raw").text
+    page = c.get(f"/raw-stock?site={env['site']}").text
+    assert "أرصدة المواد الخام" in page and "RM-G34" in page
+    db = SessionLocal()
+    st = S.raw_stock_table(db, env["site"])
+    assert st[g]["out_qty"] == 120 and st[bit]["out_qty"] == 6.5
+    db.close()
     assert "طريق الملك فهد" in c.get("/").text or True
 
 
