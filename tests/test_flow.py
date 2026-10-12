@@ -789,3 +789,44 @@ def test_stock_period_and_unit_filter(env):
     assert "الأصناف المصروفة لـ" in page and "منصرف للوحدة" in page
     assert 'src="/static/picker.js' in c.get(f"/requests/new/spare?site={env['site']}").text
 
+
+def test_custody_import_and_transfer_history(env):
+    """استيراد شيت العهد بالروابط + عدم التكرار، وصفحة التحويلات تعرض تحويلات الشيت."""
+    import io
+    from openpyxl import Workbook
+    from datetime import date
+    from app.models import CustodyRecord
+    db = SessionLocal()
+    for code, name in (("MEX", "مكه"), ("JIX", "الكدمى جيزان")):
+        if not db.query(Site).filter_by(code=code).first():
+            db.add(Site(code=code, name=name))
+    db.commit()
+    db.close()
+    wb = Workbook()
+    a = wb.active
+    a.title = "بيانات الأصول"
+    a.append(["م", "الفرع", "الرقم الوظيفي", "اسم الموظف", "الوظيفة", "القسم", "اسم الأصل", "كود الأصل", "الكمية", "رابط الصورة", "رابط المرفق"])
+    a.append([1, "الكدمي", "5784", "انيل", "حداد", "انتاج", "ماكينة لحام", "-", 1, "https://x/i1", "https://x/b1"])
+    s = wb.create_sheet("بيانات السلامة")
+    s.append(["م", "الفرع", "الرقم الوظيفي", "اسم الموظف", "الوظيفة", "القسم", "المهمات المستلمة", "الكمية", "رابط المرفق", "تاريخ الاستلام"])
+    s.append([1, "مكة", "800", "محمد", "مشغل", "كساره", "حذاء سيفتى", 1, "https://x/b2", "2026/08/27"])
+    s.append([2, "فرع وهمي", "900", "س", "", "", "خوذة تجربة", 1, None, None])
+    buf = io.BytesIO()
+    wb.save(buf)
+    data = buf.getvalue()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    c.post("/admin/import/custody", files={"files": ("c.xlsx", data)})
+    c.post("/admin/import/custody", files={"files": ("c.xlsx", data)})  # التانية تتخطى
+    db = SessionLocal()
+    recs = db.query(CustodyRecord).filter(CustodyRecord.item_name.in_(["ماكينة لحام", "حذاء سيفتى", "خوذة تجربة"])).all()
+    assert len(recs) == 2
+    asset = next(r for r in recs if r.employee_no == "5784")
+    safety = next(r for r in recs if r.employee_no == "800")
+    assert asset.category == "الأصول" and asset.site.name == "الكدمى جيزان" and asset.photo == "https://x/i1"
+    assert safety.category == "أدوات السلامة" and safety.issued_at == date(2026, 8, 27) and safety.attachment == "https://x/b2"
+    sid = asset.site_id
+    db.close()
+    page = c.get(f"/custody?site={sid}&state=all").text
+    assert 'href="https://x/b1"' in page and 'href="https://x/i1"' in page
+    assert c.get("/transfers").status_code == 200

@@ -16,4 +16,15 @@
   {% if t.status == 'in_transit' and not out and user.has('storekeeper') %}<a class="btn sm green" href="/transfers/{{ t.id }}">تأكيد الاستلام</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">لا توجد تحويلات</td></tr>{% endfor %}
 </table></div></div>
+{% if history %}
+<h2 style="margin-top:18px">تحويلات مسجلة من الشيتات (قبل البرنامج)</h2>
+<p class="muted">دي اتسجلت في الشيت كوارد «تحويل من…» أو صرف على وحدة «تحويل لفرع»، وهي محسوبة في الرصيد بالفعل — للعرض بس.</p>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>الاتجاه</th><th>البيان</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">القيمة</th></tr>
+{% for kind, d, label, ref, lines in history %}<tr>
+<td>{{ d }}</td><td>{{ 'وارد' if kind == 'in' else 'صادر' }}</td><td>{{ label }}{% if ref %} <span class="muted" dir="ltr">{{ ref }}</span>{% endif %}</td>
+<td>{% for it, q, v in lines %}<div><span class="muted" dir="ltr">{{ it.code }}</span> {{ it.name }} — <b>{{ fmt(q) }}</b> {{ it.uom }}</div>{% endfor %}</td>
+<td class="n">{{ fmt(lines|sum(attribute='2')) }}</td></tr>{% endfor %}
+</table></div></div>
+{% endif %}
 {% endblock %}
