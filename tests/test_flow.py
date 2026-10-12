@@ -830,3 +830,28 @@ def test_custody_import_and_transfer_history(env):
     page = c.get(f"/custody?site={sid}&state=all").text
     assert 'href="https://x/b1"' in page and 'href="https://x/i1"' in page
     assert c.get("/transfers").status_code == 200
+
+
+def test_old_transfers_not_counted_as_spend(env):
+    """التحويلات القديمة من الشيتات (وحدة «تحويل...» / مورد «تحويل...») ما تتحسبش صرف ولا مشتريات."""
+    from app.models import RequestLine
+    from datetime import date
+    db = SessionLocal()
+    site = db.get(Site, env["site"])
+    u = Unit(site_id=site.id, name="تحويل لمكة", kind="other")
+    it = Item(code="TR-ITEM", name="صنف محوّل", uom="قطعة")
+    db.add_all([u, it])
+    db.flush()
+    rq = Request(req_no="SP-OLD-TR", type="spare", site_id=site.id, unit_id=u.id, work_date=date.today(),
+                 status="approved", current_stage=3, imported=True)
+    rq.lines = [RequestLine(item_id=it.id, qty=1, status="approved", unit_cost=777777, value=777777)]
+    rec = Receipt(site_id=site.id, date=date.today(), invoice_no="TR-IN", supplier="تحويل من مكة")
+    rec.lines = [ReceiptLine(item_id=it.id, qty=1, unit_price=888888)]
+    db.add_all([rq, rec])
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "eng.crusher@example.com")
+    page = c.get(f"/?site={env['site']}").text
+    assert "777,777" not in page and "888,888" not in page
+

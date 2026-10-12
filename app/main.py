@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import bindparam, func, inspect, or_, text
+from sqlalchemy import bindparam, func, inspect, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -492,10 +492,13 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
     period_reqs = base.filter(period).count()
     approved = [Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]), RequestLine.status == "approved", period]
 
+    # التحويلات القديمة من شيتات Excel (صرف على وحدة «تحويل...» ووارد من مورد «تحويل...») مش صرف ولا مشتريات
+    not_tr_req = or_(Req.unit_id.is_(None), ~Req.unit_id.in_(select(Unit.id).where(Unit.name.like("تحويل%"))))
+    not_tr_rec = or_(Receipt.supplier.is_(None), ~Receipt.supplier.like("تحويل%"))
     # صرف قطع الغيار: حسب الوحدة (موقع واحد) أو جدول نوع الوحدة × الفروع (كل المواقع)
     rows = (db.query(Req.site_id, Unit.kind, Unit.name, func.sum(RequestLine.value), func.count(func.distinct(Req.id)))
             .select_from(RequestLine).join(Req).outerjoin(Unit, Unit.id == Req.unit_id)
-            .filter(Req.type == "spare", *approved).group_by(Req.site_id, Unit.kind, Unit.name).all())
+            .filter(Req.type == "spare", not_tr_req, *approved).group_by(Req.site_id, Unit.kind, Unit.name).all())
     period_spend = sum(r[3] or 0 for r in rows)
     pivot_sites = [s for s in sites if s.id in ids]
     if sel:
@@ -522,18 +525,18 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
     # المشتريات (الوارد = الكمية × سعر الوحدة): قيمة الفترة + آخر 12 شهر لحد شهر «إلى تاريخ»
     line_val = func.sum(ReceiptLine.qty * ReceiptLine.unit_price)
     period_purchases = (db.query(line_val).select_from(ReceiptLine).join(Receipt)
-                        .filter(Receipt.site_id.in_(ids), Receipt.date.between(d_from, d_to)).scalar() or 0)
+                        .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date.between(d_from, d_to)).scalar() or 0)
     months = last_12_months(d_to)
     first, last = date(*months[0], 1), month_after(months[-1])
     purchases = monthly_charts(
         db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
-        .filter(Receipt.site_id.in_(ids), Receipt.date >= first, Receipt.date < last)
+        .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date >= first, Receipt.date < last)
         .group_by(Receipt.id, Receipt.site_id, Receipt.date), months, sel, pivot_sites, sites,
         link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
     # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
     issue_rows = (db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
                   .outerjoin(Unit, Unit.id == Req.unit_id)
-                  .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]),
+                  .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]), not_tr_req,
                           RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
                   .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind).all())
     issue_link = lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else "")
@@ -541,7 +544,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
     issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link)
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
-                 .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
+                 .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", not_tr_req, *approved)
                  .group_by(Item.code, Item.name, Item.uom).order_by(func.sum(RequestLine.value).desc()).limit(10).all())
     recent = base.order_by(Req.created_at.desc()).limit(8).all()
     return render(request, "dashboard.html", user, sites=sites, sel=sel, d_from=d_from, d_to=d_to,
@@ -1494,6 +1497,10 @@ async def admin_sites_post(request: Request, db: Session = Depends(get_db), user
             db.add(Unit(site_id=int(sid), name=name, kind=kind))
         else:
             flash(request, "بيانات الوحدة غير مكتملة أو مكررة", "err")
+    elif act == "unit_kind":   # تغيير نوع الوحدة (بيأثر على تقسيم الصرف ومسار الاعتماد)
+        u = db.get(Unit, int(form.get("id")))
+        if u and form.get("kind") in UNIT_KINDS:
+            u.kind = form.get("kind")
     elif act == "toggle_unit":
         u = db.get(Unit, int(form.get("id")))
         if u:
