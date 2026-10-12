@@ -423,3 +423,11 @@ body.has-side main>.hero .hero-art{width:62%;background-size:auto 120%}
 body.has-side main>.hero .hero-hi{font-size:30px}
 body.has-side main>.hero .hero-sub{font-size:15px}
 @media (max-width:700px){body.has-side main>.hero{min-height:140px;padding:18px}body.has-side main>.hero .hero-hi{font-size:21px}body.has-side main>.hero .hero-art{width:100%}}
+/* كل المحتوى بعرض الشاشة زي شريط الترحيب، والرسمة تملى مساحتها وتختفي بالتدريج من غير حافة */
+body.has-side main>*{max-width:none}
+body.has-side main>.hero .hero-art{width:66%;background-size:cover;background-position:left bottom;
+  -webkit-mask-image:linear-gradient(to right,#000 55%,transparent 100%);mask-image:linear-gradient(to right,#000 55%,transparent 100%)}
+html[data-mode=dark] aside.side a,html[data-mode=dark] .mtop a{color:#dbe6ff}
+html[data-mode=dark] .side-brand,html[data-mode=dark] .side-brand .title{color:#fff}
+html[data-mode=dark] aside.side nav.main a:hover,html[data-mode=dark] .side-foot a:hover{color:var(--accent)}
+html[data-mode=dark] aside.side nav.main a.on{color:#fff}
