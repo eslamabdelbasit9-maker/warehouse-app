@@ -396,12 +396,12 @@ def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None):
         sub = [(r[0], r[1], r[2]) for r in rows if (r[3] if r[3] in kinds else "other") == k]
         if not any(r[2] for r in sub):
             continue
-        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=link, h2=300)
+        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=link, h2=320)
         out.append(dict(key=k, name=name, c=SUB_COLORS.get(k, 7), total=mc["total"], mc=mc))
     return out
 
 
-def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, h2=380):
+def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, h2=400):
     """rows: (site_id, date, value[, sub]) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
     subs (اختياري، dict مفتاح → اسم، زي أنواع الوحدات): في المقارنة كل عمود فرع بيتقسم بالـ subs، ولفرع واحد
     المقارنة بتبقى عمود لكل sub. لون كل فرع ثابت حسب ترتيبه."""
@@ -436,7 +436,7 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, 
         if sub_keys:
             chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=400, pad_t=100, bar_max=30)
         else:
-            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=h2, pad_t=100, bar_max=30)
+            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=h2, pad_t=90, bar_max=30)
         for b in chart["bars"]:
             for sg in b["segs"]:
                 sg["c"] = site_color[chart_sites[sg["k"]].id]
