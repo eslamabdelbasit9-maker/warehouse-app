@@ -438,3 +438,6 @@ body.has-side main>.hero .hero-hi{font-size:26px}
 body.has-side main>.hero .hero-sub{font-size:14px}
 /* الأرقام في الجداول في نص الخانة */
 table.t td.n,table.t th.n{text-align:center}
+.seg-tg a.segb{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none}
+.seg-tg a.segb.on{background:var(--card,#fff);color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+html[data-mode=dark] .seg-tg a.segb.on{background:#2A333F;color:#fff}

@@ -172,15 +172,45 @@ def stock_table(db: Session, site_id: int, item_ids=None):
     return t
 
 
+# ---------------- المواد الخام ----------------
+def crusher_price(db: Session, site_id: int):
+    """سعر الطن الثابت لإنتاج كسارات الموقع (بيحدده مدير النظام بس)."""
+    from .models import AppSetting
+    row = db.get(AppSetting, f"crusher_price:{site_id}")
+    try:
+        return float(row.value) if row else 0.0
+    except ValueError:
+        return 0.0
+
+
+def set_crusher_price(db: Session, site_id: int, price: float):
+    from .models import AppSetting
+    key = f"crusher_price:{site_id}"
+    row = db.get(AppSetting, key)
+    if row:
+        row.value = str(price)
+    else:
+        db.add(AppSetting(key=key, value=str(price)))
+
+
 def raw_stock_table(db: Session, site_id: int):
-    """أرصدة المواد الخام (كميات): افتتاحي + وارد (فواتير) − صرف معتمد، والمعلق في الاعتماد لوحده."""
-    t = defaultdict(lambda: dict(open_qty=0.0, in_qty=0.0, out_qty=0.0, pending_qty=0.0))
+    """أرصدة المواد الخام (كميات): افتتاحي + إنتاج الكسارة + وارد (فواتير) − صرف معتمد، والمعلق في الاعتماد لوحده.
+    سعر الوحدة: نواتج الكسارة بالسعر الثابت للموقع، والباقي (زي البيتومين والديزل) بمتوسط سعر الافتتاحي والفواتير."""
+    from .models import CrusherProduction, CrusherProductionLine
+    t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, prod_qty=0.0, in_qty=0.0, in_val=0.0,
+                                 out_qty=0.0, pending_qty=0.0))
     raw_ids = select(Item.id).where(Item.category == "raw")
     for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(raw_ids)):
         t[ob.item_id]["open_qty"] += ob.qty or 0
-    for iid, q in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty)).join(Receipt)
-                   .filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids)).group_by(ReceiptLine.item_id)):
+        t[ob.item_id]["open_val"] += ob.value or 0
+    for iid, q in (db.query(CrusherProductionLine.item_id, func.sum(CrusherProductionLine.qty)).join(CrusherProduction)
+                   .filter(CrusherProduction.site_id == site_id).group_by(CrusherProductionLine.item_id)):
+        t[iid]["prod_qty"] += q or 0
+    for iid, q, v in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
+                      .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids))
+                      .group_by(ReceiptLine.item_id)):
         t[iid]["in_qty"] += q or 0
+        t[iid]["in_val"] += v or 0
     for iid, ls, rs, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, func.sum(RequestLine.qty))
                            .join(Request).filter(Request.site_id == site_id, Request.type == "raw")
                            .group_by(RequestLine.item_id, RequestLine.status, Request.status)):
@@ -188,8 +218,14 @@ def raw_stock_table(db: Session, site_id: int):
             t[iid]["out_qty"] += q or 0
         elif ls == "pending" and rs == "pending":
             t[iid]["pending_qty"] += q or 0
-    for r in t.values():
-        r["cur"] = r["open_qty"] + r["in_qty"] - r["out_qty"]
+    price = crusher_price(db, site_id)
+    crusher = {i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))}
+    for iid, r in t.items():
+        r["cur"] = r["open_qty"] + r["prod_qty"] + r["in_qty"] - r["out_qty"]
+        r["available"] = r["cur"] - r["pending_qty"]
+        bq = r["open_qty"] + r["in_qty"]
+        r["avg"] = price if iid in crusher else ((r["open_val"] + r["in_val"]) / bq if bq else 0.0)
+        r["value"] = r["cur"] * r["avg"]
     return t
 
 
@@ -452,7 +488,8 @@ def can_approve(db: Session, user: User, req: Request):
     return any(u.id == user.id for u in approvers_for(db, req, req.current_stage))
 
 
-def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None):
+def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None,
+                   raw_dest=None, customer=None):
     """lines: list of dict(item, qty, entity_type, entity_name, diesel_purpose)"""
     if not lines:
         raise BusinessError("أضف صنفاً واحداً على الأقل")
@@ -473,17 +510,18 @@ def create_request(db: Session, *, rtype, site, unit, requester, work_date, reas
     for l in lines:
         if l["qty"] is None or l["qty"] <= 0:
             raise BusinessError(f"الكمية غير صحيحة للصنف «{l['item'].name}»")
-    if not approvers_for(db, _probe(site, unit), 1):
-        raise BusinessError("لا يوجد معتمد مُعرّف للمرحلة الأولى لهذه الوحدة — راجع مدير النظام")
-
     req = Request(req_no=next_req_no(db, rtype, site, work_date.year), type=rtype, site_id=site.id,
                   unit_id=unit.id if unit else None, requester_id=requester.id, work_date=work_date,
-                  reason=(reason or "").strip() or None, asphalt_tons=asphalt_tons, status="pending", current_stage=1)
+                  reason=(reason or "").strip() or None, asphalt_tons=asphalt_tons, status="pending",
+                  raw_dest=(raw_dest or "asphalt") if rtype == "raw" else None, customer=customer)
+    req.current_stage = req.flow[0]
+    if not approvers_for(db, _probe(site, unit), req.current_stage):
+        raise BusinessError(f"لا يوجد معتمد مُعرّف لمرحلة «{STAGES[req.current_stage]}» لهذا الطلب — راجع مدير النظام")
     req.site, req.unit, req.requester = site, unit, requester
     for l in lines:
         req.lines.append(RequestLine(item_id=l["item"].id, item=l["item"], qty=l["qty"],
                                      entity_type=l.get("entity_type"), entity_name=l.get("entity_name"),
-                                     diesel_purpose=l.get("diesel_purpose")))
+                                     diesel_purpose=l.get("diesel_purpose"), sale_price=l.get("sale_price")))
     db.add(req)
     db.commit()
     notify_approvers(db, req)
@@ -524,8 +562,9 @@ def decide(db: Session, req: Request, user: User, approved_line_ids: set, commen
         db.commit()
         notify_requester(db, req)
         return req
-    if stage < 3:
-        req.current_stage = stage + 1
+    later = [s for s in req.flow if s > stage]
+    if later:
+        req.current_stage = later[0]
         db.commit()
         notify_approvers(db, req)
         return req
@@ -534,6 +573,11 @@ def decide(db: Session, req: Request, user: User, approved_line_ids: set, commen
         st = stock_table(db, req.site_id, [l.item_id for l in remaining])
         for l in remaining:
             l.unit_cost = round(st[l.item_id]["avg"], 4)
+            l.value = round(l.unit_cost * l.qty, 2)
+    else:   # المواد الخام: نواتج الكسارة بالسعر الثابت للموقع، والباقي بمتوسط السعر
+        st = raw_stock_table(db, req.site_id)
+        for l in remaining:
+            l.unit_cost = round(st[l.item_id]["avg"], 4) if l.item_id in st else 0
             l.value = round(l.unit_cost * l.qty, 2)
     for l in remaining:
         l.status = "approved"

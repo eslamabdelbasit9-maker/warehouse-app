@@ -26,6 +26,9 @@ UNIT_KINDS = {
 STAGES = {1: "المهندس المعتمد", 2: "مدير الإنتاج", 3: "الاعتماد النهائي"}
 STAGE_ROLE = {1: "engineer", 2: "manager", 3: "final"}
 REQ_TYPES = {"spare": "صرف قطع غيار", "raw": "صرف مواد خام"}
+# جهة صرف المواد الخام ومسار اعتمادها (المراحل بالترتيب)
+RAW_DESTS = {"asphalt": "خلاطة أسفلت", "concrete": "محطة خرسانة", "sale": "بيع"}
+RAW_FLOWS = {"asphalt": [1, 2, 3], "concrete": [2], "sale": [2, 3]}
 REQ_STATUS = {
     "pending": "قيد الاعتماد",
     "approved": "معتمد",
@@ -114,6 +117,7 @@ class Item(Base):
     uom: Mapped[str] = mapped_column(String(30), default="قطعة")
     category: Mapped[str] = mapped_column(String(10), default="spare")  # spare | raw
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    crusher: Mapped[bool] = mapped_column(Boolean, default=False)  # مادة خام من إنتاج الكسارة (سعرها ثابت للموقع)
 
 
 class OpeningBalance(Base):
@@ -170,6 +174,8 @@ class Request(Base):
     work_date: Mapped[date] = mapped_column(Date)
     reason: Mapped[str | None] = mapped_column(Text)
     asphalt_tons: Mapped[float | None] = mapped_column(Float)  # الإنتاج اليومي للخلاطة (مواد خام)
+    raw_dest: Mapped[str | None] = mapped_column(String(15))   # asphalt | concrete | sale (مواد خام)
+    customer: Mapped[str | None] = mapped_column(String(200))  # البيع: اسم العميل
     status: Mapped[str] = mapped_column(String(15), default="pending")
     current_stage: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -196,6 +202,15 @@ class Request(Base):
         return sum(l.qty or 0 for l in self.lines if l.diesel_purpose and l.status != "rejected")
 
     @property
+    def flow(self):
+        """مراحل الاعتماد بالترتيب: قطع الغيار والأسفلت 3 مراحل، الخرسانة مدير الإنتاج، البيع مدير الإنتاج ثم النهائي."""
+        return RAW_FLOWS.get(self.raw_dest or "asphalt", [1, 2, 3]) if self.type == "raw" else [1, 2, 3]
+
+    @property
+    def sale_total(self):
+        return sum((l.qty or 0) * (l.sale_price or 0) for l in self.lines if l.sale_price and l.status != "rejected")
+
+    @property
     def liters_per_ton(self):
         return self.diesel_liters / self.asphalt_tons if self.asphalt_tons else None
 
@@ -210,6 +225,7 @@ class RequestLine(Base):
     entity_type: Mapped[str | None] = mapped_column(String(20))
     entity_name: Mapped[str | None] = mapped_column(String(200))
     diesel_purpose: Mapped[str | None] = mapped_column(String(20))
+    sale_price: Mapped[float | None] = mapped_column(Float)    # البيع: سعر الوحدة
     # الاعتماد
     status: Mapped[str] = mapped_column(String(10), default="pending")
     rejected_stage: Mapped[int | None] = mapped_column(Integer)
@@ -328,3 +344,44 @@ class MailLog(Base):
     status: Mapped[str] = mapped_column(String(20), default="queued")  # sent | failed | outbox
     error: Mapped[str | None] = mapped_column(Text)
     at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class CrusherProduction(Base):
+    """إنتاج الكسارة اليومي — بيتضاف لرصيد المواد الخام من غير اعتماد، بسعر ثابت للموقع."""
+    __tablename__ = "crusher_production"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
+    date: Mapped[date] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site] = relationship()
+    unit: Mapped[Unit | None] = relationship()
+    user: Mapped[User | None] = relationship()
+    lines: Mapped[list["CrusherProductionLine"]] = relationship(back_populates="production", cascade="all, delete-orphan",
+                                                                order_by="CrusherProductionLine.id")
+
+    @property
+    def total_qty(self):
+        return sum(l.qty or 0 for l in self.lines)
+
+    @property
+    def total_value(self):
+        return sum(l.value for l in self.lines)
+
+
+class CrusherProductionLine(Base):
+    __tablename__ = "crusher_production_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    production_id: Mapped[int] = mapped_column(ForeignKey("crusher_production.id"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
+    qty: Mapped[float] = mapped_column(Float)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)   # السعر الثابت للموقع وقت التسجيل
+    production: Mapped[CrusherProduction] = relationship(back_populates="lines")
+    item: Mapped[Item] = relationship()
+
+    @property
+    def value(self):
+        return round((self.qty or 0) * (self.unit_price or 0), 2)
+

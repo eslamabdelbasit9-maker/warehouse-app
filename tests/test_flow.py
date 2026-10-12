@@ -701,3 +701,76 @@ def test_admin_edits_request_header(env):
     db = SessionLocal()
     assert db.get(Request, rid).unit_id == env["asphalt"]
     db.close()
+
+
+def test_raw_materials_production_concrete_sale(env):
+    from app.models import CrusherProduction
+    db = SessionLocal()
+    site = db.get(Site, env["site"])
+    conc = Unit(site_id=site.id, name="محطة خرسانة", kind="concrete")
+    db.add(conc)
+    db.commit()
+    conc_id = conc.id
+    g = db.query(Item).filter_by(code="RM-G34").one()
+    assert g.crusher                                   # البحص من نواتج الكسارة
+    gid = g.id
+    db.close()
+    c = TestClient(app)
+    # السعر الثابت: مدير النظام بس
+    login(c, env, "admin@example.com")
+    c.post("/admin/crusher-prices", data={f"price_{env['site']}": "0"})
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/admin/crusher-prices", follow_redirects=False).status_code == 403
+    assert "لم يُحدَّد سعر" in c.post("/production/new", data={"site_id": env["site"], "unit_id": env["crusher"],
+                                                              "item_id": [gid], "qty": ["100"]}, follow_redirects=True).text
+    login(c, env, "admin@example.com")
+    c.post("/admin/crusher-prices", data={f"price_{env['site']}": "12.95"})
+    # إنتاج من غير اعتماد بالسعر الثابت
+    login(c, env, "storekeeper@example.com")
+    assert "12.95" in c.get(f"/production/new?site={env['site']}").text
+    r = c.post("/production/new", data={"site_id": env["site"], "unit_id": env["crusher"], "item_id": [gid], "qty": ["500"]},
+               follow_redirects=True)
+    assert "تم تسجيل إنتاج 500 طن" in r.text and "6,475" in r.text
+    db = SessionLocal()
+    st = S.raw_stock_table(db, env["site"])
+    base = st[gid]["cur"]
+    assert st[gid]["prod_qty"] == 500 and st[gid]["avg"] == 12.95
+    assert db.query(CrusherProduction).count() == 1
+    db.close()
+    # صرف خرسانة: اعتماد مدير الإنتاج بس، والتكلفة بالسعر الثابت
+    login(c, env, "requester@example.com")
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "concrete", "unit_id": conc_id,
+                                          "entity_type": "مشروع", "entity_name": "مشروع خرسانة", "item_id": gid, "qty": "40"},
+               follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.raw_dest == "concrete" and req.current_stage == 2
+    lid = req.lines[0].id
+    db.close()
+    login(c, env, "prod.manager@example.com")
+    c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.status == "approved" and req.lines[0].unit_cost == 12.95 and req.lines[0].value == 518
+    assert S.raw_stock_table(db, env["site"])[gid]["cur"] == base - 40
+    db.close()
+    # بيع: اسم العميل والسعر والقيمة — مدير الإنتاج ثم النهائي
+    login(c, env, "requester@example.com")
+    assert "سعر البيع" in c.get(f"/requests/new/raw?site={env['site']}&dest=sale").text
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "sale", "customer": "مؤسسة النور",
+                                          "item_id": [gid], "qty": ["10"], "sale_price": ["30"]}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    page = c.get(f"/requests/{rid}").text
+    assert "مؤسسة النور" in page and "قيمة البيع" in page and "300" in page
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.current_stage == 2 and req.sale_total == 300
+    lid = req.lines[0].id
+    db.close()
+    for who in ("prod.manager@example.com", "final@example.com"):
+        login(c, env, who)
+        c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "approved"
+    db.close()

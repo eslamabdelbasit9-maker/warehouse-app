@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>تسجيل إنتاج كسارة</h1>
+<form method="post" class="card">
+  <div class="meta">
+    <div class="f"><label>الموقع</label>
+      <select name="site_id" onchange="location='?site='+this.value">
+        {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>الكسارة *</label>
+      <select name="unit_id" required>{% if units|length != 1 %}<option value="">— اختر —</option>{% endif %}
+        {% for u in units %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+      {% if not units %}<span class="low">لا توجد كسارة مسجلة في هذا الموقع</span>{% endif %}</div>
+    <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+    <div class="f"><label>سعر الطن (ثابت للموقع)</label><input value="{{ fmt(price) if price else 'لم يُحدَّد — راجع مدير النظام' }}" disabled></div>
+  </div>
+  <div class="tw" style="margin-top:14px"><table class="t lines" id="plines">
+    <tr><th>المادة</th><th style="width:160px">الكمية (طن)</th><th class="n" style="width:140px">سعر الطن</th><th class="n" style="width:160px">القيمة</th></tr>
+    {% for i in items %}<tr><td>{{ i.name }}<input type="hidden" name="item_id" value="{{ i.id }}"></td>
+      <td><input name="qty" type="number" step="any" min="0" class="q"></td><td class="n">{{ fmt(price) }}</td><td class="n v">0</td></tr>{% endfor %}
+    <tr class="total"><td>الإجمالي</td><td class="n" id="tq">0</td><td></td><td class="n" id="tv">0</td></tr>
+  </table></div>
+  <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="notes"></textarea></div>
+  <button class="btn" style="margin-top:10px" {{ 'disabled' if not price }}>حفظ الإنتاج</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var price = {{ price or 0 }}, f = function (n) { return n.toLocaleString('en-US', { maximumFractionDigits: 2 }); };
+  function calc() {
+    var q = 0;
+    document.querySelectorAll('#plines .q').forEach(function (i) { var v = parseFloat(i.value) || 0; q += v; i.closest('tr').querySelector('.v').textContent = f(v * price); });
+    document.getElementById('tq').textContent = f(q); document.getElementById('tv').textContent = f(q * price);
+  }
+  document.getElementById('plines').addEventListener('input', calc);
+})();
+</script>
+{% endblock %}

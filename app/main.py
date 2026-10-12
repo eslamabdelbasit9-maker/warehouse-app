@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, inspect, or_, text
+from sqlalchemy import bindparam, func, inspect, or_, text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -18,6 +18,7 @@ from .auth import (Forbidden, LoginRequired, check_password, current_user, hash_
 from .config import settings
 from .db import Base, engine, get_db, SessionLocal
 from .models import (CUSTODY_CATEGORIES, CUSTODY_OLD_NAMES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
+                     RAW_DESTS, CrusherProduction, CrusherProductionLine,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
                      Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
                      TRANSFER_STATUS, Transfer, TransferLine)
@@ -38,7 +39,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.include_router(auth_router)
 T = Jinja2Templates(directory=APP_DIR / "templates")
-T.env.globals.update(fmt=S.fmt, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
+T.env.globals.update(fmt=S.fmt, RAW_DESTS=RAW_DESTS, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
                      TRANSFER_STATUS=TRANSFER_STATUS)
@@ -85,7 +86,11 @@ DIESEL_CODE = "RM-DSL"
 
 # ---------------- تهيئة ----------------
 # أعمدة اتضافت لجداول موجودة — create_all ما بيضيفهاش، فبنضيفها هنا مرة واحدة
-NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT")]
+NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT"),
+               ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
+               ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT")]
+DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
+CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
 
 def _add_missing_columns():
@@ -94,6 +99,11 @@ def _add_missing_columns():
         for table, col, ddl in NEW_COLUMNS:
             if table in insp.get_table_names() and col not in {c["name"] for c in insp.get_columns(table)}:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+                if (table, col) == ("items", "crusher"):   # أول مرة: البحص والبودرة نواتج كسارة
+                    conn.execute(text("UPDATE items SET crusher = :t WHERE code IN :codes")
+                                 .bindparams(bindparam("codes", expanding=True)), {"t": True, "codes": list(CRUSHER_CODES)})
+                if (table, col) == ("requests", "raw_dest"):
+                    conn.execute(text("UPDATE requests SET raw_dest = 'asphalt' WHERE type = 'raw'"))
 
 
 def init_db():
@@ -110,11 +120,19 @@ def init_db():
                ("RM-PWD", "بودرة"), ("RM-BIT", "بيتومين")]
         for code, name in raw:
             if not db.query(Item).filter(Item.code == code).first():
-                db.add(Item(code=code, name=name, uom="طن", category="raw"))
+                db.add(Item(code=code, name=name, uom="طن", category="raw", crusher=code in CRUSHER_CODES))
         for old_name, new_name in CUSTODY_OLD_NAMES.items():
             db.query(CustodyRecord).filter(CustodyRecord.category == old_name).update({"category": new_name})
         if not db.query(Item).filter(Item.code == DIESEL_CODE).first():
             db.add(Item(code=DIESEL_CODE, name="ديزل", uom="لتر", category="raw"))
+        # أسعار إنتاج الكسارات المبدئية (لو لسه ما اتحددتش) — بعد كده مدير النظام بس اللي يعدّلها
+        from .models import AppSetting
+        for s in db.query(Site):
+            if db.get(AppSetting, f"crusher_price:{s.id}") is None:
+                n = s.name.replace("ى", "ي").replace("ه", "ة")
+                price = next((p for k, p in DEFAULT_CRUSHER_PRICES if k in n), None)
+                if price:
+                    S.set_crusher_price(db, s.id, price)
         db.commit()
     finally:
         db.close()
@@ -594,12 +612,15 @@ async def new_spare_post(request: Request, db: Session = Depends(get_db),
 
 
 @app.get("/requests/new/raw", response_class=HTMLResponse)
-def new_raw(request: Request, site: str | None = None, db: Session = Depends(get_db),
+def new_raw(request: Request, site: str | None = None, dest: str = "asphalt", db: Session = Depends(get_db),
             user: User = Depends(require("requester", "storekeeper"))):
     sites, sel = pick_site(db, user, site)
-    units = [u for u in sel.units if u.active and u.kind == "asphalt"]
+    dest = dest if dest in RAW_DESTS else "asphalt"
+    kind = {"asphalt": "asphalt", "concrete": "concrete"}.get(dest)
+    units = [u for u in sel.units if u.active and u.kind == kind] if kind else []
     items = db.query(Item).filter(Item.category == "raw", Item.code != DIESEL_CODE, Item.active.is_(True)).order_by(Item.id).all()
-    return render(request, "request_raw.html", user, sites=sites, sel=sel, units=units, items=items, today=date.today())
+    return render(request, "request_raw.html", user, sites=sites, sel=sel, units=units, items=items, today=date.today(),
+                  dest=dest, RAW_DESTS=RAW_DESTS)
 
 
 @app.post("/requests/new/raw")
@@ -607,40 +628,147 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                        user: User = Depends(require("requester", "storekeeper"))):
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("site_id"))
+    dest = form.get("dest") if form.get("dest") in RAW_DESTS else "asphalt"
     try:
-        unit = db.get(Unit, int(form.get("unit_id") or 0))
-        if not unit or unit.site_id != sel.id or unit.kind != "asphalt":
-            raise S.BusinessError("اختر خلاطة الاسفلت")
-        tons = parse_float(form.get("asphalt_tons"))
-        if not tons or tons <= 0:
-            raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن)")
+        unit, tons, customer = None, None, None
+        if dest in ("asphalt", "concrete"):
+            unit = db.get(Unit, int(form.get("unit_id") or 0))
+            if not unit or unit.site_id != sel.id or unit.kind != dest:
+                raise S.BusinessError("اختر خلاطة الاسفلت" if dest == "asphalt" else "اختر محطة الخرسانة")
+        if dest == "asphalt":
+            tons = parse_float(form.get("asphalt_tons"))
+            if not tons or tons <= 0:
+                raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن)")
+        if dest == "sale":
+            customer = (form.get("customer") or "").strip()
+            if not customer:
+                raise S.BusinessError("أدخل اسم العميل")
         lines = []
-        for et, en, iid, qty in zip(form.getlist("entity_type"), form.getlist("entity_name"),
-                                    form.getlist("item_id"), form.getlist("qty")):
-            if not (en or "").strip() and not qty:
-                continue
-            item = db.get(Item, int(iid)) if str(iid).isdigit() else None
-            if not item or item.category != "raw" or item.code == DIESEL_CODE:
-                raise S.BusinessError("اختر المادة من القائمة")
-            if et not in ENTITY_TYPES:
-                raise S.BusinessError("اختر نوع الجهة (مشروع / عميل)")
-            if not (en or "").strip():
-                raise S.BusinessError("أدخل اسم الجهة")
-            lines.append(dict(item=item, qty=parse_float(qty), entity_type=et, entity_name=en.strip()))
-        diesel = db.query(Item).filter(Item.code == DIESEL_CODE).one()
-        for purpose in DIESEL_PURPOSES:
-            q = parse_float(form.get(f"diesel_{purpose}"))
-            if q:
-                lines.append(dict(item=diesel, qty=q, diesel_purpose=purpose))
+        if dest == "sale":
+            for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("sale_price")):
+                if not qty and not price:
+                    continue
+                item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+                if not item or item.category != "raw" or item.code == DIESEL_CODE:
+                    raise S.BusinessError("اختر المادة من القائمة")
+                p = parse_float(price)
+                if not p or p <= 0:
+                    raise S.BusinessError(f"أدخل سعر البيع للمادة «{item.name}»")
+                lines.append(dict(item=item, qty=parse_float(qty), sale_price=p))
+        else:
+            for et, en, iid, qty in zip(form.getlist("entity_type"), form.getlist("entity_name"),
+                                        form.getlist("item_id"), form.getlist("qty")):
+                if not (en or "").strip() and not qty:
+                    continue
+                item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+                if not item or item.category != "raw" or item.code == DIESEL_CODE:
+                    raise S.BusinessError("اختر المادة من القائمة")
+                if et not in ENTITY_TYPES:
+                    raise S.BusinessError("اختر نوع الجهة (مشروع / عميل)")
+                if not (en or "").strip():
+                    raise S.BusinessError("أدخل اسم الجهة")
+                lines.append(dict(item=item, qty=parse_float(qty), entity_type=et, entity_name=en.strip()))
+        if dest == "asphalt":
+            diesel = db.query(Item).filter(Item.code == DIESEL_CODE).one()
+            for purpose in DIESEL_PURPOSES:
+                q = parse_float(form.get(f"diesel_{purpose}"))
+                if q:
+                    lines.append(dict(item=diesel, qty=q, diesel_purpose=purpose))
         req = S.create_request(db, rtype="raw", site=sel, unit=unit, requester=user,
                                work_date=parse_date(form.get("work_date"), date.today()),
-                               reason=form.get("reason"), lines=lines, asphalt_tons=tons)
+                               reason=form.get("reason"), lines=lines, asphalt_tons=tons, raw_dest=dest, customer=customer)
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
-        return back(f"/requests/new/raw?site={sel.id}")
+        return back(f"/requests/new/raw?site={sel.id}&dest={dest}")
     flash(request, f"تم إرسال الطلب {req.req_no} للاعتماد")
     return back(f"/requests/{req.id}")
+
+
+# ---------------- إنتاج الكسارات ----------------
+@app.get("/production", response_class=HTMLResponse)
+def production_list(request: Request, site: str | None = None, db: Session = Depends(get_db),
+                    user: User = Depends(current_user)):
+    sites, sel = pick_site(db, user, site)
+    rows = (db.query(CrusherProduction).filter(CrusherProduction.site_id == sel.id)
+            .order_by(CrusherProduction.date.desc(), CrusherProduction.id.desc()).limit(300).all())
+    return render(request, "production.html", user, sites=sites, sel=sel, rows=rows, price=S.crusher_price(db, sel.id))
+
+
+@app.get("/production/new", response_class=HTMLResponse)
+def production_new(request: Request, site: str | None = None, db: Session = Depends(get_db),
+                   user: User = Depends(require("storekeeper"))):
+    sites, sel = pick_site(db, user, site)
+    units = [u for u in sel.units if u.active and u.kind == "crusher"]
+    items = db.query(Item).filter(Item.category == "raw", Item.crusher.is_(True), Item.active.is_(True)).order_by(Item.id).all()
+    return render(request, "production_new.html", user, sites=sites, sel=sel, units=units, items=items,
+                  price=S.crusher_price(db, sel.id), today=date.today())
+
+
+@app.post("/production/new")
+async def production_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    form = await request.form()
+    sites, sel = pick_site(db, user, form.get("site_id"))
+    try:
+        unit = db.get(Unit, int(form.get("unit_id") or 0))
+        if not unit or unit.site_id != sel.id or unit.kind != "crusher":
+            raise S.BusinessError("اختر الكسارة")
+        price = S.crusher_price(db, sel.id)
+        if price <= 0:
+            raise S.BusinessError("لم يُحدَّد سعر إنتاج الكسارة لهذا الموقع — راجع مدير النظام")
+        rec = CrusherProduction(site_id=sel.id, unit_id=unit.id, date=parse_date(form.get("date"), date.today()),
+                                notes=(form.get("notes") or "").strip() or None, created_by=user.id)
+        for iid, qty in zip(form.getlist("item_id"), form.getlist("qty")):
+            q = parse_float(qty)
+            if not q:
+                continue
+            item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+            if not item or item.category != "raw" or not item.crusher:
+                raise S.BusinessError("اختر المادة من القائمة")
+            if q <= 0:
+                raise S.BusinessError(f"الكمية غير صحيحة للمادة «{item.name}»")
+            rec.lines.append(CrusherProductionLine(item_id=item.id, qty=q, unit_price=price))
+        if not rec.lines:
+            raise S.BusinessError("أدخل كمية مادة واحدة على الأقل")
+        db.add(rec)
+        db.commit()
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/production/new?site={sel.id}")
+    flash(request, f"تم تسجيل إنتاج {S.fmt(rec.total_qty)} طن")
+    return back(f"/production?site={sel.id}")
+
+
+@app.post("/production/{pid}/delete")
+def production_delete(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    rec = db.get(CrusherProduction, pid)
+    if rec:
+        sid = rec.site_id
+        db.delete(rec)
+        db.commit()
+        flash(request, "تم حذف سجل الإنتاج")
+        return back(f"/production?site={sid}")
+    return back("/production")
+
+
+@app.get("/admin/crusher-prices", response_class=HTMLResponse)
+def admin_crusher_prices(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    sites = db.query(Site).order_by(Site.id).all()
+    return render(request, "admin_crusher_prices.html", user, sites=sites,
+                  prices={s.id: S.crusher_price(db, s.id) for s in sites})
+
+
+@app.post("/admin/crusher-prices")
+async def admin_crusher_prices_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    form = await request.form()
+    for s in db.query(Site):
+        v = parse_float(form.get(f"price_{s.id}"))
+        if v is not None and v >= 0:
+            S.set_crusher_price(db, s.id, v)
+    db.commit()
+    flash(request, "تم حفظ أسعار إنتاج الكسارات")
+    return back("/admin/crusher-prices")
 
 
 @app.get("/requests/{rid}", response_class=HTMLResponse)
@@ -841,7 +969,7 @@ def raw_stock(request: Request, site: str | None = None, db: Session = Depends(g
     sites, sel = pick_site(db, user, site)
     st = S.raw_stock_table(db, sel.id)
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
-    empty = dict(open_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0)
+    empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0)
     rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
     return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows)
 
@@ -1317,6 +1445,7 @@ async def admin_items_post(request: Request, db: Session = Depends(get_db),
     it.uom = (form.get("uom") or "قطعة").strip()
     it.category = form.get("category") if form.get("category") in ("spare", "raw") else "spare"
     it.active = bool(form.get("active"))
+    it.crusher = bool(form.get("crusher")) and it.category == "raw"
     db.add(it)
     db.commit()
     flash(request, "تم الحفظ")

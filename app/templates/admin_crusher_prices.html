@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>أسعار إنتاج الكسارات</h1>
+{% include "_admin_nav.html" %}
+<form method="post" class="card">
+  <p class="muted" style="margin-top:0">سعر الطن الثابت لكل موقع. يُستخدم في تسجيل إنتاج الكسارة وفي تكلفة صرف نواتج الكسارة (البحص والبودرة)، ولا يعدّله غير مدير النظام. التعديل يسري على ما يُسجَّل بعده فقط.</p>
+  <div class="tw"><table class="t" style="max-width:520px">
+    <tr><th>الموقع</th><th class="n">سعر الطن</th></tr>
+    {% for s in sites %}<tr><td>{{ s.name }}</td><td><input name="price_{{ s.id }}" type="number" step="0.01" min="0" value="{{ prices[s.id] if prices[s.id] else '' }}" style="max-width:160px"></td></tr>{% endfor %}
+  </table></div>
+  <button class="btn" style="margin-top:10px">حفظ</button>
+</form>
+{% endblock %}

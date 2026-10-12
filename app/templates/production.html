@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>إنتاج الكسارات — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="muted" style="align-self:center">سعر الطن الثابت للموقع: <b>{{ fmt(price) if price else 'لم يُحدَّد' }}</b>{% if user.has('admin') %} — <a href="/admin/crusher-prices">تعديل</a>{% endif %}</div>
+  <span class="right"></span>
+  {% if user.has('storekeeper') %}<a class="btn green" href="/production/new?site={{ sel.id }}">+ تسجيل إنتاج</a>{% endif %}
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>الكسارة</th><th>المواد (الكمية بالطن)</th><th class="n">إجمالي الكمية</th><th class="n">سعر الطن</th><th class="n">القيمة</th><th>سجّله</th>{% if user.has('admin') %}<th></th>{% endif %}</tr>
+{% for p in rows %}<tr><td>{{ p.date }}</td><td>{{ p.unit.name if p.unit else '' }}</td>
+  <td>{% for l in p.lines %}{{ l.item.name }}: <b>{{ fmt(l.qty) }}</b>{{ '، ' if not loop.last }}{% endfor %}{% if p.notes %}<div class="muted">{{ p.notes }}</div>{% endif %}</td>
+  <td class="n">{{ fmt(p.total_qty) }}</td><td class="n">{{ fmt(p.lines[0].unit_price) if p.lines else '' }}</td><td class="n"><b>{{ fmt(p.total_value) }}</b></td>
+  <td>{{ p.user.name if p.user else '' }}</td>
+  {% if user.has('admin') %}<td><form method="post" action="/production/{{ p.id }}/delete" onsubmit="return confirm('حذف سجل الإنتاج؟')"><button class="btn sec sm">حذف</button></form></td>{% endif %}</tr>
+{% else %}<tr><td colspan="8" class="muted">لا يوجد إنتاج مسجل</td></tr>{% endfor %}
+{% if rows %}<tr class="total"><td colspan="3">الإجمالي</td><td class="n">{{ fmt(rows|sum(attribute='total_qty')) }}</td><td></td><td class="n">{{ fmt(rows|sum(attribute='total_value')) }}</td><td></td>{% if user.has('admin') %}<td></td>{% endif %}</tr>{% endif %}
+</table></div></div>
+{% endblock %}
