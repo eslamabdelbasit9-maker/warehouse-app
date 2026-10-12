@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>المظهر</h1>
+<h1>المظهر الافتراضي لكل المستخدمين</h1>
 {% include "_admin_nav.html" %}
+<div class="flash err" style="margin-bottom:14px">⚠ التغيير في هذه الصفحة يُطبَّق على <b>جميع المستخدمين</b> (باستثناء من اختار مظهراً خاصاً به).
+  لتغيير مظهرك <b>أنت فقط</b>، استخدم <a href="/account">⚙ الإعدادات</a>.</div>
 {% with action="/admin/appearance", form_title="", form_sub="",
         save_note="هذا هو المظهر الافتراضي لجميع المستخدمين. تظهر التغييرات هنا للمعاينة، وتُطبَّق على الجميع عند الضغط على «حفظ» (باستثناء من اختار مظهراً خاصاً به من الإعدادات).",
-        reset_label="استعادة الافتراضي", reset_confirm="هل تريد استعادة الألوان والخط الافتراضيين؟" %}{% include "_appearance_form.html" %}{% endwith %}
+        save_confirm="سيتغيّر المظهر لكل المستخدمين. هل تريد المتابعة؟", reset_label="استعادة الافتراضي", reset_confirm="هل تريد استعادة الألوان والخط الافتراضيين؟" %}{% include "_appearance_form.html" %}{% endwith %}
 {% endblock %}

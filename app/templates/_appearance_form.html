@@ -28,7 +28,7 @@
   </div>
   <p class="muted" style="margin-top:14px">{{ save_note }}</p>
   <div style="display:flex;gap:8px">
-    <button class="btn">حفظ</button>
+    <button class="btn"{% if save_confirm %} onclick="return confirm('{{ save_confirm }}')"{% endif %}>حفظ</button>
     <button class="btn sec" name="reset" value="1" formnovalidate onclick="return confirm('{{ reset_confirm }}')">{{ reset_label }}</button>
   </div>
 </form>
