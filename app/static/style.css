@@ -441,3 +441,14 @@ table.t td.n,table.t th.n{text-align:center}
 .seg-tg a.segb{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none}
 .seg-tg a.segb.on{background:var(--card,#fff);color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 html[data-mode=dark] .seg-tg a.segb.on{background:#2A333F;color:#fff}
+/* عناوين مجموعات القائمة: أوضح وبارزة */
+aside.side .sg{font-size:13px;font-weight:800;color:#fff;letter-spacing:.2px;padding:14px 10px 6px;margin-top:4px;
+  display:flex;align-items:center;gap:8px;opacity:.95}
+aside.side .sg::before{content:"";width:4px;height:14px;border-radius:3px;background:var(--accent);flex:none}
+aside.side .sg::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.18)}
+aside.side nav.main>.sg:first-child{margin-top:0;padding-top:6px}
+/* الشعار: حركة مرة واحدة لما الماوس يعدّي، وبعدها يرجع لوضعه */
+.side-brand:hover .logo{transform:none;box-shadow:0 0 0 1px rgba(255,255,255,.12);animation:logo-pop .7s cubic-bezier(.34,1.56,.64,1)}
+@keyframes logo-pop{0%{transform:none}35%{transform:scale(1.1) rotate(-4deg);box-shadow:0 0 0 2px var(--accent),0 8px 22px rgba(0,0,0,.35)}
+  65%{transform:scale(1.04) rotate(2deg)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.side-brand:hover .logo{animation:none}}
