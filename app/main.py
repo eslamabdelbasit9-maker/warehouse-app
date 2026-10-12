@@ -38,7 +38,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.include_router(auth_router)
 T = Jinja2Templates(directory=APP_DIR / "templates")
-T.env.globals.update(fmt=S.fmt, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
+T.env.globals.update(fmt=S.fmt, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
                      TRANSFER_STATUS=TRANSFER_STATUS)
@@ -64,7 +64,7 @@ def _asset_version():
     """رقم نسخة لملفات التصميم والحركة — بيتغير مع أي تعديل، فالمتصفح ياخد النسخة الجديدة بعد كل Deploy."""
     import hashlib
     h = hashlib.md5()
-    for f in ("static/style.css", "static/anim.js"):
+    for f in ("static/style.css", "static/anim.js", "static/charts.js"):
         h.update((APP_DIR / f).read_bytes())
     return h.hexdigest()[:10]
 
@@ -192,6 +192,20 @@ def save_upload(db, upload, images_only=False):
     db.add(Attachment(key=name, filename=Path(upload.filename).name[:300],
                       content_type=upload.content_type or "application/octet-stream", data=data))
     return name
+
+
+def parse_month(v):
+    """«2026-05» → (أول الشهر، أول الشهر اللي بعده) أو None."""
+    try:
+        y, m = (int(x) for x in str(v).split("-")[:2])
+        start = date(y, m, 1)
+    except (TypeError, ValueError):
+        return None
+    return start, date(y + (m == 12), m % 12 + 1, 1)
+
+
+def month_label(mon):
+    return f"{S.MONTHS_AR[mon[0].month - 1]} {mon[0].year}" if mon else ""
 
 
 def parse_float(v):
@@ -336,6 +350,54 @@ def can_see_full_dashboard(user):
     return user.has("engineer", "manager", "final")
 
 
+def last_12_months(d_to):
+    months, y, m = [], d_to.year, d_to.month
+    for _ in range(12):
+        months.insert(0, (y, m))
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return months
+
+
+def month_after(ym):
+    y, m = ym
+    return date(y + (m == 12), m % 12 + 1, 1)
+
+
+def monthly_charts(rows, months, sel, pivot_sites, sites, link=None):
+    """rows: (site_id, date, value) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
+    فرع واحد (أو فرع واحد فيه بيانات): رسم واحد. لون كل فرع ثابت حسب ترتيبه."""
+    monthly = {k: {} for k in months}
+    for sid, d, v in rows:
+        if d and (d.year, d.month) in monthly:
+            cell = monthly[(d.year, d.month)]
+            cell[sid] = cell.get(sid, 0) + (v or 0)
+    data = [dict(y=y, m=m, by=monthly[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
+    names = {s.id: s.name for s in pivot_sites}
+    for p in data:
+        p["by_named"] = [(sid, (names[sid], p["by"][sid])) for sid in sorted(p["by"]) if sid in names and p["by"][sid]]
+        if link:   # الشهر كله (لفرع واحد: الفرع ده)
+            p["url"] = link(sel.id if sel else (pivot_sites[0].id if len(pivot_sites) == 1 else None), p["y"], p["m"])
+    chart_sites = sorted((s for s in pivot_sites if any(p["by"].get(s.id) for p in data)),
+                         key=lambda s: s.id) if not sel else []
+    if len(chart_sites) > 1:
+        keys = [s.id for s in chart_sites]
+        chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=30)
+        chart2 = S.grouped_chart([p["by"] for p in data], keys, h=250, pad_t=62)
+        site_color = {s.id: i % 8 for i, s in enumerate(sorted(sites, key=lambda s: s.id))}
+        for ch in (chart, chart2):
+            for b, p in zip(ch["bars"], data):
+                for sg in b["segs"]:
+                    sid = chart_sites[sg["k"]].id
+                    sg["c"] = site_color[sid]
+                    if link:
+                        sg["url"] = link(sid, p["y"], p["m"])
+        legend = [dict(name=s.name, c=site_color[s.id], total=sum(p["by"].get(s.id, 0) for p in data)) for s in chart_sites]
+    else:
+        chart, chart2, site_color, legend = S.column_chart([p["total"] for p in data], bar_max=30), None, {}, []
+    return dict(data=data, chart=chart, chart2=chart2, site_c=site_color, legend=legend, sites=pivot_sites,
+                total=sum(p["total"] for p in data))
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, site: str | None = None, date_from: str | None = None, date_to: str | None = None,
               db: Session = Depends(get_db), user: User = Depends(current_user)):
@@ -396,32 +458,33 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
     line_val = func.sum(ReceiptLine.qty * ReceiptLine.unit_price)
     period_purchases = (db.query(line_val).select_from(ReceiptLine).join(Receipt)
                         .filter(Receipt.site_id.in_(ids), Receipt.date.between(d_from, d_to)).scalar() or 0)
-    months = []
-    y, m = d_to.year, d_to.month
-    for _ in range(12):
-        months.insert(0, (y, m))
-        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
-    first = date(*months[0], 1)
-    last = date(d_to.year + (d_to.month == 12), d_to.month % 12 + 1, 1)
-    monthly = {k: {} for k in months}
-    for sid, d, v in (db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
-                      .filter(Receipt.site_id.in_(ids), Receipt.date >= first, Receipt.date < last)
-                      .group_by(Receipt.id, Receipt.site_id, Receipt.date)):
-        cell = monthly[(d.year, d.month)]
-        cell[sid] = cell.get(sid, 0) + (v or 0)
-    purchases = [dict(y=y, m=m, by=monthly[(y, m)], total=sum(monthly[(y, m)].values())) for y, m in months]
-    chart = S.column_chart([p["total"] for p in purchases])
+    months = last_12_months(d_to)
+    first, last = date(*months[0], 1), month_after(months[-1])
+    purchases = monthly_charts(
+        db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
+        .filter(Receipt.site_id.in_(ids), Receipt.date >= first, Receipt.date < last)
+        .group_by(Receipt.id, Receipt.site_id, Receipt.date), months, sel, pivot_sites, sites,
+        link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
+    # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
+    issues = monthly_charts(
+        db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value)).select_from(RequestLine).join(Req)
+        .filter(Req.type == "spare", Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]),
+                RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
+        .group_by(Req.id, Req.site_id, Req.work_date), months, sel, pivot_sites, sites,
+        link=lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
+    # رواكد المشتريات (نفس كارت المشتريات): اللي لسه ما اتصرفش من وارد كل شهر
+    stale = monthly_charts(((sid, d, v) for sid, d, v, _ in S.unissued_purchases(db, ids, first)), months, sel,
+                           pivot_sites, sites, link=lambda sid, y, m: "/stagnant" + (f"?site={sid}" if sid else ""))
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", *approved)
                  .group_by(Item.code, Item.name, Item.uom).order_by(func.sum(RequestLine.value).desc()).limit(10).all())
-    stagnant = S.stagnant_items(db, ids)
     recent = base.order_by(Req.created_at.desc()).limit(8).all()
     return render(request, "dashboard.html", user, sites=sites, sel=sel, d_from=d_from, d_to=d_to,
                   my_pending=my_pending, pending_by_stage=pending_by_stage, period_reqs=period_reqs,
                   period_spend=period_spend, spend=spend, pivot_sites=pivot_sites, raw_pivot=raw_pivot,
-                  top_items=top_items, stagnant_value=sum(x["value"] for x in stagnant), stagnant_n=len(stagnant),
-                  period_purchases=period_purchases, purchases=purchases, chart=chart, MONTHS_AR=S.MONTHS_AR,
+                  top_items=top_items,
+                  period_purchases=period_purchases, purchases=purchases, issues=issues, stale=stale,
                   recent=recent)
 
 
@@ -433,9 +496,19 @@ def stagnant(request: Request, site: str | None = None, days: int = 180, db: Ses
     sites = user_sites(db, user)
     sel = next((s for s in sites if str(s.id) == str(site)), None)
     days = days if days in S.STAGNANT_DAYS else 180
-    rows = S.stagnant_items(db, [sel.id] if sel else [s.id for s in sites], days)
+    ids = [sel.id] if sel else [s.id for s in sites]
+    rows = S.stagnant_items(db, ids, days)
+    # رواكد المشتريات: قيمة اللي لسه ما اتصرفش من وارد كل شهر (آخر 12 شهر)
+    months = last_12_months(date.today())
+    left = S.unissued_purchases(db, ids, date(*months[0], 1))
+    unissued = monthly_charts(((sid, d, v) for sid, d, v, _ in left), months, sel, sites if not sel else [sel], sites)
+    bought = {}
+    for sid, d, _, v in left:
+        bought[(d.year, d.month)] = bought.get((d.year, d.month), 0) + v
+    for p in unissued["data"]:
+        p["bought"] = bought.get((p["y"], p["m"]), 0)
     return render(request, "stagnant.html", user, sites=sites, sel=sel, days=days, rows=rows,
-                  total=sum(r["value"] for r in rows), day_opts=S.STAGNANT_DAYS)
+                  total=sum(r["value"] for r in rows), day_opts=S.STAGNANT_DAYS, unissued=unissued)
 
 
 # ---------------- API ----------------
@@ -458,7 +531,8 @@ def api_stock(site: int, db: Session = Depends(get_db), user: User = Depends(cur
 # ---------------- الطلبات ----------------
 @app.get("/requests", response_class=HTMLResponse)
 def requests_list(request: Request, type: str = "", status: str = "", site: str = "", q: str = "",
-                  mine: str = "", page: int = 1, db: Session = Depends(get_db), user: User = Depends(current_user)):
+                  mine: str = "", month: str = "", ok: str = "", page: int = 1, db: Session = Depends(get_db),
+                  user: User = Depends(current_user)):
     sites = user_sites(db, user)
     qry = db.query(Req).filter(or_(Req.site_id.in_([s.id for s in sites]), Req.requester_id == user.id))
     if type in REQ_TYPES:
@@ -469,6 +543,11 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
         qry = qry.filter(Req.site_id == int(site))
     if mine:
         qry = qry.filter(Req.requester_id == user.id)
+    mon = parse_month(month)
+    if mon:
+        qry = qry.filter(Req.work_date >= mon[0], Req.work_date < mon[1])
+    if ok:   # المعتمد (نهائي أو جزئي) — من رسم الصرف الشهري
+        qry = qry.filter(Req.status.in_(["approved", "partial"]))
     if q.strip():
         like = f"%{q.strip()}%"
         qry = qry.filter(or_(Req.req_no.ilike(like), Req.reason.ilike(like), Req.requester_name.ilike(like),
@@ -477,7 +556,8 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
     per = 50
     rows = qry.order_by(Req.work_date.desc(), Req.id.desc()).offset((page - 1) * per).limit(per).all()
     return render(request, "requests_list.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
-                  sites=sites, f=dict(type=type, status=status, site=site, q=q, mine=mine))
+                  sites=sites, f=dict(type=type, status=status, site=site, q=q, mine=mine, month=month if mon else "", ok=ok),
+                  month_label=month_label(mon))
 
 
 @app.get("/requests/new/spare", response_class=HTMLResponse)
@@ -804,16 +884,20 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
 
 # ---------------- الوارد ----------------
 @app.get("/receipts", response_class=HTMLResponse)
-def receipts(request: Request, site: str | None = None, q: str = "", db: Session = Depends(get_db),
+def receipts(request: Request, site: str | None = None, q: str = "", month: str = "", db: Session = Depends(get_db),
              user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     qry = db.query(Receipt).filter(Receipt.site_id == sel.id)
+    mon = parse_month(month)
+    if mon:
+        qry = qry.filter(Receipt.date >= mon[0], Receipt.date < mon[1])
     if q.strip():
         like = f"%{q.strip()}%"
         qry = qry.filter(or_(Receipt.invoice_no.ilike(like), Receipt.supplier.ilike(like),
                              Receipt.lines.any(ReceiptLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
     rows = qry.order_by(Receipt.date.desc(), Receipt.id.desc()).limit(500).all()
-    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q)
+    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q,
+                  month=month if mon else "", month_label=month_label(mon))
 
 
 @app.post("/receipts/{rid}/attach")

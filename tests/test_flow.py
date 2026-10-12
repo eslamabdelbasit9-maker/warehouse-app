@@ -549,14 +549,24 @@ def test_dashboard_roles_and_stagnant(env):
     assert "الأصناف الراكدة" in c.get("/stagnant").text   # بس يقدر يشوف الرواكد
     login(c, env, "eng.crusher@example.com")
     page = c.get("/").text
-    assert "صرف قطع الغيار المعتمد" in page and "قيمة الرواكد" in page and "نوع الوحدة" in page and "كسارة" in page
+    assert "صرف قطع الغيار المعتمد" in page and "/stagnant" in page and "نوع الوحدة" in page and "كسارة" in page
     assert "قيمة المشتريات" in page and "المشتريات الشهرية" in page
     # وارد «NEW-1» من 10 أيام بـ 100 (2 × 50) لازم يظهر في المشتريات الشهرية
     page = c.get(f"/?site={env['site']}").text
     assert "100" in page.split("المشتريات الشهرية", 1)[1]
     page = c.get(f"/?site={env['site']}&date_from=2000-01-01&date_to=2099-12-31").text
     assert "عدد الطلبات" in page and "نوع الوحدة" not in page   # موقع واحد: حسب الوحدة نفسها
-    assert "الأصناف الراكدة" in c.get(f"/stagnant?site={env['site']}&days=90").text
+    page = c.get(f"/stagnant?site={env['site']}&days=90").text
+    assert "الأصناف الراكدة" in page and "رواكد المشتريات الشهرية" in page
+    page = c.get("/").text
+    assert "صرف قطع الغيار الشهري" in page and 'data-m="rk"' in page
+    # فلتر الشهر في الوارد والطلبات (روابط الرسوم)
+    from datetime import date as _d
+    ym = f"{_d.today():%Y-%m}"
+    page = c.get(f"/receipts?site={env['site']}&month={ym}").text
+    assert "الشهر:" in page and "NEW-1" in page
+    assert "NEW-1" not in c.get(f"/receipts?site={env['site']}&month=2001-01").text
+    assert "الشهر:" in c.get(f"/requests?type=spare&ok=1&month={ym}").text
 
 
 def test_stagnant_rules(env):
@@ -602,6 +612,10 @@ def test_stagnant_rules(env):
     rows = {r["item"].code: r for r in S.stagnant_items(db, [site.id], 180, today=date(2031, 12, 1))}
     assert "ST_C" not in rows
     assert rows["ST_A"]["cur"] == 2 and rows["ST_A"]["last"] == date(2031, 6, 1)
+    # رواكد المشتريات (بالأقدمية): ST_A الافتتاحي (3) اتصرف كله، فوارد مارس (2 × 10) لسه راكد؛
+    # ST_C اتصرف كله (معلق)؛ ST_B وارد سبتمبر (5 × 10) كله راكد
+    left = {(d.month, v) for sid, d, v, _ in S.unissued_purchases(db, [site.id], date(2031, 1, 1)) if d.year == 2031}
+    assert (3, 20) in left and (9, 50) in left and (2, 0) in left and (4, 0) in left
     db.close()
 
 

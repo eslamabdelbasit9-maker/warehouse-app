@@ -317,3 +317,90 @@ html[data-mode=dark] .stg-red-key{background:rgba(220,60,60,.22);color:#ffb4b4}
 /* صرف الأسفلت: معدل الديزل لكل طن */
 .dpt{display:inline-block;margin-top:10px;padding:8px 14px;border-radius:10px;background:rgba(var(--brand-rgb),.08);border:1px solid rgba(var(--brand-rgb),.18);font-weight:600}
 .dpt b{font-size:1.15em;direction:ltr;unicode-bidi:isolate}
+
+/* ===== القائمة الجانبية ===== */
+.mtop{display:none}
+aside.side{position:fixed;top:0;bottom:0;right:0;width:236px;z-index:30;display:flex;flex-direction:column;color:#fff;
+  background:linear-gradient(180deg,var(--brand) 0%,var(--brand2) 60%,var(--brand3) 100%);box-shadow:-2px 0 16px rgba(var(--brand-rgb),.22);overflow-y:auto}
+.side-brand{display:flex;align-items:center;gap:10px;padding:16px 16px 14px;color:#fff;border-bottom:1px solid rgba(255,255,255,.12)}
+.side-brand:hover{text-decoration:none}
+.side-brand .logo{height:38px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+.side-brand .title{font-weight:700;font-size:15px;line-height:1.3}
+aside.side nav.main{display:flex;flex-direction:column;gap:2px;padding:10px 10px;flex:1}
+aside.side .sg{font-size:11.5px;color:rgba(255,255,255,.55);padding:12px 10px 4px;font-weight:600}
+aside.side nav.main a,.side-foot a{display:flex;align-items:center;gap:10px;color:#dbe6ff;padding:9px 12px;border-radius:9px;font-size:14.5px;font-weight:600;position:relative}
+aside.side nav.main a::after{display:none}
+aside.side nav.main a:hover,.side-foot a:hover{background:rgba(255,255,255,.10);color:#fff;text-decoration:none}
+aside.side nav.main a.on,.side-foot a.on{background:rgba(255,255,255,.16);color:#fff}
+aside.side nav.main a.on::before{content:"";position:absolute;right:-10px;top:8px;bottom:8px;width:4px;border-radius:4px 0 0 4px;background:var(--accent,#F5B301)}
+aside.side .ic{flex:none;opacity:.9}
+aside.side .badge-n{margin-inline-start:auto}
+.side-foot{border-top:1px solid rgba(255,255,255,.12);padding:10px}
+.side-foot .who-n{font-size:12.5px;color:rgba(255,255,255,.7);padding:4px 12px 6px}
+.side-foot a{font-size:13.5px;padding:7px 12px}
+body.has-side main{margin-right:236px;margin-left:0;max-width:none;padding:18px 26px}
+body.has-side main>*{max-width:1280px;margin-left:auto;margin-right:auto}
+.side-dim{display:none}
+@media (max-width:900px){
+  .mtop{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:25;padding:8px 12px;min-height:54px;color:#fff;
+    background:linear-gradient(120deg,var(--brand) 0%,var(--brand2) 55%,var(--brand3) 100%)}
+  .mtop .logo{height:32px}.mtop .title{font-weight:700;font-size:15px;flex:1}
+  .mtop .menu-btn{display:block;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:8px;font-size:22px;line-height:1;padding:7px 12px;cursor:pointer;position:relative}
+  .mtop .menu-btn .badge-n{position:absolute;top:-6px;left:-6px;margin:0}
+  aside.side{transform:translateX(105%);transition:transform .28s var(--ease,ease)}
+  body.side-open aside.side{transform:none}
+  body.side-open .side-dim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:29}
+  body.has-side main{margin-right:0;padding:12px 10px}
+}
+@media print{aside.side,.mtop,.side-dim{display:none}body.has-side main{margin:0}}
+/* المشتريات حسب الفرع: ألوان ثابتة لكل فرع (متحققة للعمى اللوني) */
+.chart .bar path.s0,.sw.s0{fill:#2a78d6;background:#2a78d6}.chart .bar path.s1,.sw.s1{fill:#eb6834;background:#eb6834}
+.chart .bar path.s2,.sw.s2{fill:#1baf7a;background:#1baf7a}.chart .bar path.s3,.sw.s3{fill:#eda100;background:#eda100}
+.chart .bar path.s4,.sw.s4{fill:#e87ba4;background:#e87ba4}.chart .bar path.s5,.sw.s5{fill:#008300;background:#008300}
+.chart .bar path.s6,.sw.s6{fill:#6250d6;background:#6250d6}.chart .bar path.s7,.sw.s7{fill:#e34948;background:#e34948}
+html[data-mode=dark] .chart .bar path.s0,html[data-mode=dark] .sw.s0{fill:#3987e5;background:#3987e5}
+html[data-mode=dark] .chart .bar path.s1,html[data-mode=dark] .sw.s1{fill:#d95926;background:#d95926}
+html[data-mode=dark] .chart .bar path.s2,html[data-mode=dark] .sw.s2{fill:#199e70;background:#199e70}
+html[data-mode=dark] .chart .bar path.s3,html[data-mode=dark] .sw.s3{fill:#c98500;background:#c98500}
+html[data-mode=dark] .chart .bar path.s4,html[data-mode=dark] .sw.s4{fill:#d55181;background:#d55181}
+html[data-mode=dark] .chart .bar path.s6,html[data-mode=dark] .sw.s6{fill:#9085e9;background:#9085e9}
+html[data-mode=dark] .chart .bar path.s7,html[data-mode=dark] .sw.s7{fill:#e66767;background:#e66767}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin:2px 0 10px;font-size:13px;color:var(--muted)}
+.legend .lg{display:inline-flex;align-items:center;gap:6px}.legend b{color:var(--text,#1f2937);font-weight:700}
+html[data-mode=dark] .legend b{color:#F3F4F6}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
+.chart .tip .ts{display:flex;align-items:center;gap:6px}.chart .tip .sw{box-shadow:0 0 0 1px rgba(255,255,255,.5)}
+.chart .val{font-size:11.5px}
+/* القائمة المصغّرة: أيقونات بس، والشعار فاضل ظاهر */
+.side-head{display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,.12);padding-left:8px}
+.side-head .side-brand{border-bottom:0;flex:1;min-width:0}
+.side-tg{flex:none;background:rgba(255,255,255,.12);border:0;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;display:grid;place-items:center;transition:background .2s,transform .3s}
+.side-tg:hover{background:rgba(255,255,255,.22)}
+.side-tg .ic{transform:rotate(180deg);transition:transform .3s}
+aside.side,body.has-side main{transition:width .25s var(--ease,ease),margin .25s var(--ease,ease)}
+@media (min-width:901px){
+  body.side-mini aside.side{width:80px}
+  body.side-mini main{margin-right:80px}
+  body.side-mini .side-head{flex-direction:column;padding:12px 0 10px;gap:10px}
+  body.side-mini .side-brand{padding:0;justify-content:center}
+  body.side-mini .side-brand .logo{height:auto;width:60px;max-width:60px}
+  body.side-mini aside.side .title,body.side-mini aside.side nav.main a span:not(.badge-n),body.side-mini .side-foot a span,
+  body.side-mini aside.side .who-n{display:none}
+  body.side-mini aside.side .sg{font-size:0;padding:6px 0;margin:4px 14px;border-top:1px solid rgba(255,255,255,.14)}
+  body.side-mini aside.side nav.main a,body.side-mini .side-foot a{justify-content:center;padding:10px 0}
+  body.side-mini aside.side .badge-n{position:absolute;top:2px;left:8px;margin:0;font-size:10px;min-width:16px;padding:0 4px}
+  body.side-mini .side-tg .ic{transform:none}
+}
+@media (max-width:900px){.side-tg{display:none}}
+/* زرار تبديل شكل رسم المشتريات */
+.seg-tg{display:inline-flex;background:rgba(var(--brand-rgb),.07);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;margin-bottom:8px}
+.seg-tg button{border:0;background:none;padding:6px 14px;border-radius:7px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg-tg button.on{background:var(--card,#fff);color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+html[data-mode=dark] .seg-tg button.on{background:#2A333F;color:#fff}
+.chart .val.sm{font-size:10.5px;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:8px;align-self:center;background:rgba(var(--brand-rgb),.09);border:1px solid rgba(var(--brand-rgb),.2);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
+.chip a{color:var(--muted);text-decoration:none;font-weight:700}.chip a:hover{color:var(--err)}
+.chart .hint{margin:0 0 4px;font-size:12.5px}
+.chart a.go{cursor:pointer}.chart a.go:hover path{filter:brightness(1.12)}
+.chart .bar[data-url]{cursor:pointer}
+.view[data-mode=grp] .bar .hit{pointer-events:none}

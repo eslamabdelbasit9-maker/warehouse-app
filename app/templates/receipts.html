@@ -3,6 +3,7 @@
 <h1>الوارد — {{ sel.name }}</h1>
 <form class="filters card noprint" method="get">{% include "_site_pick.html" %}
   <div class="f"><label>بحث (فاتورة/مورد/صنف/كود)</label><input name="q" value="{{ q }}" data-live="#rtbl"></div>
+  {% if month %}<input type="hidden" name="month" value="{{ month }}"><span class="chip">الشهر: {{ month_label }} <a href="/receipts?site={{ sel.id }}" title="إلغاء فلتر الشهر">✕</a></span>{% endif %}
   <button class="btn">بحث</button><span class="right"></span>
   {% if user.has('storekeeper') %}<a class="btn sec" href="/admin/invoices">رفع الفواتير</a> <a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
 <div class="card"><div class="tw"><table class="t" id="rtbl">

@@ -234,11 +234,63 @@ def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, b
         r = min(4, bh, bw / 2)
         path = (f"M{x:.1f},{pad_t + plot_h:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
                 f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{pad_t + plot_h:.1f} Z") if bh > 0 else ""
-        bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band))
+        bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band, bw=bw))
     grid = [dict(y=pad_t + plot_h - plot_h * t / top, v=t) for t in ticks]
-    return dict(w=w, h=h, bars=bars, grid=grid, base=pad_t + plot_h, pad_l=pad_l, pad_t=pad_t, plot_h=plot_h,
+    return dict(w=w, h=h, bars=bars, grid=grid, base=pad_t + plot_h, pad_l=pad_l, pad_t=pad_t, plot_h=plot_h, top=top,
                 x0=pad_l, x1=w - pad_r, tick_x=w - pad_r + 8,
                 max_i=max(range(len(values)), key=lambda i: values[i]) if any(values) else None)
+
+
+def _bar_path(x, y, bw, bh, r):
+    """عمود من (x, y+bh) لفوق، بطرف علوي مدوّر r (r=0 من غير تدوير)."""
+    b = y + bh
+    if r <= 0:
+        return f"M{x:.1f},{b:.1f} V{y:.1f} H{x + bw:.1f} V{b:.1f} Z"
+    return (f"M{x:.1f},{b:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
+            f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{b:.1f} Z")
+
+
+def stacked_chart(stacks, keys, gap=2, **kw):
+    """زي column_chart بس كل عمود مقسوم لأجزاء (لكل مفتاح في keys بالترتيب من تحت لفوق) بفاصل 2px.
+    stacks: list of dict(key → value). كل جزء بياخد ترتيب المفتاح (k) عشان اللون يفضل ثابت للفرع."""
+    totals = [sum(s.get(k, 0) or 0 for k in keys) for s in stacks]
+    c = column_chart(totals, **kw)
+    scale = c["plot_h"] / c["top"] if c["top"] else 0
+    for b, s in zip(c["bars"], stacks):
+        segs, y = [], c["base"]
+        parts = [(i, s.get(k, 0) or 0) for i, k in enumerate(keys) if (s.get(k, 0) or 0) > 0]
+        for j, (i, v) in enumerate(parts):
+            h = v * scale
+            top_seg = j == len(parts) - 1
+            hh = h - (0 if j == 0 else gap)          # الفاصل بياكل من الجزء اللي فوق
+            if hh > 0.3:
+                r = min(4, hh, b["bw"] / 2) if top_seg else 0
+                segs.append(dict(k=i, path=_bar_path(b["x"], y - h, b["bw"], hh, r)))
+            y -= h
+        b["segs"] = segs
+    return c
+
+
+def grouped_chart(stacks, keys, gap=2, **kw):
+    """أعمدة جنب بعض: لكل شهر عمود لكل مفتاح (فرع) بفاصل 2px — للمقارنة بين الفروع."""
+    flat = [s.get(k, 0) or 0 for s in stacks for k in keys]
+    c = column_chart([max([s.get(k, 0) or 0 for k in keys] or [0]) for s in stacks], **kw)
+    n = max(1, len(keys))
+    scale = c["plot_h"] / c["top"] if c["top"] else 0
+    for b, s in zip(c["bars"], stacks):
+        bw = min(14, (b["band"] * 0.78 - gap * (n - 1)) / n)
+        x0 = b["hit_x"] + (b["band"] - (bw * n + gap * (n - 1))) / 2
+        segs = []
+        for i, k in enumerate(keys):   # أول فرع على اليمين (عربي)
+            v = s.get(k, 0) or 0
+            x = x0 + (n - 1 - i) * (bw + gap)
+            h = v * scale
+            segs.append(dict(k=i, v=v, cx=x + bw / 2, y=c["base"] - h,
+                             path=_bar_path(x, c["base"] - h, bw, h, min(4, h, bw / 2)) if h > 0.3 else ""))
+        b["segs"] = segs
+    c["grouped"] = True
+    c["flat_max"] = max(flat or [0])
+    return c
 
 
 # ---------------- الرواكد ----------------
@@ -308,6 +360,34 @@ def stagnant_items(db: Session, site_ids, days=180, today=None):
                             last=last_out.get(iid), since=since, idle_days=idle,
                             added_qty=sum(q for _, q in added), added_last=max((d for d, _ in added), default=None)))
     out.sort(key=lambda x: -x["value"])
+    return out
+
+
+def unissued_purchases(db: Session, site_ids, since):
+    """المشتريات اللي دخلت وما اتصرفتش: الصرف (المعتمد + المعلق في الاعتماد + التحويل الصادر) بيتخصم
+    بالأقدمية (الافتتاحي الأول، وبعده الوارد بالتاريخ). يرجع لكل سطر وارد من `since`:
+    (site_id, date, قيمة الباقي، قيمة الوارد)."""
+    out = []
+    for sid in site_ids:
+        st = stock_table(db, sid)
+        inflow = defaultdict(list)   # item → [(date, qty, price, is_receipt)]
+        for iid, r in st.items():
+            if r["open_qty"] > 0:
+                inflow[iid].append((None, r["open_qty"], 0, False))
+        for iid, d, q, p in (db.query(ReceiptLine.item_id, Receipt.date, ReceiptLine.qty, ReceiptLine.unit_price)
+                             .join(Receipt).filter(Receipt.site_id == sid)):
+            inflow[iid].append((d, q or 0, p or 0, True))
+        for iid, d, q in (db.query(TransferLine.item_id, Transfer.date, TransferLine.recv_qty).join(Transfer)
+                          .filter(Transfer.status == "received", Transfer.to_site_id == sid)):
+            inflow[iid].append((d, q or 0, 0, False))
+        for iid, lst in inflow.items():
+            r = st.get(iid)
+            used = (r["out_qty"] + r["tr_out_qty"] + r["pending_qty"]) if r else 0
+            for d, q, p, is_rec in sorted(lst, key=lambda x: (x[0] is not None, x[0] or datetime.min.date())):
+                take = min(q, used)
+                used -= take
+                if is_rec and d >= since:
+                    out.append((sid, d, (q - take) * p, q * p))
     return out
 
 
