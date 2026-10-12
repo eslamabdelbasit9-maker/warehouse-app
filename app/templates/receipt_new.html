@@ -12,7 +12,7 @@
   </div>
   <datalist id="items">{% for i in items %}<option value="{{ i.code }} — {{ i.name }}" data-id="{{ i.id }}" data-uom="{{ i.uom }}">{% endfor %}</datalist>
   <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
-    <tr><th style="width:45%">الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th class="n">الإجمالي</th><th></th></tr>
+    <tr><th style="width:45%">الصنف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة (بدون ضريبة)</th><th class="n">الإجمالي</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
   <button class="btn">حفظ الوارد</button>

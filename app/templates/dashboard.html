@@ -16,7 +16,7 @@
 <div class="grid g4 kpis">
   <a class="card kpi" href="/approvals"><span class="kpi-ic">{{ icon('inbox') }}</span><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('wrench') }}</span><div class="v">{{ fmt(period_spend) }}</div><div class="l">صرف قطع الغيار المعتمد</div><div class="s">{{ per }}</div></div>
-  <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (الوارد)</div><div class="s">{{ per }}</div></a>
+  <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (شامل الضريبة 15%)</div><div class="s">{{ per }}</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('file') }}</span><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
   <div class="card kpi"><span class="kpi-ic">{{ icon('steps') }}</span><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد</div><div class="s">المهندس / مدير الإنتاج / النهائي</div></div>
 </div>
@@ -31,7 +31,7 @@
 {% endif %}
 
 {% set scope = ' — ' ~ sel.name if sel else ' — كل المواقع' %}
-{% with mc=purchases, mc_extra=none, mc_open=false, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
+{% with mc=purchases, mc_extra=none, mc_open=false, mc_id='pchart', mc_icon='cart', mc_title='المشتريات الشهرية', mc_sub='قيمة الوارد شامل الضريبة في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
 {% with mc=issues, mc_extra=none, mc_open=false, mc_id='ichart', mc_icon='wrench', mc_title='صرف قطع الغيار الشهري', mc_sub='قيمة الصرف المعتمد في آخر 12 شهر' ~ scope %}{% include "_mchart.html" %}{% endwith %}
 
 <div class="grid dash-g">

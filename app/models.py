@@ -39,6 +39,7 @@ REQ_STATUS = {
 LINE_STATUS = {"pending": "قيد الاعتماد", "approved": "معتمد", "rejected": "مرفوض"}
 ENTITY_TYPES = ["مشروع", "عميل"]
 DIESEL_PURPOSES = ["تشغيل", "تسخين"]
+VAT_RATE = 0.15  # ضريبة القيمة المضافة — للعرض في المشتريات بس، أسعار الوارد ومتوسط التكلفة والصرف كلها من غير ضريبة
 CUSTODY_CATEGORIES = ["الأصول", "أدوات السلامة"]
 CUSTODY_OLD_NAMES = {"أصول": "الأصول", "مهمات سلامة": "أدوات السلامة"}  # أسماء قديمة تتحدّث تلقائياً
 TRANSFER_STATUS = {"in_transit": "في الطريق", "received": "تم الاستلام", "cancelled": "ملغي"}
@@ -145,6 +146,23 @@ class Receipt(Base):
     site: Mapped[Site] = relationship()
     created_by: Mapped[User | None] = relationship()
     lines: Mapped[list["ReceiptLine"]] = relationship(back_populates="receipt", cascade="all, delete-orphan")
+
+    @property
+    def is_transfer(self):
+        return (self.supplier or "").startswith("تحويل")
+
+    @property
+    def net(self):
+        return round(sum(l.total for l in self.lines), 2)
+
+    @property
+    def vat(self):
+        """الضريبة 15% على الفاتورة (التحويلات بين الفروع مالهاش ضريبة)."""
+        return 0.0 if self.is_transfer else round(self.net * VAT_RATE, 2)
+
+    @property
+    def gross(self):
+        return round(self.net + self.vat, 2)
 
 
 class ReceiptLine(Base):

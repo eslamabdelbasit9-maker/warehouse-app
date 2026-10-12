@@ -855,3 +855,22 @@ def test_old_transfers_not_counted_as_spend(env):
     page = c.get(f"/?site={env['site']}").text
     assert "777,777" not in page and "888,888" not in page
 
+
+
+def test_receipt_vat_display_only(env):
+    """الضريبة 15% بتظهر في الوارد بس — متوسط التكلفة من غير ضريبة، والتحويل مالوش ضريبة."""
+    from datetime import date
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    db = SessionLocal()
+    rec = Receipt(site_id=env["site"], date=date(2026, 10, 5), invoice_no="VAT-1", supplier="مورد ضريبة")
+    rec.lines.append(ReceiptLine(item_id=env["b"], qty=2, unit_price=100))
+    tr = Receipt(site_id=env["site"], date=date(2026, 10, 5), invoice_no="TR-1", supplier="تحويل من نجران")
+    tr.lines.append(ReceiptLine(item_id=env["b"], qty=1, unit_price=100))
+    db.add_all([rec, tr])
+    db.commit()
+    assert (rec.net, rec.vat, rec.gross) == (200, 30, 230) and tr.vat == 0 and tr.gross == 100
+    rid = rec.id
+    db.close()
+    page = c.get(f"/receipts/{rid}").text
+    assert "الإجمالي شامل الضريبة" in page and "230" in page

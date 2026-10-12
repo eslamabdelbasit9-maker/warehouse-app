@@ -11,7 +11,9 @@
     <tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th><th class="n">سعر الوحدة</th><th class="n">الإجمالي</th></tr>
     {% for l in r.lines %}<tr><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
     <td class="n">{{ fmt(l.unit_price) }}</td><td class="n">{{ fmt(l.total) }}</td></tr>{% endfor %}
-    <tr><td colspan="5"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(r.lines|sum(attribute='total')) }}</b></td></tr>
+    <tr><td colspan="5"><b>الإجمالي بدون ضريبة</b></td><td class="n"><b>{{ fmt(r.net) }}</b></td></tr>
+    <tr><td colspan="5">ضريبة القيمة المضافة 15%{% if r.is_transfer %} (تحويل — بدون ضريبة){% endif %}</td><td class="n">{{ fmt(r.vat) }}</td></tr>
+    <tr><td colspan="5"><b>الإجمالي شامل الضريبة</b></td><td class="n"><b>{{ fmt(r.gross) }}</b></td></tr>
   </table></div>
 </div>
 {% if user.has('storekeeper') %}

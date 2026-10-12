@@ -23,7 +23,7 @@ from .models import (CUSTODY_CATEGORIES, CUSTODY_OLD_NAMES, DIESEL_PURPOSES, ENT
                      RAW_DESTS, CrusherProduction, CrusherProductionLine,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
                      Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
-                     TRANSFER_STATUS, Transfer, TransferLine)
+                     TRANSFER_STATUS, VAT_RATE, Transfer, TransferLine)
 
 APP_DIR = Path(__file__).parent
 from contextlib import asynccontextmanager
@@ -522,8 +522,9 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         raw_pivot[key][sid] += q or 0
     raw_pivot = sorted(raw_pivot.items())
 
-    # المشتريات (الوارد = الكمية × سعر الوحدة): قيمة الفترة + آخر 12 شهر لحد شهر «إلى تاريخ»
-    line_val = func.sum(ReceiptLine.qty * ReceiptLine.unit_price)
+    # المشتريات (الوارد = الكمية × سعر الوحدة + ضريبة 15%): قيمة الفترة + آخر 12 شهر لحد شهر «إلى تاريخ»
+    # التحويلات مستبعدة (not_tr_rec) فالضريبة بتتحسب على فواتير الموردين بس
+    line_val = func.sum(ReceiptLine.qty * ReceiptLine.unit_price) * (1 + VAT_RATE)
     period_purchases = (db.query(line_val).select_from(ReceiptLine).join(Receipt)
                         .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date.between(d_from, d_to)).scalar() or 0)
     months = last_12_months(d_to)
@@ -1891,9 +1892,11 @@ def export_csv(table: str, key: str = "", db: Session = Depends(get_db)):
     if table == "receipts":
         q = db.query(ReceiptLine, Receipt).join(Receipt).order_by(Receipt.date, Receipt.id)
         rows = [[r.site.name, r.date.isoformat() if r.date else "", r.invoice_no or "", r.supplier or "",
-                 l.item.code, l.item.name, l.qty, l.unit_price, round((l.qty or 0) * (l.unit_price or 0), 2)]
+                 l.item.code, l.item.name, l.qty, l.unit_price, round((l.qty or 0) * (l.unit_price or 0), 2),
+                 0 if r.is_transfer else round((l.qty or 0) * (l.unit_price or 0) * VAT_RATE, 2),
+                 round((l.qty or 0) * (l.unit_price or 0) * (1 if r.is_transfer else 1 + VAT_RATE), 2)]
                 for l, r in q]
         head = ["المستودع", "التاريخ", "رقم الفاتورة", "المورد", "كود الصنف", "اسم الصنف", "الكمية", "سعر الوحدة",
-                "الإجمالي"]
+                "الإجمالي بدون ضريبة", "الضريبة 15%", "الإجمالي شامل الضريبة"]
         return _csv_response(head, rows, "receipts")
     return JSONResponse({"error": "unknown table"}, status_code=404)
