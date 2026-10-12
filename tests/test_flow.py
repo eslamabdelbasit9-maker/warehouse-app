@@ -908,4 +908,4 @@ def test_transfer_by_invoice_no_not_a_supplier(env):
     assert r.is_transfer and r.vat == 0
     db.close()
     assert "استلام تحويل من الدار" not in c.get("/suppliers/statement", params={"k": ""}).text
-    assert "استلام تحويل من الدار" in c.get("/transfers").text
+    assert "استلام تحويل من الدار" in c.get(f"/transfers?site={env['site']}").text
