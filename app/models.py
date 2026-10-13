@@ -206,6 +206,8 @@ class Request(Base):
                                                       order_by="RequestLine.id")
     decisions: Mapped[list["LineDecision"]] = relationship(back_populates="request", cascade="all, delete-orphan",
                                                            order_by="LineDecision.id")
+    party_tons: Mapped[list["AsphaltPartyTons"]] = relationship(cascade="all, delete-orphan",
+                                                               order_by="AsphaltPartyTons.id")
 
     @property
     def requester_display(self):
@@ -252,6 +254,16 @@ class RequestLine(Base):
     value: Mapped[float | None] = mapped_column(Float)
     request: Mapped[Request] = relationship(back_populates="lines")
     item: Mapped[Item] = relationship()
+
+
+class AsphaltPartyTons(Base):
+    """أطنان الأسفلت المنتجة لكل جهة (عميل / مشروع) في طلب صرف الخلاطة — علشان تكلفة الطن لكل جهة."""
+    __tablename__ = "asphalt_party_tons"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), index=True)
+    entity_type: Mapped[str | None] = mapped_column(String(20))
+    entity_name: Mapped[str] = mapped_column(String(200))
+    tons: Mapped[float] = mapped_column(Float)
 
 
 class LineDecision(Base):

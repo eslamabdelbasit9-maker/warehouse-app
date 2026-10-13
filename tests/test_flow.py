@@ -941,3 +941,25 @@ def test_raw_project_issue_and_single_destination(env):
     db.close()
     card = c.get(f"/stock/{gid}?site={env['site']}").text
     assert "مشروع — طريق نجران الدائري" in card
+
+
+def test_asphalt_tons_per_party(env):
+    """صرف الخلاطة: أطنان الأسفلت لكل جهة بتتسجل، والإجمالي = مجموعها."""
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['asphalt']}").text
+    assert 'id="ptons"' in page and "أطنان الأسفلت المنتجة لكل جهة" in page
+    r = c.post("/requests/new/raw", data={
+        "site_id": env["site"], "dest": "asphalt", "unit_id": env["asphalt"],
+        "entity_type": ["عميل", "مشروع"], "entity_name": ["مؤسسة س", "طريق ص"], "item_id": [g, g], "qty": ["10", "5"],
+        "pt_type": ["عميل", "مشروع"], "pt_name": ["مؤسسة س", "طريق ص"], "pt_tons": ["120", "80"]}, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.asphalt_tons == 200 and {(p.entity_name, p.tons) for p in req.party_tons} == {("مؤسسة س", 120), ("طريق ص", 80)}
+    db.close()
+    assert "أسفلت عميل مؤسسة س" in c.get(f"/requests/{rid}").text

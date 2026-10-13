@@ -708,7 +708,10 @@ def new_raw(request: Request, site: str | None = None, dest: str = "", unit: str
     sites, sel = pick_site(db, user, site)
     # «الجهة المستلمة» حقل واحد: وحدات الموقع (خلاطة أسفلت / محطة خرسانة) + بيع لعميل + مشروع للشركة
     units = [u for u in sel.units if u.active and u.kind in ("asphalt", "concrete")]
-    targets = [(f"u{u.id}", u.name + " — " + RAW_DESTS[u.kind], u.kind, u) for u in units] + \
+    def _ulabel(u):   # «اسفلت» ← «اسفلت — خلاطة أسفلت»؛ «خلاطة اسفلت» تفضل زي ما هي
+        n = u.name.replace("أ", "ا").replace("ة", "ه")
+        return u.name if ("خلاط" in n or "خرسان" in n or "محطه" in n) else f"{u.name} — {RAW_DESTS[u.kind]}"
+    targets = [(f"u{u.id}", _ulabel(u), u.kind, u) for u in units] + \
               [("sale", RAW_DESTS["sale"], "sale", None), ("project", RAW_DESTS["project"], "project", None)]
     chosen = next((t for t in targets if t[0] == f"u{unit}"), None) if unit else None
     if not chosen and dest in ("sale", "project"):
@@ -733,10 +736,16 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
             unit = db.get(Unit, int(form.get("unit_id") or 0))
             if not unit or unit.site_id != sel.id or unit.kind != dest:
                 raise S.BusinessError("اختر خلاطة الاسفلت" if dest == "asphalt" else "اختر محطة الخرسانة")
+        party_tons = []
         if dest == "asphalt":
-            tons = parse_float(form.get("asphalt_tons"))
+            # أطنان الأسفلت لكل جهة؛ الإجمالي = مجموعها (أو الرقم المكتوب لو مفيش توزيع)
+            for et, en, t in zip(form.getlist("pt_type"), form.getlist("pt_name"), form.getlist("pt_tons")):
+                v = parse_float(t)
+                if (en or "").strip() and v and v > 0:
+                    party_tons.append((et if et in ENTITY_TYPES else None, en.strip()[:200], v))
+            tons = sum(t for _, _, t in party_tons) if party_tons else parse_float(form.get("asphalt_tons"))
             if not tons or tons <= 0:
-                raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن)")
+                raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن) لكل جهة")
         if dest in ("sale", "project"):
             customer = (form.get("customer") or "").strip()
             if not customer:
@@ -782,7 +791,8 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                     lines.append(dict(item=diesel, qty=q, diesel_purpose=purpose))
         req = S.create_request(db, rtype="raw", site=sel, unit=unit, requester=user,
                                work_date=parse_date(form.get("work_date"), date.today()),
-                               reason=form.get("reason"), lines=lines, asphalt_tons=tons, raw_dest=dest, customer=customer)
+                               reason=form.get("reason"), lines=lines, asphalt_tons=tons, raw_dest=dest, customer=customer,
+                               party_tons=party_tons)
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")

@@ -525,7 +525,7 @@ def can_approve(db: Session, user: User, req: Request):
     return any(u.id == user.id for u in approvers_for(db, req, req.current_stage))
 
 
-def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None,
+def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None, party_tons=None,
                    raw_dest=None, customer=None):
     """lines: list of dict(item, qty, entity_type, entity_name, diesel_purpose)"""
     if not lines:
@@ -555,6 +555,9 @@ def create_request(db: Session, *, rtype, site, unit, requester, work_date, reas
     if not approvers_for(db, _probe(site, unit), req.current_stage):
         raise BusinessError(f"لا يوجد معتمد مُعرّف لمرحلة «{STAGES[req.current_stage]}» لهذا الطلب — راجع مدير النظام")
     req.site, req.unit, req.requester = site, unit, requester
+    from .models import AsphaltPartyTons
+    for et, en, t in (party_tons or []):
+        req.party_tons.append(AsphaltPartyTons(entity_type=et, entity_name=en, tons=t))
     for l in lines:
         req.lines.append(RequestLine(item_id=l["item"].id, item=l["item"], qty=l["qty"],
                                      entity_type=l.get("entity_type"), entity_name=l.get("entity_name"),

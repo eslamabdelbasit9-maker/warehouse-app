@@ -21,10 +21,6 @@
   </div>
   <p class="muted" style="margin:8px 0 0">مسار الاعتماد: {% if dest == 'asphalt' %}المهندس ← مدير الإنتاج ← الاعتماد النهائي{% elif dest == 'concrete' %}مدير الإنتاج{% else %}مدير الإنتاج ← الاعتماد النهائي{% endif %}</p>
 
-  {% if dest == 'asphalt' %}
-  <div class="f" style="margin-top:12px;max-width:280px"><label>الكمية المنتجة من الأسفلت (طن) *</label>
-    <input type="number" step="any" min="0" name="asphalt_tons" id="tons" required></div>
-  {% endif %}
 
   {% if dest == 'project' %}
   <h2 style="margin-top:16px">المواد المصروفة للمشروع</h2>
@@ -47,6 +43,13 @@
   {% endif %}
 
   {% if dest == 'asphalt' %}
+  <h2>أطنان الأسفلت المنتجة لكل جهة</h2>
+  <div class="tw"><table class="t lines" id="ptons">
+    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:170px">أطنان الأسفلت *</th></tr>
+  </table></div>
+  <p class="muted" id="pt-empty">تظهر الجهات هنا تلقائيًا بعد إدخالها في جدول المواد.</p>
+  <div class="f" style="margin-top:6px;max-width:280px"><label>إجمالي الأسفلت المنتج (طن)</label>
+    <input type="number" step="any" min="0" name="asphalt_tons" id="tons" readonly></div>
   <h2>الديزل (إجمالي اليوم) — لتر</h2>
   <div class="row" style="display:flex;gap:14px;flex-wrap:wrap">
     {% for p in DIESEL_PURPOSES %}<div class="f"><label>ديزل {{ p }}</label><input type="number" step="any" min="0" name="diesel_{{ p }}" class="dsl"></div>{% endfor %}
@@ -102,6 +105,33 @@ function addRow() {
   tb.appendChild(tr);
 }
 addRow();
+// أطنان الأسفلت لكل جهة: الجهات بتتجمع من جدول المواد، والإجمالي = مجموعها
+(function () {
+  const tb = document.getElementById('ptons'); if (!tb) return;
+  const tons = document.getElementById('tons'), empty = document.getElementById('pt-empty');
+  function total() { let t = 0; tb.querySelectorAll('[name=pt_tons]').forEach(i => t += parseFloat(i.value) || 0);
+    tons.value = t ? Math.round(t * 1000) / 1000 : ''; tons.dispatchEvent(new Event('input')); }
+  function sync() {
+    const parties = [];
+    document.querySelectorAll('#lines tr').forEach(tr => { const en = tr.querySelector('.en'); if (!en || !en.value.trim()) return;
+      const et = tr.querySelector('[name=entity_type]').value, k = et + '|' + en.value.trim();
+      if (!parties.some(p => p.k === k)) parties.push({k: k, et: et, en: en.value.trim()}); });
+    const keys = parties.map(p => p.k);
+    tb.querySelectorAll('tr[data-k]').forEach(tr => { if (!keys.includes(tr.dataset.k)) tr.remove(); });   // اللي اتشال بس
+    parties.forEach(p => { if (tb.querySelector('tr[data-k="' + CSS.escape(p.k) + '"]')) return;           // الموجود يفضل زي ما هو
+      const tr = document.createElement('tr'); tr.dataset.k = p.k;
+      tr.innerHTML = '<td></td><td></td><td><input name="pt_tons" type="number" step="any" min="0" required>' +
+        '<input type="hidden" name="pt_type"><input type="hidden" name="pt_name"></td>';
+      tr.cells[0].textContent = p.et; tr.cells[1].textContent = p.en;
+      tr.querySelector('[name=pt_type]').value = p.et; tr.querySelector('[name=pt_name]').value = p.en;
+      tr.querySelector('[name=pt_tons]').addEventListener('input', total);
+      tb.appendChild(tr); });
+    empty.hidden = parties.length > 0; total();
+  }
+  document.getElementById('lines').addEventListener('input', sync);
+  document.getElementById('lines').addEventListener('change', sync);
+  document.getElementById('lines').addEventListener('click', () => setTimeout(sync));
+})();
 // معدل الديزل لكل طن: إجمالي لترات الديزل ÷ الأسفلت المنتج
 (function () {
   const tons = document.getElementById('tons'), box = document.getElementById('dpt'), out = document.getElementById('dptv');

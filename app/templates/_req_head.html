@@ -12,6 +12,7 @@
   {% if r.type == 'raw' and r.asphalt_tons %}
   <div><b>الأسفلت المنتج</b>{{ fmt(r.asphalt_tons) }} طن</div>
   <div><b>الديزل لكل طن</b>{{ '%.2f'|format(r.liters_per_ton) }} لتر/طن</div>
+  {% for p in r.party_tons %}<div><b>أسفلت {{ p.entity_type or '' }} {{ p.entity_name }}</b>{{ fmt(p.tons) }} طن</div>{% endfor %}
   {% endif %}
   <div><b>أُنشئ في</b>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
 </div>
