@@ -1380,6 +1380,105 @@ def transfer_cancel(tid: int, request: Request, db: Session = Depends(get_db), u
     return back(f"/transfers/{tid}")
 
 
+# ---------------- كشف حساب الوحدة ----------------
+@app.get("/unit-statement", response_class=HTMLResponse)
+def unit_statement(request: Request, site: str | None = None, unit: str = "",
+                   d_from: str | None = Query(None, alias="from"), d_to: str | None = Query(None, alias="to"),
+                   db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from collections import defaultdict
+    sites, sel = pick_site(db, user, site)
+    units = [u for u in sel.units if u.active]
+    u = next((x for x in units if str(x.id) == str(unit)), units[0] if units else None)
+    f, t = parse_date(d_from), parse_date(d_to)
+    ctx = dict(sites=sites, sel=sel, units=units, u=u, d_from=f, d_to=t)
+    if not u:
+        return render(request, "unit_statement.html", user, **ctx)
+
+    def in_period(col):
+        return [*( [col >= f] if f else []), *([col <= t] if t else [])]
+
+    ok = [Req.status.in_(["approved", "partial"]), RequestLine.status == "approved"]
+    # قطع الغيار المصروفة للوحدة (كل الوحدات)
+    spare = (db.query(RequestLine).join(Req).filter(Req.type == "spare", Req.unit_id == u.id, *ok, *in_period(Req.work_date))
+             .order_by(Req.work_date).all())
+    sp_items = defaultdict(lambda: [None, 0.0, 0.0])
+    for l in spare:
+        r = sp_items[l.item_id]; r[0] = l.item; r[1] += l.qty or 0; r[2] += l.value or 0
+    ctx.update(spare=spare, sp_items=sorted(sp_items.values(), key=lambda r: -r[2]), sp_total=sum(l.value or 0 for l in spare))
+
+    if u.kind == "crusher":
+        prod = (db.query(CrusherProductionLine).join(CrusherProduction)
+                .filter(CrusherProduction.site_id == sel.id, or_(CrusherProduction.unit_id == u.id, CrusherProduction.unit_id.is_(None)),
+                        *in_period(CrusherProduction.date)).all())
+        items = {}
+        def row(it):
+            return items.setdefault(it.id, dict(item=it, prod=0.0, prod_val=0.0, asphalt=0.0, concrete=0.0, sale=0.0, project=0.0, out_val=0.0))
+        for l in prod:
+            r = row(l.item); r["prod"] += l.qty or 0; r["prod_val"] += l.value
+        crusher_ids = [i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))]
+        outs = (db.query(RequestLine).join(Req).filter(Req.type == "raw", Req.site_id == sel.id, RequestLine.item_id.in_(crusher_ids),
+                                                       *ok, *in_period(Req.work_date)).order_by(Req.work_date).all())
+        parties = defaultdict(lambda: [0.0, 0.0])
+        for l in outs:
+            d = l.request.raw_dest or "asphalt"
+            r = row(l.item); r[d if d in ("asphalt", "concrete", "sale", "project") else "asphalt"] += l.qty or 0; r["out_val"] += l.value or 0
+            who = (f"بيع — {l.request.customer}" if d == "sale" else f"مشروع — {l.request.customer}" if d == "project"
+                   else (l.request.unit.name if l.request.unit else RAW_DESTS.get(d, "")))
+            parties[who][0] += l.qty or 0; parties[who][1] += l.value or 0
+        ctx.update(kind="crusher", c_items=sorted(items.values(), key=lambda r: r["item"].code), outs=outs,
+                   parties=sorted(parties.items(), key=lambda x: -x[1][0]),
+                   prod_total=sum(r["prod"] for r in items.values()), prod_val=sum(r["prod_val"] for r in items.values()),
+                   out_total=sum(l.qty or 0 for l in outs), out_val=sum(l.value or 0 for l in outs))
+    elif u.kind in ("asphalt", "concrete"):
+        reqs = (db.query(Req).filter(Req.type == "raw", Req.unit_id == u.id, Req.status.in_(["approved", "partial"]),
+                                     *in_period(Req.work_date)).order_by(Req.work_date).all())
+        mats = defaultdict(lambda: [None, 0.0, 0.0])
+        diesel = defaultdict(float); diesel_val = 0.0
+        parties = defaultdict(lambda: dict(qty=0.0, val=0.0, tons=0.0, diesel=0.0))
+        tons_total = 0.0
+        for r in reqs:
+            tons_total += r.asphalt_tons or 0
+            app_lines = [l for l in r.lines if l.status == "approved"]
+            d_val = sum(l.value or 0 for l in app_lines if l.diesel_purpose)
+            for l in app_lines:
+                if l.diesel_purpose:
+                    diesel[l.diesel_purpose] += l.qty or 0; diesel_val += l.value or 0
+                    continue
+                m = mats[l.item_id]; m[0] = l.item; m[1] += l.qty or 0; m[2] += l.value or 0
+                key = f"{l.entity_type or ''} {l.entity_name or '—'}".strip()
+                parties[key]["qty"] += l.qty or 0; parties[key]["val"] += l.value or 0
+            for p in r.party_tons:
+                parties[f"{p.entity_type or ''} {p.entity_name}".strip()]["tons"] += p.tons or 0
+            # الديزل بيتوزع على الجهات بنسبة أطنان الأسفلت (أو كمية المواد لو الأطنان مش متسجلة لكل جهة)
+            if d_val:
+                if r.party_tons:
+                    base = {f"{p.entity_type or ''} {p.entity_name}".strip(): p.tons or 0 for p in r.party_tons}
+                else:
+                    base = defaultdict(float)
+                    for l in app_lines:
+                        if not l.diesel_purpose:
+                            base[f"{l.entity_type or ''} {l.entity_name or '—'}".strip()] += l.qty or 0
+                tot = sum(base.values())
+                for k, v in base.items():
+                    if tot:
+                        parties[k]["diesel"] += d_val * v / tot
+        mat_val = sum(m[2] for m in mats.values())
+        prows = []
+        for k, v in parties.items():
+            cost = v["val"] + v["diesel"]
+            prows.append(dict(name=k, qty=v["qty"], val=v["val"], diesel=v["diesel"], cost=cost, tons=v["tons"],
+                              per_ton=(cost / v["tons"]) if v["tons"] else None))
+        total_cost = mat_val + diesel_val
+        ctx.update(kind=u.kind, reqs=reqs, mats=sorted(mats.values(), key=lambda m: -m[2]), mat_val=mat_val,
+                   diesel=dict(diesel), diesel_val=diesel_val, diesel_l=sum(diesel.values()), tons_total=tons_total,
+                   prows=sorted(prows, key=lambda r: -r["cost"]), total_cost=total_cost,
+                   per_ton=(total_cost / tons_total) if tons_total else None,
+                   l_per_ton=(sum(diesel.values()) / tons_total) if tons_total else None)
+    else:
+        ctx.update(kind="other")
+    return render(request, "unit_statement.html", user, **ctx)
+
+
 # ---------------- الموردين ----------------
 def _supplier_receipts(db, user, site, d_from, d_to):
     sites = user_sites(db, user)

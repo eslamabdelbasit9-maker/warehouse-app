@@ -963,3 +963,32 @@ def test_asphalt_tons_per_party(env):
     assert req.asphalt_tons == 200 and {(p.entity_name, p.tons) for p in req.party_tons} == {("مؤسسة س", 120), ("طريق ص", 80)}
     db.close()
     assert "أسفلت عميل مؤسسة س" in c.get(f"/requests/{rid}").text
+
+
+def test_unit_statement_pages(env):
+    """كشف حساب الخلاطة: تكلفة المواد + نصيب الديزل لكل جهة وتكلفة الطن؛ والكسارة بتفتح من غير أخطاء."""
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    r = c.post("/requests/new/raw", data={
+        "site_id": env["site"], "dest": "asphalt", "unit_id": env["asphalt"],
+        "entity_type": ["عميل", "مشروع"], "entity_name": ["عميل كشف", "مشروع كشف"], "item_id": [g, g], "qty": ["6", "4"],
+        "pt_type": ["عميل", "مشروع"], "pt_name": ["عميل كشف", "مشروع كشف"], "pt_tons": ["60", "40"],
+        "diesel_تشغيل": "100"}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    ids = [l.id for l in db.get(Request, rid).lines]
+    db.close()
+    for who in ("eng.asphalt@example.com", "prod.manager@example.com", "final@example.com"):
+        login(c, env, who)
+        c.post(f"/approvals/{rid}", data={"action": "approve", "line": ids})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "approved"
+    db.close()
+    login(c, env, "admin@example.com")
+    page = c.get(f"/unit-statement?site={env['site']}&unit={env['asphalt']}").text
+    assert "التكلفة حسب الجهة" in page and "عميل كشف" in page and "مشروع كشف" in page and "تكلفة طن الأسفلت" in page
+    page = c.get(f"/unit-statement?site={env['site']}&unit={env['crusher']}").text
+    assert "الإنتاج والصرف حسب المادة" in page and "قطع الغيار المصروفة للوحدة" in page

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>كشف حساب الوحدة{% if u %} — {{ u.name }} ({{ sel.name }}){% endif %}</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الموقع</label><select name="site" onchange="this.form.unit.value='';this.form.submit()">
+    {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الوحدة</label><select name="unit" onchange="this.form.submit()">
+    {% for x in units %}<option value="{{ x.id }}" {{ 'selected' if u and x.id==u.id }}>{{ x.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>من</label><input type="date" name="from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى</label><input type="date" name="to" value="{{ d_to or '' }}"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <button type="button" class="btn sec" onclick="print()">طباعة</button></form>
+
+{% if not u %}<div class="card muted">لا توجد وحدات في هذا الموقع.</div>{% else %}
+
+{% if kind == 'crusher' %}
+<div class="grid g4">
+  <div class="card kpi"><div class="v">{{ fmt(prod_total) }}</div><div class="l">الإنتاج (طن)</div><div class="s">{{ fmt(prod_val) }} ريال</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(out_total) }}</div><div class="l">المصروف (طن)</div><div class="s">{{ fmt(out_val) }} ريال</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(sp_total) }}</div><div class="l">قطع الغيار (ريال)</div></div>
+</div>
+<h2>الإنتاج والصرف حسب المادة</h2>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الكود</th><th>المادة</th><th class="n">الإنتاج</th><th class="n">خلاطة الأسفلت</th><th class="n">الخرسانة</th><th class="n">بيع</th><th class="n">مشاريع</th><th class="n">إجمالي المصروف</th><th class="n">الفرق</th></tr>
+{% for r in c_items %}{% set o = r.asphalt + r.concrete + r.sale + r.project %}<tr>
+<td dir="ltr">{{ r.item.code }}</td><td><a href="/stock/{{ r.item.id }}?site={{ sel.id }}">{{ r.item.name }}</a></td>
+<td class="n">{{ fmt(r.prod) }}</td><td class="n">{{ fmt(r.asphalt) }}</td><td class="n">{{ fmt(r.concrete) }}</td><td class="n">{{ fmt(r.sale) }}</td><td class="n">{{ fmt(r.project) }}</td>
+<td class="n"><b>{{ fmt(o) }}</b></td><td class="n {{ 'low' if r.prod - o < 0 }}">{{ fmt(r.prod - o) }}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">لا توجد حركة في الفترة</td></tr>{% endfor %}
+</table></div></div>
+{% if parties %}<h2>المصروف حسب الجهة</h2>
+<div class="card"><div class="tw"><table class="t"><tr><th>الجهة</th><th class="n">الكمية (طن)</th><th class="n">القيمة</th></tr>
+{% for k, v in parties %}<tr><td>{{ k }}</td><td class="n">{{ fmt(v[0]) }}</td><td class="n">{{ fmt(v[1]) }}</td></tr>{% endfor %}
+</table></div></div>{% endif %}
+
+{% elif kind in ('asphalt', 'concrete') %}
+<div class="grid g4">
+  {% if kind == 'asphalt' %}<div class="card kpi"><div class="v">{{ fmt(tons_total) }}</div><div class="l">الأسفلت المنتج (طن)</div></div>{% endif %}
+  <div class="card kpi"><div class="v">{{ fmt(mat_val) }}</div><div class="l">تكلفة المواد</div></div>
+  {% if kind == 'asphalt' %}<div class="card kpi"><div class="v">{{ fmt(diesel_l) }}</div><div class="l">الديزل (لتر)</div><div class="s">{{ fmt(diesel_val) }} ريال{% if l_per_ton %} — {{ '%.2f'|format(l_per_ton) }} لتر/طن{% endif %}</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(per_ton) if per_ton else '—' }}</div><div class="l">تكلفة طن الأسفلت</div><div class="s">مواد + ديزل</div></div>{% endif %}
+  <div class="card kpi"><div class="v">{{ fmt(sp_total) }}</div><div class="l">قطع الغيار (ريال)</div></div>
+</div>
+<h2>المواد المصروفة</h2>
+<div class="card"><div class="tw"><table class="t"><tr><th>الكود</th><th>المادة</th><th class="n">الكمية</th><th>الوحدة</th><th class="n">التكلفة</th></tr>
+{% for it, q, v in mats %}<tr><td dir="ltr">{{ it.code }}</td><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.name }}</a></td><td class="n">{{ fmt(q) }}</td><td>{{ it.uom }}</td><td class="n">{{ fmt(v) }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا توجد حركة في الفترة</td></tr>{% endfor %}
+{% if kind == 'asphalt' %}{% for p, q in diesel.items() %}<tr><td></td><td>ديزل {{ p }}</td><td class="n">{{ fmt(q) }}</td><td>لتر</td><td></td></tr>{% endfor %}{% endif %}
+</table></div></div>
+<h2>التكلفة حسب الجهة (عميل / مشروع)</h2>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الجهة</th><th class="n">كمية المواد</th><th class="n">تكلفة المواد</th>{% if kind == 'asphalt' %}<th class="n">نصيب الديزل</th>{% endif %}<th class="n">إجمالي التكلفة</th>{% if kind == 'asphalt' %}<th class="n">أطنان الأسفلت</th><th class="n">تكلفة الطن</th>{% endif %}</tr>
+{% for r in prows %}<tr><td>{{ r.name }}</td><td class="n">{{ fmt(r.qty) }}</td><td class="n">{{ fmt(r.val) }}</td>{% if kind == 'asphalt' %}<td class="n">{{ fmt(r.diesel) }}</td>{% endif %}
+<td class="n"><b>{{ fmt(r.cost) }}</b></td>{% if kind == 'asphalt' %}<td class="n">{{ fmt(r.tons) if r.tons else '—' }}</td><td class="n">{{ fmt(r.per_ton) if r.per_ton else '—' }}</td>{% endif %}</tr>
+{% else %}<tr><td colspan="7" class="muted">لا توجد حركة في الفترة</td></tr>{% endfor %}
+</table></div></div>
+<h2>طلبات الصرف</h2>
+<div class="card"><div class="tw"><table class="t"><tr><th>التاريخ</th><th>رقم الطلب</th>{% if kind == 'asphalt' %}<th class="n">الأسفلت (طن)</th>{% endif %}<th class="n">التكلفة</th></tr>
+{% for r in reqs %}<tr><td>{{ r.work_date }}</td><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td>{% if kind == 'asphalt' %}<td class="n">{{ fmt(r.asphalt_tons) }}</td>{% endif %}<td class="n">{{ fmt(r.total_value) }}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">لا يوجد</td></tr>{% endfor %}
+</table></div></div>
+{% else %}
+<div class="grid g4"><div class="card kpi"><div class="v">{{ fmt(sp_total) }}</div><div class="l">قطع الغيار (ريال)</div></div></div>
+{% endif %}
+
+<h2>قطع الغيار المصروفة للوحدة</h2>
+<div class="card"><div class="tw"><table class="t"><tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
+{% for it, q, v in sp_items %}<tr><td dir="ltr">{{ it.code }}</td><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.name }}</a></td><td class="n">{{ fmt(q) }}</td><td class="n">{{ fmt(v) }}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">لا يوجد صرف قطع غيار في الفترة</td></tr>{% endfor %}
+{% if sp_items %}<tr><td colspan="3"><b>الإجمالي</b></td><td class="n"><b>{{ fmt(sp_total) }}</b></td></tr>{% endif %}
+</table></div></div>
+{% endif %}
+{% endblock %}

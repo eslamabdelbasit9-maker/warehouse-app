@@ -46,6 +46,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/stock', 'قطع غيار', 'box', path.startswith('/stock')) }}
     {{ nl('/raw-stock', 'مواد خام', 'layers', path.startswith('/raw-stock')) }}
     {{ nl('/production', 'إنتاج الكسارات', 'chart', path.startswith('/production')) }}
+    {{ nl('/unit-statement', 'كشف حساب الوحدة', 'file', path.startswith('/unit-statement')) }}
     <div class="sg">المستودع</div>
     {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}
     {{ nl('/receipts', 'الوارد', 'cart', path.startswith('/receipts')) }}
