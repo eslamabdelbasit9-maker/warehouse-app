@@ -909,3 +909,35 @@ def test_transfer_by_invoice_no_not_a_supplier(env):
     db.close()
     assert "استلام تحويل من الدار" not in c.get("/suppliers/statement", params={"k": ""}).text
     assert "استلام تحويل من الدار" in c.get(f"/transfers?site={env['site']}").text
+
+
+def test_raw_project_issue_and_single_destination(env):
+    """صرف مواد خام لمشروع للشركة: حقل «الجهة المستلمة» واحد، والمشروع بيظهر في كارت الصنف."""
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    page = c.get(f"/requests/new/raw?site={env['site']}&dest=project").text
+    assert "الجهة المستلمة" in page and "اسم المشروع" in page and "seg-tg" not in page
+    assert "اسم الخلاطة" not in page
+    page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['asphalt']}").text
+    assert 'id="tons"' in page
+    db = SessionLocal()
+    gid = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "project", "customer": "طريق نجران الدائري",
+                                          "item_id": [gid], "qty": ["30"]}, follow_redirects=False)
+    assert r.status_code == 303, r.text
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.raw_dest == "project" and req.customer == "طريق نجران الدائري" and req.current_stage == 2
+    lid = req.lines[0].id
+    db.close()
+    for who in ("prod.manager@example.com", "final@example.com"):
+        login(c, env, who)
+        c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "approved"
+    assert S.raw_stock_table(db, env["site"])[gid]["out_project"] == 30
+    db.close()
+    card = c.get(f"/stock/{gid}?site={env['site']}").text
+    assert "مشروع — طريق نجران الدائري" in card

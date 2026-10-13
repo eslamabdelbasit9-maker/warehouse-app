@@ -27,8 +27,8 @@ STAGES = {1: "المهندس المعتمد", 2: "مدير الإنتاج", 3: "
 STAGE_ROLE = {1: "engineer", 2: "manager", 3: "final"}
 REQ_TYPES = {"spare": "صرف قطع غيار", "raw": "صرف مواد خام"}
 # جهة صرف المواد الخام ومسار اعتمادها (المراحل بالترتيب)
-RAW_DESTS = {"asphalt": "خلاطة أسفلت", "concrete": "محطة خرسانة", "sale": "بيع"}
-RAW_FLOWS = {"asphalt": [1, 2, 3], "concrete": [2], "sale": [2, 3]}
+RAW_DESTS = {"asphalt": "خلاطة أسفلت", "concrete": "محطة خرسانة", "sale": "بيع لعميل", "project": "مشروع للشركة"}
+RAW_FLOWS = {"asphalt": [1, 2, 3], "concrete": [2], "sale": [2, 3], "project": [2, 3]}
 REQ_STATUS = {
     "pending": "قيد الاعتماد",
     "approved": "معتمد",
@@ -193,7 +193,7 @@ class Request(Base):
     reason: Mapped[str | None] = mapped_column(Text)
     asphalt_tons: Mapped[float | None] = mapped_column(Float)  # الإنتاج اليومي للخلاطة (مواد خام)
     raw_dest: Mapped[str | None] = mapped_column(String(15))   # asphalt | concrete | sale (مواد خام)
-    customer: Mapped[str | None] = mapped_column(String(200))  # البيع: اسم العميل
+    customer: Mapped[str | None] = mapped_column(String(200))  # البيع: اسم العميل — المشروع: اسم المشروع
     status: Mapped[str] = mapped_column(String(15), default="pending")
     current_stage: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

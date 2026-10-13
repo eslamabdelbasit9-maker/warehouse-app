@@ -1,21 +1,20 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>صرف مواد خام — {{ RAW_DESTS[dest] }}</h1>
-<div class="seg-tg noprint" style="margin-bottom:12px">{% for k, v in RAW_DESTS.items() %}<a class="segb {{ 'on' if k == dest }}" href="?site={{ sel.id }}&dest={{ k }}">{{ v }}</a>{% endfor %}</div>
+<h1>صرف مواد خام</h1>
 <form method="post" class="card">
   <input type="hidden" name="dest" value="{{ dest }}">
+  {% if unit %}<input type="hidden" name="unit_id" value="{{ unit.id }}">{% endif %}
   <div class="meta">
     <div class="f"><label>الموقع</label>
-      <select name="site_id" onchange="location='?dest={{ dest }}&site='+this.value">
+      <select name="site_id" onchange="location='?site='+this.value">
         {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
-    {% if dest != 'sale' %}
-    <div class="f"><label>{{ 'الخلاطة' if dest == 'asphalt' else 'محطة الخرسانة' }} *</label>
-      <select name="unit_id" required>
-        {% if units|length != 1 %}<option value="">— اختر —</option>{% endif %}
-        {% for u in units %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
-      {% if not units %}<span class="low">لا توجد {{ 'خلاطة أسفلت' if dest == 'asphalt' else 'محطة خرسانة' }} مسجلة في هذا الموقع</span>{% endif %}</div>
-    {% else %}
+    <div class="f"><label>الجهة المستلمة *</label>
+      <select onchange="var v=this.value; location='?site={{ sel.id }}&'+(v.charAt(0)=='u'?'unit='+v.slice(1):'dest='+v)">
+        {% for k, label, d, u in targets %}<option value="{{ k }}" {{ 'selected' if k == chosen[0] }}>{{ label }}</option>{% endfor %}</select></div>
+    {% if dest == 'sale' %}
     <div class="f"><label>اسم العميل *</label><input name="customer" required></div>
+    {% elif dest == 'project' %}
+    <div class="f"><label>اسم المشروع *</label><input name="customer" required></div>
     {% endif %}
     <div class="f"><label>التاريخ</label><input type="date" name="work_date" value="{{ today }}"></div>
     <div class="f"><label>طالب الصرف</label><input value="{{ user.name }}" disabled></div>
@@ -27,7 +26,13 @@
     <input type="number" step="any" min="0" name="asphalt_tons" id="tons" required></div>
   {% endif %}
 
-  {% if dest == 'sale' %}
+  {% if dest == 'project' %}
+  <h2 style="margin-top:16px">المواد المصروفة للمشروع</h2>
+  <div class="tw"><table class="t lines" id="lines">
+    <tr><th style="width:260px">المادة</th><th style="width:160px">الكمية (طن)</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
+  {% elif dest == 'sale' %}
   <h2 style="margin-top:16px">المواد المباعة</h2>
   <div class="tw"><table class="t lines" id="lines">
     <tr><th style="width:220px">المادة</th><th style="width:140px">الكمية (طن)</th><th style="width:140px">سعر البيع</th><th class="n">القيمة</th><th></th></tr>
@@ -51,7 +56,13 @@
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="reason"></textarea></div>
   <button class="btn" style="margin-top:10px">إرسال للاعتماد</button>
 </form>
-{% if dest == 'sale' %}
+{% if dest == 'project' %}
+<template id="tpl"><tr>
+  <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
+  <td><input name="qty" type="number" step="any" min="0"></td>
+  <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>
+</tr></template>
+{% elif dest == 'sale' %}
 <template id="tpl"><tr>
   <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
   <td><input name="qty" type="number" step="any" min="0" class="q"></td>

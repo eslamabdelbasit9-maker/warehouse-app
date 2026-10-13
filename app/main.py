@@ -703,15 +703,22 @@ async def new_spare_post(request: Request, db: Session = Depends(get_db),
 
 
 @app.get("/requests/new/raw", response_class=HTMLResponse)
-def new_raw(request: Request, site: str | None = None, dest: str = "asphalt", db: Session = Depends(get_db),
+def new_raw(request: Request, site: str | None = None, dest: str = "", unit: str = "", db: Session = Depends(get_db),
             user: User = Depends(require("requester", "storekeeper"))):
     sites, sel = pick_site(db, user, site)
-    dest = dest if dest in RAW_DESTS else "asphalt"
-    kind = {"asphalt": "asphalt", "concrete": "concrete"}.get(dest)
-    units = [u for u in sel.units if u.active and u.kind == kind] if kind else []
+    # «الجهة المستلمة» حقل واحد: وحدات الموقع (خلاطة أسفلت / محطة خرسانة) + بيع لعميل + مشروع للشركة
+    units = [u for u in sel.units if u.active and u.kind in ("asphalt", "concrete")]
+    targets = [(f"u{u.id}", u.name + " — " + RAW_DESTS[u.kind], u.kind, u) for u in units] + \
+              [("sale", RAW_DESTS["sale"], "sale", None), ("project", RAW_DESTS["project"], "project", None)]
+    chosen = next((t for t in targets if t[0] == f"u{unit}"), None) if unit else None
+    if not chosen and dest in ("sale", "project"):
+        chosen = next(t for t in targets if t[0] == dest)
+    if not chosen and dest in ("asphalt", "concrete"):
+        chosen = next((t for t in targets if t[2] == dest), None)
+    chosen = chosen or targets[0]
     items = db.query(Item).filter(Item.category == "raw", Item.code != DIESEL_CODE, Item.active.is_(True)).order_by(Item.id).all()
-    return render(request, "request_raw.html", user, sites=sites, sel=sel, units=units, items=items, today=date.today(),
-                  dest=dest, RAW_DESTS=RAW_DESTS)
+    return render(request, "request_raw.html", user, sites=sites, sel=sel, targets=targets, chosen=chosen, items=items,
+                  today=date.today(), dest=chosen[2], unit=chosen[3])
 
 
 @app.post("/requests/new/raw")
@@ -730,12 +737,20 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
             tons = parse_float(form.get("asphalt_tons"))
             if not tons or tons <= 0:
                 raise S.BusinessError("أدخل الكمية المنتجة من الأسفلت (طن)")
-        if dest == "sale":
+        if dest in ("sale", "project"):
             customer = (form.get("customer") or "").strip()
             if not customer:
-                raise S.BusinessError("أدخل اسم العميل")
+                raise S.BusinessError("أدخل اسم العميل" if dest == "sale" else "أدخل اسم المشروع")
         lines = []
-        if dest == "sale":
+        if dest == "project":
+            for iid, qty in zip(form.getlist("item_id"), form.getlist("qty")):
+                if not qty:
+                    continue
+                item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+                if not item or item.category != "raw" or item.code == DIESEL_CODE:
+                    raise S.BusinessError("اختر المادة من القائمة")
+                lines.append(dict(item=item, qty=parse_float(qty), entity_type="مشروع", entity_name=customer))
+        elif dest == "sale":
             for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("sale_price")):
                 if not qty and not price:
                     continue
@@ -771,7 +786,7 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
-        return back(f"/requests/new/raw?site={sel.id}&dest={dest}")
+        return back(f"/requests/new/raw?site={sel.id}&dest={dest}" + (f"&unit={unit.id}" if unit else ""))
     flash(request, f"تم إرسال الطلب {req.req_no} للاعتماد")
     return back(f"/requests/{req.id}")
 
@@ -1100,11 +1115,11 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
             b0 = before.get(iid)
             if b0:
                 r["open_qty"] = b0["cur"]
-                for k in ("prod_qty", "in_qty", "out_qty", "out_asphalt", "out_concrete", "out_sale"):
+                for k in ("prod_qty", "in_qty", "out_qty", "out_asphalt", "out_concrete", "out_sale", "out_project"):
                     r[k] -= b0[k]
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
     empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0,
-                 out_asphalt=0, out_concrete=0, out_sale=0)
+                 out_asphalt=0, out_concrete=0, out_sale=0, out_project=0)
     rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
     return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows, d_from=d_from, d_to=d_to)
 
@@ -1127,9 +1142,21 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
     for l in (db.query(RequestLine).join(Req).filter(Req.site_id == sel.id, RequestLine.item_id == item_id,
                                                       RequestLine.status == "approved",
                                                       Req.status.in_(["approved", "partial"]))):
-        moves.append(dict(d=l.request.work_date, kind="صرف", ref=l.request.req_no, inq=0, outq=l.qty, price=l.unit_cost,
-                          who=(l.request.unit.name if l.request.unit else ""), link=f"/requests/{l.request_id}",
-                          value=l.value))
+        rq = l.request
+        if rq.type == "raw" and rq.raw_dest == "sale":
+            who = f"بيع — {rq.customer or ''}"
+        elif rq.type == "raw" and rq.raw_dest == "project":
+            who = f"مشروع — {rq.customer or ''}"
+        else:
+            who = (rq.unit.name if rq.unit else "") + (f" — {l.entity_name}" if l.entity_name else "")
+        moves.append(dict(d=rq.work_date, kind="صرف", ref=rq.req_no, inq=0, outq=l.qty, price=l.unit_cost,
+                          who=who, link=f"/requests/{l.request_id}", value=l.value))
+    if item.category == "raw":   # إنتاج الكسارة بيدخل رصيد المادة
+        for pl in (db.query(CrusherProductionLine).join(CrusherProduction)
+                   .filter(CrusherProduction.site_id == sel.id, CrusherProductionLine.item_id == item_id)):
+            pr = pl.production
+            moves.append(dict(d=pr.date, kind="إنتاج الكسارة", ref="", inq=pl.qty, outq=0, price=pl.unit_price,
+                              who=pr.unit.name if pr.unit else "", value=pl.value))
     for tl in (db.query(TransferLine).join(Transfer).filter(
             TransferLine.item_id == item_id, Transfer.status.in_(["in_transit", "received"]),
             or_(Transfer.from_site_id == sel.id, Transfer.to_site_id == sel.id))):
@@ -1148,7 +1175,7 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
     for m in moves:
         bal += m["inq"] - m["outq"]
         m["bal"] = bal
-    st = S.stock_table(db, sel.id, [item_id]).get(item_id)
+    st = (S.raw_stock_table(db, sel.id) if item.category == "raw" else S.stock_table(db, sel.id, [item_id])).get(item_id)
     return render(request, "item_card.html", user, sites=sites, sel=sel, item=item, moves=moves, st=st)
 
 
