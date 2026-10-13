@@ -1,0 +1,12 @@
+# يفتح البرنامج كل 10 دقايق علشان Render المجاني ما ينامش (بينام بعد 15 دقيقة من غير زيارات)
+name: keep-awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS --retry 3 --retry-delay 20 --max-time 90 https://warehouse-app-9k24.onrender.com/healthz
