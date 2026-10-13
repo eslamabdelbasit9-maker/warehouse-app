@@ -15,6 +15,15 @@
   </label>
   <button class="btn" style="margin-top:12px" onclick="if(document.getElementById('rep').checked&&!confirm('سيتم حذف البيانات المستوردة سابقًا لهذا الموقع واستبدالها بالملف الجديد. هل تريد المتابعة؟'))return false;this.textContent='جارٍ الاستيراد...'">استيراد</button>
 </form>
+<h2 style="margin-top:20px">استيراد المواد الخام (الإنتاج والصرف)</h2>
+<form method="post" action="/admin/import/raw" enctype="multipart/form-data" class="card">
+  <p class="muted">ارفع ملف المواد الخام الموحّد للموقع. يحل محل ما سبق استيراده من مواد خام لهذا الموقع (الأرصدة الافتتاحية والإنتاج والوارد والصرف المستورد)، ولا يمس ما أُدخل من داخل البرنامج.</p>
+  <div class="meta">
+    <div class="f"><label>ملف Excel</label><input type="file" name="file" accept=".xlsx" required></div>
+    <div class="f"><label>كود الموقع</label><input name="site_code" dir="ltr" placeholder="JIZ" required></div>
+  </div>
+  <button class="btn" style="margin-top:12px" onclick="if(!confirm('سيتم استبدال المواد الخام المستوردة سابقًا لهذا الموقع. هل تريد المتابعة؟'))return false;this.textContent='جارٍ الاستيراد...'">استيراد المواد الخام</button>
+</form>
 <h2 style="margin-top:20px">استيراد العهد (الأصول / أدوات السلامة)</h2>
 <form method="post" action="/admin/import/custody" enctype="multipart/form-data" class="card">
   <p class="muted">ارفع ملف الأصول أو ملف أدوات السلامة أو كليهما. يُربط كل فرع بالموقع المطابق لاسمه، وتُحفظ روابط الصور والمرفقات كما هي، ويُتجاوز ما سبق تسجيله دون حذف أي بيانات.</p>

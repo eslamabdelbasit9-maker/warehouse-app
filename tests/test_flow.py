@@ -992,3 +992,44 @@ def test_unit_statement_pages(env):
     assert "التكلفة حسب الجهة" in page and "عميل كشف" in page and "مشروع كشف" in page and "تكلفة طن الأسفلت" in page
     page = c.get(f"/unit-statement?site={env['site']}&unit={env['crusher']}").text
     assert "الإنتاج والصرف حسب المادة" in page and "قطع الغيار المصروفة للوحدة" in page
+
+
+def test_import_raw_materials(env):
+    """استيراد ملف المواد الخام الموحّد: افتتاحي + إنتاج + وارد + صرف (بيع وخلاطة بأطنان الجهات)، وإعادة الاستيراد بتستبدل."""
+    import io
+    from datetime import date
+    from openpyxl import Workbook
+    from app.models import CrusherProduction
+    from scripts.import_raw import run
+    wb = Workbook()
+    wb.remove(wb.active)
+    def sh(n, head, rows):
+        w = wb.create_sheet(n); w.append(head)
+        for r in rows: w.append(r)
+    sh("الأصناف", ["الكود", "الاسم", "الوحدة", "ناتج كسارة"], [("RM-T34", "بحص تجربة", "طن", 1), ("RM-TBT", "بيتومين تجربة", "طن", 0)])
+    sh("الافتتاحي", ["الكود", "الكمية", "القيمة"], [("RM-T34", 1000, 10000), ("RM-TBT", 50, 100000)])
+    sh("الإنتاج", ["التاريخ", "الكود", "الكمية", "السعر"], [(date(2026, 4, 1), "RM-T34", 300, 12.59)])
+    sh("الوارد", ["التاريخ", "رقم الفاتورة", "المورد", "الكود", "الكمية", "السعر"], [(date(2026, 4, 2), "B-1", "مورد", "RM-TBT", 10, 2000)])
+    sh("الصرف", ["المرجع", "التاريخ", "الجهة", "الوحدة", "العميل", "الكود", "الكمية", "التكلفة", "سعر البيع",
+                 "نوع الجهة", "اسم الجهة", "غرض الديزل", "أطنان الأسفلت"],
+       [("TS1", date(2026, 4, 3), "sale", "", "عميل س", "RM-T34", 100, 12.59, 15, None, None, None, None),
+        ("TA1", date(2026, 4, 3), "asphalt", "", None, "RM-TBT", 5, 2000, None, "عميل", "عميل ص", None, 90)])
+    sh("أطنان الجهات", ["المرجع", "نوع الجهة", "اسم الجهة", "الأطنان"], [("TA1", "عميل", "عميل ص", 90)])
+    buf = io.BytesIO(); wb.save(buf)
+    db = SessionLocal()
+    code = db.get(Site, env["site"]).code
+    db.close()
+    for _ in range(2):
+        buf.seek(0)
+        msg = run(io.BytesIO(buf.getvalue()), code)
+    assert "طلبات صرف 2" in msg
+    db = SessionLocal()
+    t34 = db.query(Item).filter_by(code="RM-T34").one().id
+    tbt = db.query(Item).filter_by(code="RM-TBT").one().id
+    st = S.raw_stock_table(db, env["site"])
+    assert st[t34]["open_qty"] == 1000 and st[t34]["prod_qty"] == 300 and st[t34]["out_sale"] == 100
+    assert st[tbt]["in_qty"] == 10 and st[tbt]["out_asphalt"] == 5
+    assert db.query(CrusherProduction).filter_by(site_id=env["site"], notes="استيراد مواد خام").count() == 1
+    req = db.query(Request).filter(Request.req_no.like("%TA1")).one()
+    assert req.asphalt_tons == 90 and req.party_tons[0].entity_name == "عميل ص" and req.status == "approved"
+    db.close()

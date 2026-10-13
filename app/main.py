@@ -1857,6 +1857,21 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
     return back("/admin/import")
 
 
+@app.post("/admin/import/raw")
+async def admin_import_raw(request: Request, user: User = Depends(require("admin"))):
+    from scripts.import_raw import run as run_raw
+    form = await request.form()
+    f, code = form.get("file"), (form.get("site_code") or "").strip().upper()
+    if not f or not getattr(f, "filename", "") or not code:
+        flash(request, "اختر الملف وأدخل كود الموقع", "err")
+        return back("/admin/import")
+    try:
+        flash(request, run_raw(io.BytesIO(f.file.read()), code))
+    except Exception as e:  # noqa: BLE001
+        flash(request, f"تعذّر الاستيراد: {e}", "err")
+    return back("/admin/import")
+
+
 @app.post("/admin/import/custody")
 async def admin_import_custody(request: Request, user: User = Depends(require("admin"))):
     from scripts.import_custody import run as run_custody
