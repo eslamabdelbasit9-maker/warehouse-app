@@ -29,10 +29,28 @@ APP_DIR = Path(__file__).parent
 from contextlib import asynccontextmanager
 
 
+async def _keep_awake():
+    """Render المجاني بينام بعد 15 دقيقة من غير زيارات — البرنامج بيزور نفسه من العنوان الخارجي كل 10 دقايق."""
+    import asyncio
+    import httpx
+    url = settings.BASE_URL + "/healthz"
+    while True:
+        await asyncio.sleep(600)
+        try:
+            async with httpx.AsyncClient(timeout=30) as c:
+                await c.get(url)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_app):
+    import asyncio
     init_db()
+    task = asyncio.create_task(_keep_awake()) if "onrender.com" in settings.BASE_URL else None
     yield
+    if task:
+        task.cancel()
 
 
 app = FastAPI(title=settings.APP_NAME, docs_url=None, redoc_url=None, lifespan=lifespan)
