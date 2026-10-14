@@ -1435,3 +1435,19 @@ def test_item_card_date_filter_and_raw_site_items(env):
     assert "رصيد أول الفترة" in t and "F-6" in t and "F-5" not in t and "15" in t
     assert "RM-FLT" in c.get(f"/raw-stock?site={env['site']}").text
     assert "RM-FLT" not in c.get(f"/raw-stock?site={oid}").text
+
+
+def test_receipts_filters(env):
+    from datetime import date
+    db = SessionLocal()
+    raw = Item(code="RM-RF1", name="مادة وارد", uom="طن", category="raw"); db.add(raw); db.flush()
+    for inv, d, iid in [("RF-RAW", date(2026, 7, 5), raw.id), ("RF-SP", date(2026, 7, 6), env["a"]), ("RF-OLD", date(2026, 1, 5), raw.id)]:
+        rc = Receipt(site_id=env["site"], date=d, invoice_no=inv, supplier="مورد")
+        rc.lines.append(ReceiptLine(item_id=iid, qty=1, unit_price=1)); db.add(rc)
+    db.commit(); db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    t = c.get(f"/receipts?site={env['site']}&cat=raw&date_from=2026-07-01&date_to=2026-07-31").text
+    assert "RF-RAW" in t and "RF-SP" not in t and "RF-OLD" not in t
+    t = c.get(f"/receipts?site={env['site']}&cat=spare").text
+    assert "RF-SP" in t and "RF-RAW" not in t

@@ -2,9 +2,12 @@
 {% block body %}
 <h1>الوارد — {{ sel.name }}</h1>
 <form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="f"><label>النوع</label><select name="cat"><option value="">الكل</option>{% for k, v in ITEM_CATS.items() %}<option value="{{ k }}" {{ 'selected' if cat == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to or '' }}"></div>
   <div class="f"><label>بحث (فاتورة/مورد/صنف/كود)</label><input name="q" value="{{ q }}" data-live="#rtbl"></div>
   {% if month %}<input type="hidden" name="month" value="{{ month }}"><span class="chip">الشهر: {{ month_label }} <a href="/receipts?site={{ sel.id }}" title="إلغاء فلتر الشهر">✕</a></span>{% endif %}
-  <button class="btn">بحث</button><span class="right"></span>
+  <button class="btn">عرض</button>{% if cat or d_from or d_to or q %} <a class="btn sec" href="/receipts?site={{ sel.id }}">إلغاء الفلتر</a>{% endif %}<span class="right"></span>
   {% if user.has('storekeeper') %}<a class="btn sec" href="/admin/invoices">رفع الفواتير</a> <a class="btn green" href="/receipts/new?site={{ sel.id }}">+ تسجيل وارد</a>{% endif %}</form>
 <div class="card"><div class="tw"><table class="t" id="rtbl">
 <tr><th>التاريخ</th><th>رقم الفاتورة</th><th>المورد</th><th>الأصناف (الكود — الاسم — الكمية)</th><th class="n">بدون ضريبة</th><th class="n">الضريبة 15%</th><th class="n">شامل الضريبة</th><th>المرفق</th></tr>
@@ -12,5 +15,6 @@
 <td><table style="border-collapse:collapse;width:100%">{% for l in r.lines %}<tr><td style="border:0;padding:2px 6px;font-family:monospace;font-size:12px;color:#6b7280;direction:ltr;white-space:nowrap">{{ l.item.code }}</td><td style="border:0;padding:2px 6px">{{ l.item.name }}</td><td style="border:0;padding:2px 6px;white-space:nowrap;text-align:left"><b>{{ fmt(l.qty) }}</b> {{ l.item.uom or '' }}</td></tr>{% endfor %}</table></td>
 <td class="n">{{ fmt(r.net) }}</td><td class="n">{{ fmt(r.vat) }}</td><td class="n"><b>{{ fmt(r.gross) }}</b></td><td>{% if r.attachment %}<a href="{{ att_url(r.attachment) }}" target="_blank" rel="noopener">عرض الفاتورة</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="8" class="muted">لا يوجد</td></tr>{% endfor %}
+{% if rows %}<tr class="total"><td colspan="4"><b>الإجمالي ({{ rows|length }} فاتورة)</b></td><td class="n"><b>{{ fmt(rows|sum(attribute='net')) }}</b></td><td class="n"><b>{{ fmt(rows|sum(attribute='vat')) }}</b></td><td class="n"><b>{{ fmt(rows|sum(attribute='gross')) }}</b></td><td></td></tr>{% endif %}
 </table></div></div>
 {% endblock %}

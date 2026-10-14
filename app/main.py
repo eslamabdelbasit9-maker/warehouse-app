@@ -1410,20 +1410,31 @@ def item_card(item_id: int, request: Request, site: str | None = None, date_from
 
 # ---------------- الوارد ----------------
 @app.get("/receipts", response_class=HTMLResponse)
-def receipts(request: Request, site: str | None = None, q: str = "", month: str = "", db: Session = Depends(get_db),
-             user: User = Depends(current_user)):
+def receipts(request: Request, site: str | None = None, q: str = "", month: str = "", date_from: str = "",
+             date_to: str = "", cat: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     qry = db.query(Receipt).filter(Receipt.site_id == sel.id)
     mon = parse_month(month)
     if mon:
         qry = qry.filter(Receipt.date >= mon[0], Receipt.date < mon[1])
+    d_from, d_to = parse_date(date_from), parse_date(date_to)
+    if d_from and d_to and d_to < d_from:
+        d_from, d_to = d_to, d_from
+    if d_from:
+        qry = qry.filter(Receipt.date >= d_from)
+    if d_to:
+        qry = qry.filter(Receipt.date <= d_to)
+    cat = cat if cat in ITEM_CATS else ""
+    if cat:   # نوع الوارد: مواد خام / قطع غيار / أصول / أدوات سلامة
+        qry = qry.filter(Receipt.lines.any(ReceiptLine.item.has(Item.category == cat)))
     if q.strip():
         like = f"%{q.strip()}%"
         qry = qry.filter(or_(Receipt.invoice_no.ilike(like), Receipt.supplier.ilike(like),
                              Receipt.lines.any(ReceiptLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
-    rows = (qry.options(selectinload(Receipt.lines).selectinload(ReceiptLine.item))
-            .order_by(Receipt.date.desc(), Receipt.id.desc()).limit(500).all())
-    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q,
+    limited = not (d_from or d_to or mon or cat or q.strip())
+    qry = qry.options(selectinload(Receipt.lines).selectinload(ReceiptLine.item)).order_by(Receipt.date.desc(), Receipt.id.desc())
+    rows = qry.limit(500).all() if limited else qry.all()
+    return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q, d_from=d_from, d_to=d_to, cat=cat,
                   month=month if mon else "", month_label=month_label(mon))
 
 
