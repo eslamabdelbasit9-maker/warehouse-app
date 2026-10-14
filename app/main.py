@@ -152,6 +152,8 @@ def init_db():
         con.execute(text("UPDATE custody_records SET notes = REPLACE(notes, :o, :n) WHERE notes LIKE :l"),
                     {"o": "تاريخ الاستلام مش مسجل في الشيت", "n": "تاريخ الاستلام غير مسجل في الملف",
                      "l": "%تاريخ الاستلام مش مسجل في الشيت%"})
+        # علامة استيراد المواد الخام القديمة كانت متخزنة مكان المرفق فبتظهر رابط فاتورة وهمي
+        con.execute(text("UPDATE receipts SET attachment = NULL WHERE attachment = :m"), {"m": "استيراد مواد خام"})
     db = SessionLocal()
     try:
         if not db.query(User).first():
