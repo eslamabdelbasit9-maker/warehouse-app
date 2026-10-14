@@ -1688,7 +1688,17 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
                    else f"{l.entity_type or ''} {l.entity_name or '—'}".strip() if d == "crusher"
                    else (l.request.unit.name if l.request.unit else RAW_DESTS.get(d, "")))
             parties[who][0] += l.qty or 0; parties[who][1] += l.value or 0
-        ctx.update(kind="crusher", c_items=sorted(items.values(), key=lambda r: r["item"].code), outs=outs,
+        from datetime import timedelta
+        st_end = S.raw_stock_table(db, sel.id, upto=t)
+        st_beg = S.raw_stock_table(db, sel.id, upto=f - timedelta(days=1)) if f else None
+        for iid, r in items.items():
+            e = st_end.get(iid)
+            r["close"] = e["cur"] if e else 0.0
+            r["open"] = ((st_beg[iid]["cur"] if iid in st_beg else 0.0) if st_beg is not None else (e["open_qty"] if e else 0.0))
+        order = ["G15", "G1", "G34", "G38", "PWD", "PWD3", "MIX"]
+        c_sorted = sorted(items.values(), key=lambda r: (order.index(r["item"].code.rsplit("-", 1)[-1])
+                                                          if r["item"].code.rsplit("-", 1)[-1] in order else 99, r["item"].code))
+        ctx.update(kind="crusher", c_items=c_sorted, outs=outs,
                    parties=sorted(parties.items(), key=lambda x: -x[1][0]),
                    prod_total=sum(r["prod"] for r in items.values()), prod_val=sum(r["prod_val"] for r in items.values()),
                    out_total=sum(l.qty or 0 for l in outs), out_val=sum(l.value or 0 for l in outs))

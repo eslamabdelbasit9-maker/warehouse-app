@@ -10,7 +10,7 @@
       <th class="n grp-out">الكسارة (مشاريع/عملاء)</th><th class="n grp-out">خلاطة الأسفلت</th><th class="n grp-out">الخرسانة</th><th class="n grp-out">بيع</th><th class="n grp-out">مشاريع</th><th class="n grp-out">الإجمالي</th></tr>
   </thead>
   <tbody>
-  {% for it, r in rows %}<tr><td>{{ it.code }}</td><td>{{ it.name }}</td><td>{{ it.uom or '' }}</td>
+  {% for it, r in rows %}<tr><td>{{ it.code }}</td><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.name }}</a></td><td>{{ it.uom or '' }}</td>
     <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.prod_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td>
     <td class="n">{{ fmt(r.out_crusher) }}</td><td class="n">{{ fmt(r.out_asphalt) }}</td><td class="n">{{ fmt(r.out_concrete) }}</td><td class="n">{{ fmt(r.out_sale) }}</td><td class="n">{{ fmt(r.out_project) }}</td><td class="n"><b>{{ fmt(r.out_qty) }}</b></td>
     <td class="n {{ 'low' if r.cur < 0 }}"><b>{{ fmt(r.cur) }}</b></td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
