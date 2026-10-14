@@ -32,7 +32,7 @@
   {{ stock_table(rows, 'لا توجد مواد خام مسجلة') }}
 </div>
 {% for title, grows in sub_groups %}
-<h2 style="margin-top:18px">أرصدة {{ title }} — تابعة لـ{{ sel.name }}</h2>
+<h2 style="margin-top:18px">أرصدة {{ title }} — تابعة لموقع {{ sel.name }}</h2>
 <div class="card">{{ stock_table(grows, '') }}</div>
 {% endfor %}
 {% endblock %}

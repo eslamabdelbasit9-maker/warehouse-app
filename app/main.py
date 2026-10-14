@@ -1319,6 +1319,16 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
             continue
         if sub or it.id in st or it.active:
             groups.setdefault(sub, []).append((it, st.get(it.id, empty)))
+    # الترتيب: نواتج الكسارة (البحص من الأكبر للأصغر ثم البودرة والخلطة) ثم البيتومين وباقي المواد ثم الديزل آخرًا
+    order = ["G15", "G1", "G34", "G38", "PWD", "PWD3", "MIX", "BIT", "PMB", "MC1", "RC2"]
+
+    def _key(row):
+        it = row[0]
+        tail = it.code.rsplit("-", 1)[-1]
+        rank = order.index(tail) if tail in order else len(order)
+        return (it.code == DIESEL_CODE, not it.crusher, rank, it.code)
+    for k in groups:
+        groups[k].sort(key=_key)
     main_rows = groups.pop(None, [])
     sub_groups = sorted(groups.items())
     return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=main_rows, sub_groups=sub_groups,
