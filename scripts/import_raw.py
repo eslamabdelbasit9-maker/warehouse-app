@@ -135,6 +135,9 @@ def run(fileobj, site_code):
                 q.party_tons.append(AsphaltPartyTons(entity_type=clean(t.get("نوع الجهة")),
                                                      entity_name=clean(t.get("اسم الجهة")) or "—", tons=num(t.get("الأطنان"))))
             db.add(q)
+        db.flush()
+        from app.services import revalue_raw
+        revalue_raw(db, site.id)   # البيتومين والديزل بالمتوسط المتحرك حسب التاريخ
         db.commit()
         return (f"تم استيراد المواد الخام لموقع {site.name}: أصناف جديدة {n_new}، أرصدة افتتاحية {n_ob}، "
                 f"أيام إنتاج {len(prod)}، فواتير وارد {len(rec)}، طلبات صرف {len(reqs)}")

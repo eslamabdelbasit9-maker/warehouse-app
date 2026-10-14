@@ -1,7 +1,7 @@
 """منطق العمل: الأرصدة ومتوسط التكلفة، ترقيم الطلبات، مسار الاعتماد، الإشعارات."""
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -233,13 +233,61 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
             t[iid]["pending_qty"] += q or 0
     price = crusher_price(db, site_id)
     crusher = {i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))}
+    mavg = raw_moving_avg(db, site_id, upto=upto)
     for iid, r in t.items():
         r["cur"] = r["open_qty"] + r["prod_qty"] + r["in_qty"] - r["out_qty"]
         r["available"] = r["cur"] - r["pending_qty"]
-        bq = r["open_qty"] + r["in_qty"]
-        r["avg"] = price if iid in crusher else ((r["open_val"] + r["in_val"]) / bq if bq else 0.0)
+        r["avg"] = price if iid in crusher else mavg.get(iid, 0.0)
         r["value"] = r["cur"] * r["avg"]
     return t
+
+
+def raw_moving_avg(db: Session, site_id: int, upto=None, write=False):
+    """المتوسط المرجّح المتحرك للمواد الخام غير نواتج الكسارة (البيتومين، الديزل، ...) كما في أنظمة ERP:
+    تُرتَّب الحركات بالتاريخ (الوارد قبل الصرف في اليوم نفسه)، وكل وارد يُعيد حساب المتوسط
+    = (قيمة الرصيد + قيمة الوارد) / (كمية الرصيد + كمية الوارد)، وكل صرف يُسعَّر بالمتوسط وقت صرفه.
+    write=True يُعيد تسعير سطور الصرف المعتمدة بهذا المتوسط. يرجع dict[item_id] = المتوسط في نهاية الفترة."""
+    from .models import Request as Req
+    non_crusher = select(Item.id).where(Item.category == "raw", Item.crusher.is_not(True))
+    ev = defaultdict(list)   # item_id -> [(date, order, id, kind, qty, price|line)]
+    for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(non_crusher)):
+        ev[ob.item_id].append((date.min, 0, ob.id, "in", ob.qty or 0, ob.value or 0))
+    for rl, d in (db.query(ReceiptLine, Receipt.date).join(Receipt)
+                  .filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(non_crusher))):
+        ev[rl.item_id].append((d or date.min, 1, rl.id, "in", rl.qty or 0, (rl.qty or 0) * (rl.unit_price or 0)))
+    for l, d in (db.query(RequestLine, Req.work_date).join(Req)
+                 .filter(Req.site_id == site_id, Req.type == "raw", Req.status.in_(["approved", "partial"]),
+                         RequestLine.status == "approved", RequestLine.item_id.in_(non_crusher))):
+        ev[l.item_id].append((d or date.min, 2, l.id, "out", l.qty or 0, l))
+    out = {}
+    for iid, moves in ev.items():
+        moves.sort(key=lambda m: (m[0], m[1], m[2]))
+        bq = bv = avg = 0.0
+        for d, _, _, kind, q, x in moves:
+            if upto and d != date.min and d > upto and not write:
+                break
+            if kind == "in":
+                if bq <= 1e-9:      # رصيد صفر أو سالب: المتوسط = سعر الوارد
+                    avg = x / q if q else avg
+                    bv = bq * avg + x
+                else:
+                    bv += x
+                    avg = bv / (bq + q) if bq + q else avg
+                bq += q
+            else:
+                if write:
+                    x.unit_cost = round(avg, 4)
+                    x.value = round(avg * q, 2)
+                bq -= q
+                bv = bq * avg
+            if not (upto and d != date.min and d > upto):
+                out[iid] = avg
+    return out
+
+
+def revalue_raw(db: Session, site_id: int):
+    """إعادة تسعير صرف المواد الخام بالمتوسط المتحرك بعد أي وارد أو صرف أو تعديل بتاريخ سابق."""
+    raw_moving_avg(db, site_id, write=True)
 
 
 def issued_summary(db: Session, site_id: int, item_ids, ref_date, exclude_request_id=None):
@@ -623,6 +671,9 @@ def decide(db: Session, req: Request, user: User, approved_line_ids: set, commen
         l.status = "approved"
     req.status = "partial" if any(l.status == "rejected" for l in req.lines) else "approved"
     req.closed_at = now
+    if req.type == "raw":   # التسعير بالمتوسط المتحرك حسب تاريخ الصرف
+        db.flush()
+        revalue_raw(db, req.site_id)
     db.commit()
     notify_requester(db, req)
     return req

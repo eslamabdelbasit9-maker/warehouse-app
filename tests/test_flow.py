@@ -1033,3 +1033,39 @@ def test_import_raw_materials(env):
     req = db.query(Request).filter(Request.req_no.like("%TA1")).one()
     assert req.asphalt_tons == 90 and req.party_tons[0].entity_name == "عميل ص" and req.status == "approved"
     db.close()
+
+
+def test_raw_moving_average_cost(env):
+    """البيتومين يُسعَّر بالمتوسط المرجّح المتحرك: كل صرف بمتوسط وقت صرفه، والوارد بأثر رجعي يعيد التسعير."""
+    import io
+    from datetime import date
+    from openpyxl import Workbook
+    from scripts.import_raw import run
+    wb = Workbook()
+    wb.remove(wb.active)
+    def sh(n, head, rows):
+        w = wb.create_sheet(n); w.append(head)
+        for r in rows: w.append(r)
+    sh("الأصناف", ["الكود", "الاسم", "الوحدة", "ناتج كسارة"], [("RM-MBT", "بيتومين متوسط", "طن", 0)])
+    sh("الافتتاحي", ["الكود", "الكمية", "القيمة"], [("RM-MBT", 10, 10000)])
+    sh("الوارد", ["التاريخ", "رقم الفاتورة", "المورد", "الكود", "الكمية", "السعر"],
+       [(date(2026, 4, 2), "M-1", "المسار", "RM-MBT", 5, 2000),
+        (date(2026, 4, 5), "تحويل", "تحويل من نجران", "RM-MBT", 10, 1700)])
+    sh("الصرف", ["المرجع", "التاريخ", "الجهة", "الوحدة", "العميل", "الكود", "الكمية", "التكلفة", "سعر البيع",
+                 "نوع الجهة", "اسم الجهة", "غرض الديزل", "أطنان الأسفلت"],
+       [("MA1", date(2026, 4, 1), "asphalt", "", None, "RM-MBT", 5, 0, None, None, None, None, None),
+        ("MA2", date(2026, 4, 3), "asphalt", "", None, "RM-MBT", 4, 0, None, None, None, None, None),
+        ("MA3", date(2026, 4, 6), "asphalt", "", None, "RM-MBT", 2, 0, None, None, None, None, None)])
+    buf = io.BytesIO(); wb.save(buf)
+    db = SessionLocal()
+    code = db.get(Site, env["site"]).code
+    db.close()
+    run(io.BytesIO(buf.getvalue()), code)
+    db = SessionLocal()
+    cost = {r.req_no[-3:]: r.lines[0].unit_cost for r in db.query(Request).filter(Request.req_no.like("%-MA_"))}
+    # 10@1000 → صرف 5 بـ1000 → وارد 5@2000: (5000+10000)/10=1500 → صرف 4 بـ1500 → وارد 10@1700: (9000+17000)/16=1625
+    assert cost == {"MA1": 1000, "MA2": 1500, "MA3": 1625}
+    mbt = db.query(Item).filter_by(code="RM-MBT").one().id
+    assert round(S.raw_stock_table(db, env["site"])[mbt]["avg"], 4) == 1625
+    assert round(S.raw_stock_table(db, env["site"], upto=date(2026, 4, 4))[mbt]["avg"], 4) == 1500
+    db.close()

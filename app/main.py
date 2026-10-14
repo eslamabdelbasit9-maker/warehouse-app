@@ -934,6 +934,9 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
     if not changes:
         flash(request, "لم يتم إجراء أي تعديل")
         return back(f"/requests/{rid}")
+    if req.type == "raw":
+        db.flush()
+        S.revalue_raw(db, req.site_id)
     db.commit()
     flash(request, "تم التعديل: " + "، ".join(changes))
     return back(f"/requests/{rid}")
@@ -1259,6 +1262,9 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
             raise S.BusinessError("أضف صنفاً واحداً على الأقل")
         rec.attachment = save_upload(db, form.get("attachment"))
         db.add(rec)
+        db.flush()
+        if any(l.item.category == "raw" for l in rec.lines):
+            S.revalue_raw(db, sel.id)
         db.commit()
     except S.BusinessError as e:
         db.rollback()
