@@ -10,8 +10,8 @@
     {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if f.site==s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
   <div class="f"><label>بحث (رقم/صنف/سبب)</label><input name="q" value="{{ f.q }}"></div>
   <label style="align-self:center"><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }}> طلباتي فقط</label>
-  {% if f.month %}<input type="hidden" name="month" value="{{ f.month }}">{% if f.ok %}<input type="hidden" name="ok" value="1">{% endif %}
-  <span class="chip">الشهر: {{ month_label }}{{ ' — المعتمد' if f.ok }} <a href="/requests?type={{ f.type }}&site={{ f.site }}" title="إلغاء فلتر الشهر">✕</a></span>{% endif %}
+  {% if f.month %}<input type="hidden" name="month" value="{{ f.month }}">{% if f.ok %}<input type="hidden" name="ok" value="1">{% endif %}{% if f.kind %}<input type="hidden" name="kind" value="{{ f.kind }}">{% endif %}
+  <span class="chip">الشهر: {{ month_label }}{{ ' — المعتمد' if f.ok }}{{ (' — ' ~ UNIT_KINDS[f.kind]) if f.kind }} <a href="/requests?type={{ f.type }}&site={{ f.site }}" title="إلغاء فلتر الشهر">✕</a></span>{% endif %}
   <button class="btn">بحث</button>
   <span class="right"></span>
   <a class="btn sec" href="/export/requests.xlsx?type=spare&site={{ f.site }}">تصدير قطع الغيار Excel</a>
@@ -27,6 +27,6 @@
 <td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>
 {% else %}<tr><td colspan="9" class="muted">لا توجد طلبات</td></tr>{% endfor %}
 </table></div>
-{% if pages > 1 %}<div class="pager">{% for p in range(1, pages+1) %}{% if p == page %}<b>{{ p }}</b>{% else %}<a href="?type={{ f.type }}&status={{ f.status }}&site={{ f.site }}&q={{ f.q }}&mine={{ f.mine }}&month={{ f.month }}&ok={{ f.ok }}&page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}</div>{% endif %}
+{% if pages > 1 %}<div class="pager">{% for p in range(1, pages+1) %}{% if p == page %}<b>{{ p }}</b>{% else %}<a href="?type={{ f.type }}&status={{ f.status }}&site={{ f.site }}&q={{ f.q }}&mine={{ f.mine }}&month={{ f.month }}&ok={{ f.ok }}&kind={{ f.kind }}&page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}</div>{% endif %}
 </div>
 {% endblock %}

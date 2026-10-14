@@ -1349,3 +1349,27 @@ def test_custom_bg_notify_and_idle_logout(env, monkeypatch):
     assert c.get("/", follow_redirects=False).status_code == 200
     monkeypatch.setattr(A.time, "time", lambda: now + 31 * 60 + 50 * 60)
     assert c.get("/", follow_redirects=False).status_code == 200
+
+
+def test_issue_chart_by_unit_kind_links(env):
+    """رسم «حسب الوحدة» في اللوحة: كل نوع بيفتح صرف النوع ده بس، وصفحة الصرف بتفلتر بنوع الوحدة."""
+    from datetime import date as _d
+    c = TestClient(app)
+    db = SessionLocal()
+    admin = db.query(User).filter(User.roles == "admin").first()
+    env["admin"] = admin.id
+    db.close()
+    login(c, env, "admin")
+    page = c.get("/").text
+    assert "&amp;kind=" in page
+    db = SessionLocal()
+    reqs = db.query(Request).filter(Request.type == "spare", Request.unit_id.isnot(None)).all()
+    kinds = {r.unit.kind for r in reqs}
+    assert len(kinds) >= 2
+    db.close()
+    m = _d.today().strftime("%Y-%m")
+    for k in kinds:
+        html = c.get(f"/requests?type=spare&month={m}&kind={k}").text
+        for r in reqs:
+            if r.work_date.strftime("%Y-%m") == m:
+                assert (r.req_no in html) == (r.unit.kind == k)

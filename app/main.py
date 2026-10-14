@@ -456,14 +456,15 @@ SUB_COLORS = {"asphalt": 3, "crusher": 4, "concrete": 5, "transport": 6, "other"
 
 def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None):
     """رسم شهري منفصل لكل نوع وحدة (الكسارات، الخلاطات، ...) — وجوه كل رسم مقارنة الفروع.
-    rows: (site_id, date, value, kind)."""
+    rows: (site_id, date, value, kind). الضغط على عمود بيفتح صرف النوع ده بس (&kind=)."""
     rows = list(rows)
     out = []
     for k, name in kinds.items():
         sub = [(r[0], r[1], r[2]) for r in rows if (r[3] if r[3] in kinds else "other") == k]
         if not any(r[2] for r in sub):
             continue
-        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=link, h2=320)
+        klink = (lambda sid, y, m, k=k: link(sid, y, m) + f"&kind={k}") if link else None
+        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=klink, h2=320)
         out.append(dict(key=k, name=name, c=SUB_COLORS.get(k, 7), total=mc["total"], mc=mc))
     return out
 
@@ -680,8 +681,8 @@ def api_stock(site: int, db: Session = Depends(get_db), user: User = Depends(cur
 # ---------------- الطلبات ----------------
 @app.get("/requests", response_class=HTMLResponse)
 def requests_list(request: Request, type: str = "", status: str = "", site: str = "", q: str = "",
-                  mine: str = "", month: str = "", ok: str = "", page: int = 1, db: Session = Depends(get_db),
-                  user: User = Depends(current_user)):
+                  mine: str = "", month: str = "", ok: str = "", kind: str = "", page: int = 1,
+                  db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites = user_sites(db, user)
     qry = db.query(Req).filter(or_(Req.site_id.in_([s.id for s in sites]), Req.requester_id == user.id))
     if type in REQ_TYPES:
@@ -697,6 +698,14 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
         qry = qry.filter(Req.work_date >= mon[0], Req.work_date < mon[1])
     if ok:   # المعتمد (نهائي أو جزئي) — من رسم الصرف الشهري
         qry = qry.filter(Req.status.in_(["approved", "partial"]))
+    if kind in UNIT_KINDS:   # نوع الوحدة (من رسم «حسب الوحدة») — «أخرى» تشمل الطلبات من غير وحدة
+        if kind == "other":
+            known = [k for k in UNIT_KINDS if k != "other"]
+            qry = qry.filter(or_(Req.unit_id.is_(None), Req.unit.has(or_(Unit.kind.is_(None), Unit.kind.notin_(known)))))
+        else:
+            qry = qry.filter(Req.unit.has(Unit.kind == kind))
+    else:
+        kind = ""
     if q.strip():
         like = f"%{q.strip()}%"
         qry = qry.filter(or_(Req.req_no.ilike(like), Req.reason.ilike(like), Req.requester_name.ilike(like),
@@ -707,7 +716,7 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
                         selectinload(Req.requester))
             .order_by(Req.work_date.desc(), Req.id.desc()).offset((page - 1) * per).limit(per).all())
     return render(request, "requests_list.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
-                  sites=sites, f=dict(type=type, status=status, site=site, q=q, mine=mine, month=month if mon else "", ok=ok),
+                  sites=sites, f=dict(type=type, status=status, site=site, q=q, mine=mine, month=month if mon else "", ok=ok, kind=kind),
                   month_label=month_label(mon))
 
 
