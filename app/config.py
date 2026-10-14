@@ -33,6 +33,7 @@ class Settings:
             DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_p):]
     # مفتاح روابط Power BI (/export/...csv?key=...) — اتركه فارغاً لإيقاف الروابط
     EXPORT_KEY = os.getenv("EXPORT_KEY", "")
+    BACKUP_KEY = os.getenv("BACKUP_KEY", "")   # مفتاح النسخة التلقائية الأسبوعية (GitHub Actions) — منفصل عن مفتاح Power BI
     UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")))
 
     # تسجيل دخول تجريبي (للتطوير فقط) — يجب أن يكون false في التشغيل الفعلي

@@ -23,5 +23,7 @@ services:
         sync: false
       - key: EXPORT_KEY            # مفتاح روابط Power BI
         generateValue: true
+      - key: BACKUP_KEY            # مفتاح النسخة الاحتياطية الأسبوعية (نفس القيمة في GitHub Secrets)
+        generateValue: true
       - key: MAIL_MODE             # outbox = الاعتماد من جوه البرنامج والإيميلات تتسجل في سجل الإيميلات بس
         value: outbox

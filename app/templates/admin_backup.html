@@ -14,6 +14,14 @@
   <a class="btn sec" href="/admin/backup/download">تحميل نسخة واحدة</a>
   <p class="muted" id="bk-msg" style="margin-bottom:0">عند «تحميل نسختين» يُطلب منك مكان الحفظ مرتين: الأولى على الجهاز (مثل التنزيلات)، والثانية اختر فيها مجلد <b>OneDrive</b> على جهازك فيُرفع تلقائياً.</p>
 </div>
+<div class="card">
+  <h2 style="margin-top:0">النسخة التلقائية الأسبوعية</h2>
+  <p style="margin-top:0">آخر نسخة يدوية: <b>{{ last_manual.strftime('%Y-%m-%d %H:%M') if last_manual else 'لا يوجد' }}</b> —
+     آخر نسخة تلقائية: <b>{{ last_auto.strftime('%Y-%m-%d %H:%M') if last_auto else 'لا يوجد' }}</b></p>
+  {% if auto_on %}<p class="muted" style="margin-bottom:0">تعمل كل يوم جمعة الساعة 2 فجراً، وتُحفظ مشفرة بكلمة سر لمدة 90 يوماً في GitHub (صفحة Actions ← weekly-backup).</p>
+  {% else %}<p class="muted" style="margin-bottom:0">غير مفعّلة بعد — تحتاج إضافة مفتاح <b>BACKUP_KEY</b> في Render وفي GitHub مع كلمة سر <b>BACKUP_PASSWORD</b>.</p>{% endif %}
+  <p class="muted" style="margin-bottom:0">ويظهر لك تذكير في أعلى البرنامج إذا مرّ أسبوع بدون نسخة يدوية (الجهاز + OneDrive).</p>
+</div>
 <form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="card" style="border:1px solid var(--err)">
   <h2 style="margin-top:0;color:var(--err)">استرجاع نسخة احتياطية</h2>
   <p class="muted" style="margin-top:0">⚠ الاسترجاع <b>يحذف كل البيانات الحالية</b> ويضع مكانها بيانات الملف. يُنصح بتحميل نسخة من الوضع الحالي أولاً.</p>

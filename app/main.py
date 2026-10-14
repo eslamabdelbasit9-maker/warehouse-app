@@ -184,6 +184,7 @@ def flash(request: Request, msg: str, kind="ok"):
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
     pending_n = transfer_n = 0
+    backup_due = None   # لمدير النظام: عدد الأيام من آخر نسخة يدوية لو عدّى أسبوع
     own = getattr(request.state, "db", None)  # نفس اتصال الطلب — من غير ما نفتح اتصال تاني
     db = own or SessionLocal()
     try:
@@ -193,11 +194,16 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
+            if u.has("admin"):
+                lb = last_backup(db, "manual")
+                days = (datetime.now() - lb).days if lb else None
+                if days is None or days >= 7:
+                    backup_due = days if days is not None else -1
         theme = S.get_theme(db, user.id if user is not None else None)
     finally:
         if own is None:
             db.close()
-    return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "path": request.url.path,
+    return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "backup_due": backup_due, "path": request.url.path,
                                               "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, **ctx})
 
 
@@ -876,13 +882,37 @@ def production_delete(pid: int, request: Request, db: Session = Depends(get_db),
 # ---------------- النسخ الاحتياطي ----------------
 @app.get("/admin/backup", response_class=HTMLResponse)
 def admin_backup(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
-    return render(request, "admin_backup.html", user)
+    return render(request, "admin_backup.html", user, last_manual=last_backup(db, "manual"), last_auto=last_backup(db, "auto"),
+                  auto_on=bool(settings.BACKUP_KEY))
 
 
-@app.get("/admin/backup/download")
-def admin_backup_download(user: User = Depends(require("admin"))):
+def _mark_backup(kind):
+    """آخر نسخة احتياطية (يدوي / تلقائي) — للتذكير الأسبوعي."""
+    from .models import AppSetting
+    db = SessionLocal()
+    try:
+        key = f"last_backup_{kind}"
+        row = db.get(AppSetting, key) or AppSetting(key=key, value="")
+        row.value = datetime.now().isoformat(timespec="minutes")
+        db.merge(row)
+        db.commit()
+    finally:
+        db.close()
+
+
+def last_backup(db, kind="manual"):
+    from .models import AppSetting
+    row = db.get(AppSetting, f"last_backup_{kind}")
+    try:
+        return datetime.fromisoformat(row.value) if row and row.value else None
+    except ValueError:
+        return None
+
+
+def _backup_response(kind):
     from .backup import make_backup
     f = make_backup()
+    _mark_backup(kind)
     name = f"backup_{datetime.now():%Y-%m-%d_%H%M}.zip"
 
     def chunks():
@@ -896,6 +926,19 @@ def admin_backup_download(user: User = Depends(require("admin"))):
             f.close()
     return StreamingResponse(chunks(), media_type="application/zip",
                              headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.get("/admin/backup/download")
+def admin_backup_download(user: User = Depends(require("admin"))):
+    return _backup_response("manual")
+
+
+@app.get("/backup/auto")
+def backup_auto(key: str = ""):
+    """النسخة التلقائية الأسبوعية (من GitHub Actions) بمفتاح BACKUP_KEY."""
+    if not settings.BACKUP_KEY or not _hmac.compare_digest(key, settings.BACKUP_KEY):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return _backup_response("auto")
 
 
 @app.post("/admin/backup/restore")

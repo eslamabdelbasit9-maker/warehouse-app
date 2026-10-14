@@ -67,6 +67,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 {% endif %}
 <main>
 {% for k, m in flashes %}<div class="flash {{ k }}">{{ m }}</div>{% endfor %}
+{% if backup_due is not none and not path.startswith('/admin/backup') %}<div class="flash warn noprint">🗂 {% if backup_due < 0 %}لم تُحمَّل أي نسخة احتياطية بعد{% else %}مرّ {{ backup_due }} يوم على آخر نسخة احتياطية{% endif %} — <a href="/admin/backup">حمّل النسخة الأسبوعية الآن (الجهاز + OneDrive)</a></div>{% endif %}
 {% block body %}{% endblock %}
 </main>
 {% block scripts %}{% endblock %}

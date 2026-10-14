@@ -1,0 +1,36 @@
+# نسخة احتياطية تلقائية كل أسبوع (الجمعة 2 الفجر بتوقيت السعودية).
+# الملف بيتشفّر بكلمة سر قبل ما يتحفظ (المستودع عام)، ويفضل محفوظ 90 يوم في صفحة Actions.
+# محتاج في GitHub ← Settings ← Secrets and variables ← Actions:
+#   BACKUP_KEY       نفس القيمة اللي في Render (Environment ← BACKUP_KEY)
+#   BACKUP_PASSWORD  كلمة سر تفتح بيها الملف (احتفظ بيها عندك)
+name: weekly-backup
+on:
+  schedule:
+    - cron: "0 23 * * 4"
+  workflow_dispatch:
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: تحميل النسخة وتشفيرها
+        env:
+          BACKUP_KEY: ${{ secrets.BACKUP_KEY }}
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          if [ -z "$BACKUP_KEY" ] || [ -z "$BACKUP_PASSWORD" ]; then
+            echo "::warning::النسخة التلقائية متوقفة — أضف BACKUP_KEY و BACKUP_PASSWORD في Secrets"; exit 0; fi
+          name="backup_$(date -u -d '+3 hours' +%Y-%m-%d)"
+          curl -fsS --retry 5 --retry-delay 30 --retry-all-errors --max-time 600 -o raw.zip \
+            "https://warehouse-app-9k24.onrender.com/backup/auto?key=${BACKUP_KEY}"
+          unzip -tq raw.zip
+          7z a -tzip -mem=AES256 -p"$BACKUP_PASSWORD" "$name.zip" raw.zip > /dev/null
+          rm raw.zip
+          echo "NAME=$name" >> "$GITHUB_ENV"
+      - name: حفظ النسخة (90 يوم)
+        if: env.NAME != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.zip
+          retention-days: 90

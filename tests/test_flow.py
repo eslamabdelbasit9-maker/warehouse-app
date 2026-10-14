@@ -1268,3 +1268,25 @@ def test_backup_download_and_restore(env):
     db.add(Item(code="BK-AFTER", name="بعد الاسترجاع", uom="قطعة"))   # الأرقام التلقائية شغالة بعد الاسترجاع
     db.commit()
     db.close()
+
+
+def test_backup_auto_key_and_reminder(env):
+    from app.config import settings
+    c = TestClient(app)
+    assert c.get("/backup/auto?key=x").status_code == 403
+    settings.BACKUP_KEY = "k-123"
+    try:
+        r = c.get("/backup/auto?key=k-123")
+        assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    finally:
+        settings.BACKUP_KEY = ""
+    login(c, env, "admin@example.com")
+    from app.db import SessionLocal as SL
+    from app.models import AppSetting
+    db = SL()
+    db.query(AppSetting).filter(AppSetting.key == "last_backup_manual").delete()
+    db.commit()
+    db.close()
+    assert "لم تُحمَّل أي نسخة احتياطية" in c.get("/").text      # تذكير
+    c.get("/admin/backup/download")
+    assert "نسخة احتياطية" not in c.get("/").text.split("<main>")[1].split("</main>")[0][:400]
