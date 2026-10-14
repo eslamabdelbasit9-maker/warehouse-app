@@ -1316,3 +1316,36 @@ def test_security_hardening(env):
     r = c.post("/signin", data={"email": "admin@example.com", "password": "admin-pass-123"}, follow_redirects=True)
     assert "محاولات كثيرة" in r.text
     M._FAILS.clear()
+
+
+def test_custom_bg_notify_and_idle_logout(env, monkeypatch):
+    import app.auth as A
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    # خلفية من لوحة الألوان (داكنة → وضع داكن)، وقيمة غلط مرفوضة
+    assert "تم حفظ المظهر" in c.post("/account/appearance", data={"primary": "#2B3440", "bg": "custom", "bg_custom": "#1a2b3c",
+                                                                "font": "Cairo"}, follow_redirects=True).text
+    page = c.get("/").text
+    assert "--bg:#1A2B3C" in page and 'data-mode="dark"' in page
+    c.post("/account/appearance", data={"primary": "#2B3440", "bg": "mint", "font": "Cairo"})
+    page = c.get("/").text
+    assert "--bg:#E7F3EC" in page and 'data-mode="dark"' not in page
+    assert "اختيار غير صحيح" in c.post("/account/appearance", data={"primary": "#2B3440", "bg": "custom", "bg_custom": "red;x",
+                                                                   "font": "Cairo"}, follow_redirects=True).text
+    c.post("/account/appearance", data={"reset": "1"})
+    # عدد الطلبات المنتظرة
+    r = c.get("/api/notify")
+    assert r.status_code == 200 and isinstance(r.json()["n"], int)
+    # خمول 31 دقيقة → خروج؛ والاستعلام التلقائي ما بيجددش الجلسة
+    now = A.time.time()
+    monkeypatch.setattr(A.time, "time", lambda: now + 20 * 60)
+    assert c.get("/api/notify").status_code == 200
+    monkeypatch.setattr(A.time, "time", lambda: now + 31 * 60)
+    assert c.get("/api/notify").status_code == 401
+    assert c.get("/", follow_redirects=False).status_code == 303
+    # الاستخدام الفعلي بيجدد المدة
+    login(c, env, "requester@example.com")
+    monkeypatch.setattr(A.time, "time", lambda: now + 31 * 60 + 25 * 60)
+    assert c.get("/", follow_redirects=False).status_code == 200
+    monkeypatch.setattr(A.time, "time", lambda: now + 31 * 60 + 50 * 60)
+    assert c.get("/", follow_redirects=False).status_code == 200

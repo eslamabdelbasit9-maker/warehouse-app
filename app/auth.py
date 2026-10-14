@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import os
+import time
 
 import msal
 from fastapi import APIRouter, Depends, Request
@@ -14,6 +15,8 @@ from .models import User
 
 router = APIRouter()
 SCOPES = ["User.Read"]
+IDLE_LIMIT = 30 * 60   # خروج تلقائي بعد 30 دقيقة بدون أي استخدام
+NO_TOUCH = {"/api/notify"}   # طلبات تلقائية من الصفحة — ما تتحسبش استخدام
 
 
 class LoginRequired(Exception):
@@ -51,7 +54,13 @@ def _msal_app():
 
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
     uid = request.session.get("uid")
+    now = int(time.time())
+    seen = request.session.get("seen") or now
+    if uid and now - seen > IDLE_LIMIT:
+        uid = None
     user = db.get(User, uid) if uid else None
+    if user and request.url.path not in NO_TOUCH and (now - seen > 30 or "seen" not in request.session):
+        request.session["seen"] = now
     if not user or not user.active:
         request.session.clear()
         raise LoginRequired(str(request.url.path))
@@ -91,6 +100,7 @@ def callback(request: Request, db: Session = Depends(get_db)):
         request.session["denied_email"] = email
         return RedirectResponse("/denied")
     request.session["uid"] = user.id
+    request.session["seen"] = int(time.time())
     return RedirectResponse(request.session.pop("next", "/"))
 
 

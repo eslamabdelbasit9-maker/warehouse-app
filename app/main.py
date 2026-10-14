@@ -184,6 +184,8 @@ def init_db():
 # ---------------- أدوات ----------------
 @app.exception_handler(LoginRequired)
 def _login_required(request: Request, exc: LoginRequired):
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"login": True}, status_code=401)
     return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
 
 
@@ -320,6 +322,7 @@ async def dev_login(request: Request, db: Session = Depends(get_db)):
     if not u:
         return back("/dev-login")
     request.session["uid"] = u.id
+    request.session["seen"] = int(time.time())
     return back(request.session.pop("next", "/"))
 
 
@@ -377,6 +380,7 @@ async def signin(request: Request, db: Session = Depends(get_db)):
     nxt = request.session.get("next", "/")
     request.session.clear()
     request.session["uid"] = u.id
+    request.session["seen"] = int(time.time())
     return back(nxt)
 
 
@@ -402,6 +406,15 @@ async def account_post(request: Request, db: Session = Depends(get_db), user: Us
     return back("/account#password")
 
 
+@app.get("/api/notify")
+def api_notify(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """عدد الطلبات المنتظرة (اعتمادات + تحويلات واردة) — للتنبيه لو البرنامج مصغّر."""
+    n = len(S.pending_for(db, user))
+    if user.has("storekeeper"):
+        n += db.query(Transfer).filter(Transfer.status == "in_transit", Transfer.to_site_id.in_(user.site_ids(db))).count()
+    return JSONResponse({"n": n}, headers={"Cache-Control": "no-store"})
+
+
 @app.post("/account/appearance")
 async def account_appearance(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """المظهر الخاص بالمستخدم — ما بيأثرش على حد تاني."""
@@ -411,7 +424,7 @@ async def account_appearance(request: Request, db: Session = Depends(get_db), us
         flash(request, "تمت استعادة المظهر الافتراضي")
         return back("/account")
     try:
-        S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"), user_id=user.id)
+        S.save_theme(db, (form.get("primary") or "").strip(), S.pick_bg(form), form.get("font"), user_id=user.id)
     except S.BusinessError as e:
         flash(request, str(e), "err")
         return back("/account")
@@ -2225,7 +2238,7 @@ async def admin_appearance_post(request: Request, db: Session = Depends(get_db),
         flash(request, "تمت استعادة المظهر الافتراضي")
         return back("/admin/appearance")
     try:
-        S.save_theme(db, (form.get("primary") or "").strip(), form.get("bg"), form.get("font"))
+        S.save_theme(db, (form.get("primary") or "").strip(), S.pick_bg(form), form.get("font"))
     except S.BusinessError as e:
         flash(request, str(e), "err")
         return back("/admin/appearance")

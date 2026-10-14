@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar" dir="rtl"{% if theme and theme.bg == "dark" %} data-mode="dark"{% endif %}>
+<html lang="ar" dir="rtl"{% if theme and theme.dark %} data-mode="dark"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -125,5 +125,38 @@ document.querySelectorAll('input[data-live]').forEach(function(inp){
   });
 });
 </script>
+{% if user %}
+<script>
+// خروج تلقائي بعد 30 دقيقة بدون استخدام (مشترك بين كل التبويبات المفتوحة)
+(function(){
+  var LIMIT = 30 * 60 * 1000, K = 'lastActive';
+  function get(){ try { return +localStorage.getItem(K) || 0; } catch (_) { return 0; } }
+  function touch(){ try { if (Date.now() - get() > 15000) localStorage.setItem(K, Date.now()); } catch (_) {} }
+  try { localStorage.setItem(K, Date.now()); } catch (_) {}
+  ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach(function(ev){ document.addEventListener(ev, touch, {passive: true}); });
+  setInterval(function(){ if (get() && Date.now() - get() > LIMIT) location.href = '/logout'; }, 30000);
+})();
+// تنبيه بالطلبات الجديدة لو البرنامج مصغّر أو في تبويب تاني
+(function(){
+  var base = document.title, last = null;
+  function ask(){ if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }
+  document.addEventListener('click', ask, {once: true});
+  function check(){
+    fetch('/api/notify', {credentials: 'same-origin', cache: 'no-store'}).then(function(r){
+      if (r.status === 401) { location.href = '/login'; return null; } return r.ok ? r.json() : null;
+    }).then(function(d){
+      if (!d) return;
+      document.title = d.n ? '(' + d.n + ') ' + base : base;
+      if (last !== null && d.n > last && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        var nt = new Notification({{ APP_NAME|tojson }}, {body: 'يوجد طلب جديد بانتظارك (' + d.n + ')', icon: '/static/logo.png', tag: 'pending', renotify: true});
+        nt.onclick = function(){ window.focus(); location.href = '/'; nt.close(); };
+      }
+      last = d.n;
+    }).catch(function(){});
+  }
+  check(); setInterval(check, 60000);
+})();
+</script>
+{% endif %}
 </body>
 </html>

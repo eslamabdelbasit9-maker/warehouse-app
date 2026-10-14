@@ -33,7 +33,10 @@ THEME_COLORS = {  # ألوان جاهزة — والمدير يقدر يختار
     "#7A1F3D": "عنابي", "#9A3412": "برتقالي محروق",
 }
 THEME_BGS = {"gray": ("رمادي فاتح", "#ECEEF2"), "light": ("فاتح مزرق", "#F3F5F9"),
-             "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB"), "dark": ("داكن (Dark)", "#12161C")}
+             "warm": ("رمادي دافئ", "#F0EEEA"), "white": ("أبيض", "#FAFAFB"),
+             "sky": ("سماوي فاتح", "#E6F0FA"), "mint": ("أخضر فاتح", "#E7F3EC"), "cream": ("كريمي", "#F7F2E6"),
+             "sand": ("رملي", "#EFE6D6"), "rose": ("وردي فاتح", "#F8ECEF"), "lavender": ("بنفسجي فاتح", "#EEEBF8"),
+             "dark": ("داكن (Dark)", "#12161C"), "navy": ("كحلي داكن", "#0F1A2B")}
 THEME_FONTS = {"Cairo": "Cairo", "IBM Plex Sans Arabic": "IBM Plex Arabic", "Tajawal": "Tajawal", "Almarai": "Almarai"}
 THEME_DEFAULT = {"primary": "#2B3440", "bg": "gray", "font": "Cairo"}
 
@@ -41,6 +44,22 @@ THEME_DEFAULT = {"primary": "#2B3440", "bg": "gray", "font": "Cairo"}
 def _hex_ok(v):
     import re
     return bool(re.fullmatch(r"#[0-9A-Fa-f]{6}", v or ""))
+
+
+def _bg_ok(v):
+    """الخلفية: من الألوان الجاهزة أو أي لون من لوحة الألوان (#RRGGBB)."""
+    return v in THEME_BGS or _hex_ok(v)
+
+
+def _is_dark(hex_color):
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 110
+
+
+def pick_bg(form):
+    """قيمة الخلفية من الفورم: اختيار جاهز، أو «custom» = اللون من اللوحة."""
+    bg = form.get("bg") or ""
+    return (form.get("bg_custom") or "").strip().upper() if bg == "custom" else bg
 
 
 def _shade(hex_color, dl, ds=0.0):
@@ -76,15 +95,17 @@ def get_theme(db: Session, user_id=None):
                 t["personal"] = True
     if not _hex_ok(t["primary"]):
         t["primary"] = THEME_DEFAULT["primary"]
-    if t["bg"] not in THEME_BGS:
+    if not _bg_ok(t["bg"]):
         t["bg"] = THEME_DEFAULT["bg"]
     if t["font"] not in THEME_FONTS:
         t["font"] = THEME_DEFAULT["font"]
     p = t["primary"].upper()
     t.update(brand=p, brand2=_shade(p, 0.08), brand3=_shade(p, 0.20, 0.05),
-             brand_rgb=",".join(str(int(p[i:i + 2], 16)) for i in (1, 3, 5)), bg_hex=THEME_BGS[t["bg"]][1],
+             brand_rgb=",".join(str(int(p[i:i + 2], 16)) for i in (1, 3, 5)), bg_hex=THEME_BGS[t["bg"]][1] if t["bg"] in THEME_BGS else t["bg"],
              font_url="https://fonts.googleapis.com/css2?family=" + t["font"].replace(" ", "+")
                       + ":wght@400;500;600;700&display=swap")
+    t["dark"] = _is_dark(t["bg_hex"])
+    t["custom_bg"] = t["bg"] not in THEME_BGS
     return t
 
 
@@ -93,7 +114,7 @@ def save_theme(db: Session, primary, bg, font, user_id=None):
     from .models import AppSetting
     if not _hex_ok(primary):
         raise BusinessError("اختر لون صحيح")
-    if bg not in THEME_BGS or font not in THEME_FONTS:
+    if not _bg_ok(bg) or font not in THEME_FONTS:
         raise BusinessError("اختيار غير صحيح")
     keys = _theme_keys(user_id)
     for k, v in (("primary", primary.upper()), ("bg", bg), ("font", font)):

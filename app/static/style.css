@@ -59,7 +59,9 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
 .swatch span{width:22px;height:22px;border-radius:6px;display:inline-block}
 .swatch input[type=radio]{display:none}
 .swatch input[type=color]{width:34px;height:26px;padding:0;border:0;background:none}
-.font-opt{flex-direction:column;align-items:flex-start;gap:2px;min-width:170px}.font-opt b{font-size:17px;white-space:nowrap}.font-opt .muted{font-size:12px;white-space:nowrap}
+.swatches.fonts{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.font-opt{flex-direction:column;align-items:flex-start;gap:4px;min-width:0;overflow:hidden}.font-opt b{font-size:16px;line-height:1.5;max-width:100%;overflow-wrap:anywhere}.font-opt .muted{font-size:12px;line-height:1.4}
+.font-opt span.muted{width:auto;height:auto;border-radius:0;display:block}
 .pager{display:flex;gap:6px;margin-top:10px}
 .menu{display:flex;align-items:center;gap:18px;flex:1;flex-wrap:wrap}
 .menu-btn{display:none}
