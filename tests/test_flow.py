@@ -1290,3 +1290,29 @@ def test_backup_auto_key_and_reminder(env):
     assert "لم تُحمَّل أي نسخة احتياطية" in c.get("/").text      # تذكير
     c.get("/admin/backup/download")
     assert "نسخة احتياطية" not in c.get("/").text.split("<main>")[1].split("</main>")[0][:400]
+
+
+def test_security_hardening(env):
+    """هيدرز الأمان، قفل openapi، نوع الملف من الامتداد، وحد محاولات الدخول لكل حساب."""
+    from app.models import Attachment
+    c = TestClient(app)
+    r = c.get("/healthz")
+    assert r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "SAMEORIGIN"
+    assert c.get("/openapi.json").status_code == 404
+    db = SessionLocal()
+    db.add(Attachment(key="evil.pdf", filename="x.pdf", content_type="text/html", data=b"<script>alert(1)</script>"))
+    db.add(Attachment(key="sheet.xlsx", filename="s.xlsx", content_type="text/html", data=b"PK"))
+    db.commit()
+    db.close()
+    login(c, env, "requester@example.com")
+    r = c.get("/files/evil.pdf")
+    assert r.headers["content-type"] == "application/pdf"            # مش text/html حتى لو اترفع كده
+    assert c.get("/files/sheet.xlsx").headers["content-disposition"].startswith("attachment")
+    # 10 محاولات غلط لنفس الحساب من IPs مختلفة → يتقفل مؤقتاً
+    from app import main as M
+    M._FAILS.clear()
+    for i in range(10):
+        c.post("/signin", data={"email": "admin@example.com", "password": "bad"}, headers={"X-Forwarded-For": f"10.0.0.{i}"})
+    r = c.post("/signin", data={"email": "admin@example.com", "password": "admin-pass-123"}, follow_redirects=True)
+    assert "محاولات كثيرة" in r.text
+    M._FAILS.clear()

@@ -53,7 +53,20 @@ async def lifespan(_app):
         task.cancel()
 
 
-app = FastAPI(title=settings.APP_NAME, docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title=settings.APP_NAME, docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """هيدرز أمان لكل الصفحات: منع تخمين نوع الملف، ومنع فتح البرنامج جوه موقع تاني، وإجبار HTTPS."""
+    resp = await call_next(request)
+    h = resp.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "SAMEORIGIN")
+    h.setdefault("Referrer-Policy", "same-origin")
+    if settings.BASE_URL.startswith("https"):
+        h.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return resp
+
+
 app.add_middleware(GZipMiddleware, minimum_size=1000)   # الصفحات الكبيرة (الأرصدة) بتنزل أصغر 5-10 مرات
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60 * 60 * 12,
                    https_only=settings.BASE_URL.startswith("https"), same_site="lax")
@@ -85,7 +98,7 @@ T.env.filters["greet_name"] = greet_name
 def _asset_version():
     """رقم نسخة لملفات التصميم والحركة — بيتغير مع أي تعديل، فالمتصفح ياخد النسخة الجديدة بعد كل Deploy."""
     import hashlib
-    h = hashlib.md5()
+    h = hashlib.md5(usedforsecurity=False)   # رقم نسخة للملفات بس، مش للأمان
     for f in ("static/style.css", "static/anim.js", "static/charts.js", "static/picker.js"):
         h.update((APP_DIR / f).read_bytes())
     return h.hexdigest()[:10]
@@ -102,6 +115,10 @@ T.env.globals["att_url"] = _att_url
 
 ALLOWED_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls", ".docx", ".doc"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+SAFE_TYPES = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+              ".webp": "image/webp", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              ".xls": "application/vnd.ms-excel", ".doc": "application/msword",
+              ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 DIESEL_CODE = "RM-DSL"
 
 
@@ -240,7 +257,7 @@ def save_upload(db, upload, images_only=False):
         raise S.BusinessError("حجم المرفق أكبر من 10 ميجا")
     name = f"{uuid.uuid4().hex}{ext}"
     db.add(Attachment(key=name, filename=Path(upload.filename).name[:300],
-                      content_type=upload.content_type or "application/octet-stream", data=data))
+                      content_type=SAFE_TYPES.get(ext, "application/octet-stream"), data=data))
     return name
 
 
@@ -320,8 +337,12 @@ def get_file(name: str, db: Session = Depends(get_db), user: User = Depends(curr
     if not a:
         p = settings.UPLOAD_DIR / Path(name).name
         return FileResponse(p) if p.exists() else HTMLResponse("غير موجود", status_code=404)
-    return Response(a.data, media_type=a.content_type,
-                    headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(a.filename)}"})
+    # نوع الملف من الامتداد (مش من اللي بعته المتصفح وقت الرفع) — والفتح جوه المتصفح للـ PDF والصور بس
+    ext = Path(a.key).suffix.lower()
+    ctype = SAFE_TYPES.get(ext, "application/octet-stream")
+    disp = "inline" if ext in (".pdf", *IMAGE_EXT) else "attachment"
+    return Response(a.data, media_type=ctype,
+                    headers={"Content-Disposition": f"{disp}; filename*=UTF-8''{quote(a.filename)}"})
 
 
 # ---------------- الدخول بكلمة المرور ----------------
@@ -340,15 +361,19 @@ async def signin(request: Request, db: Session = Depends(get_db)):
     email = (form.get("email") or "").strip().lower()
     ip = request.client.host if request.client else ""
     fails = [t for t in _FAILS.get(ip, []) if time.time() - t < 900]
-    if len(fails) >= 10:
+    efails = [t for t in _FAILS.get("e:" + email, []) if time.time() - t < 900]   # لكل حساب كمان (حتى لو الـ IP اتغيّر)
+    if len(fails) >= 10 or len(efails) >= 10:
         flash(request, "محاولات كثيرة — حاول بعد 15 دقيقة", "err")
         return back("/signin")
     u = db.query(User).filter(User.email == email, User.active.is_(True)).first()
     if not u or not check_password(form.get("password") or "", u.password_hash):
         _FAILS[ip] = fails + [time.time()]
+        if email:
+            _FAILS["e:" + email] = efails + [time.time()]
         flash(request, "الإيميل أو كلمة المرور غير صحيحة", "err")
         return back("/signin")
     _FAILS.pop(ip, None)
+    _FAILS.pop("e:" + email, None)
     nxt = request.session.get("next", "/")
     request.session.clear()
     request.session["uid"] = u.id

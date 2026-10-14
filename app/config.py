@@ -27,6 +27,9 @@ class Settings:
     # على Render يُؤخذ العنوان تلقائياً من RENDER_EXTERNAL_URL إذا لم يُحدَّد BASE_URL
     BASE_URL = (os.getenv("BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://localhost:8000").rstrip("/")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+    if SECRET_KEY == "change-me-in-production" and os.getenv("RENDER"):   # على السيرفر من غير مفتاح: مفتاح عشوائي بدل المعروف
+        import secrets as _secrets
+        SECRET_KEY = _secrets.token_hex(32)
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'app.db'}")
     for _p in ("postgres://", "postgresql://"):
         if DATABASE_URL.startswith(_p):

@@ -105,6 +105,7 @@ def restore_backup(fileobj):
             if engine.dialect.name == "postgresql":   # عدّادات الأرقام تكمل بعد آخر رقم مسترجع
                 for t in tables:
                     if "id" in t.columns and t.columns["id"].autoincrement:
-                        conn.execute(text(f"SELECT setval(pg_get_serial_sequence('{t.name}', 'id'), "
+                        conn.execute(text(f"SELECT setval("  # nosec B608 — أسماء الجداول من تعريف البرنامج نفسه
+                                          f"pg_get_serial_sequence('{t.name}', 'id'), "
                                           f"COALESCE((SELECT MAX(id) FROM {t.name}), 0) + 1, false)"))
     return n

@@ -22,7 +22,8 @@ document.querySelectorAll('.mchart').forEach(function (box) {
   try { var saved = localStorage.getItem(key); if (saved) setMode(saved); } catch (e) {}
   toEnd();
   function show(g) {
-    var parts = g.dataset.tip.split('|');
+    var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var parts = g.dataset.tip.split('|').map(esc);
     tip.innerHTML = '<b>' + parts[0] + '</b><div class="tv">' + parts[1] + '</div>' + parts.slice(2).map(function (x) {
       var p = x.split('~'); return '<div class="ts">' + (p[0] !== '' ? '<i class="sw s' + p[0] + '"></i>' : '') + p[1] + '</div>'; }).join('');
     tip.hidden = false;
