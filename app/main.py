@@ -1366,9 +1366,11 @@ def reports_page(request: Request, tab: str = "overview", site: str = "", date_f
     if t < f:
         f, t = t, f
     data = R.build(db, tab, sites, f, t) if sites else {}
+    months = R.months_between(f, t)
+    names = {s.id: s.name for s in all_sites}
     return render(request, "reports.html", user, tabs=R.TABS, tab=tab, all_sites=all_sites, sel=sel, sites=sites,
-                  site_name={s.id: s.name for s in all_sites}, d_from=f, d_to=t, d=data,
-                  months=R.months_between(f, t), ITEM_CATS=ITEM_CATS)
+                  site_name=names, d_from=f, d_to=t, d=data, months=months, ITEM_CATS=ITEM_CATS,
+                  charts=R.charts(tab, data, months, names))
 
 
 @app.get("/raw-stock", response_class=HTMLResponse)

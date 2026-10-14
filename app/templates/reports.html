@@ -1,21 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-{# ---------- رسوم بسيطة ---------- #}
-{% macro cols(series, labels, fmtd=0) %}{# series: [(الاسم، اللون، {ym: قيمة})] #}
-  {% set ns = namespace(mx=0) %}{% for _, _, vals in series %}{% for ym in months %}{% if (vals.get(ym) or 0) > ns.mx %}{% set ns.mx = vals.get(ym) %}{% endif %}{% endfor %}{% endfor %}
-  <div class="rc-legend">{% for name, c, _ in series %}<span><i style="background:{{ c }}"></i>{{ name }}</span>{% endfor %}</div>
-  <div class="rc-cols">{% for ym in months %}<div class="rc-m">
-    <div class="rc-bars">{% for name, c, vals in series %}{% set v = vals.get(ym) or 0 %}
-      <div class="rc-b" style="height:{{ (100 * v / ns.mx) if ns.mx else 0 }}%;background:{{ c }}" title="{{ name }}: {{ fmt(v, fmtd) }}"><span>{{ fmt(v, 0) if v else '' }}</span></div>{% endfor %}</div>
-    <div class="rc-l">{{ MONTHS_AR[ym[1] - 1] }}</div></div>{% endfor %}</div>
-{% endmacro %}
-{% macro hbars(rows, c='#4F6582', fmtd=0) %}{# rows: [(الاسم، القيمة، نص إضافي)] #}
-  {% set mx = (rows|map(attribute=1)|max) if rows else 0 %}
-  <div class="rc-h">{% for name, v, extra in rows %}<div class="rc-hr"><div class="rc-hn" title="{{ name }}">{{ name }}</div>
-    <div class="rc-ht"><div class="rc-hb" style="width:{{ (100 * v / mx) if mx else 0 }}%;background:{{ c }}"></div></div>
-    <div class="rc-hv">{{ fmt(v, fmtd) }}{% if extra %} <small class="muted">{{ extra }}</small>{% endif %}</div></div>
-  {% else %}<p class="muted">لا توجد بيانات في الفترة</p>{% endfor %}</div>
-{% endmacro %}
+{% macro chart_grid(cs) %}<div class="rp-charts">{% for c in cs %}<div class="card rp-chart{{ ' wide' if c.span == 2 }}"><h3>{{ c.title }}</h3><div class="rp-cv{{ ' tall' if c.type == 'doughnut' }}"><canvas id="{{ c.id }}"></canvas></div></div>{% endfor %}</div>{% endmacro %}
 {% macro delta(cur, prev, good_up=true) %}{% if prev %}{% set ch = 100 * (cur - prev) / prev %}
   <div class="s {{ 'up' if (ch >= 0) == good_up else 'down' }}">{{ '▲' if ch >= 0 else '▼' }} {{ fmt(ch|abs, 1) }}% عن الفترة السابقة</div>{% endif %}{% endmacro %}
 
@@ -40,7 +25,7 @@
   <div class="card kpi"><div class="v">{{ fmt(d.sp.total, 0) }}</div><div class="l">صرف قطع الغيار (ريال)</div>{{ delta(d.sp.total, d.prev.spare, false) }}</div>
   <div class="card kpi"><div class="v">{{ fmt(d.st.total, 0) }}</div><div class="l">قيمة المخزون في {{ d_to }}</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">إنتاج ومبيعات الكسارات شهريًا (طن)</h3>{{ cols([('الإنتاج', '#4F6582', d.cr.prod_m), ('المبيعات', '#0f9d58', d.cr.sale_m)], months) }}</div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">ملخص المواقع</h3><div class="tw"><table class="t rp">
 <tr><th>الموقع</th><th class="n">إنتاج الكسارة</th><th class="n">مبيعات الكسارة</th><th class="n">أسفلت (طن)</th><th class="n">تكلفة طن الأسفلت</th><th class="n">لتر/طن</th><th class="n">صرف قطع الغيار</th><th class="n">قيمة المخزون</th></tr>
 {% for s in sites %}{% set a = d.asp.per_site.get(s.id) %}<tr><td>{{ s.name }}</td>
@@ -57,11 +42,7 @@
   <div class="card kpi"><div class="v">{{ fmt(d.sales_val, 0) }}</div><div class="l">قيمة المبيعات (ريال)</div></div>
   <div class="card kpi"><div class="v">{{ fmt(d.stock|sum(attribute=1), 0) }}</div><div class="l">رصيد نواتج الكسارة (طن)</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">الإنتاج والمبيعات شهريًا (طن)</h3>{{ cols([('الإنتاج', '#4F6582', d.prod_m), ('المبيعات', '#0f9d58', d.sale_m)], months) }}</div>
-<div class="grid g2">
-  <div class="card"><h3 style="margin-top:0">الإنتاج حسب المادة (طن)</h3>{{ hbars(rp_items(d.prod_items)) }}</div>
-  <div class="card"><h3 style="margin-top:0">أكبر 10 عملاء (طن)</h3>{{ hbars(rp_cust(d.customers), '#0f9d58') }}</div>
-</div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">الرصيد المتبقي من نواتج الكسارة في {{ d_to }}</h3><div class="tw"><table class="t rp"><tr><th>الكود</th><th>المادة</th><th class="n">الرصيد (طن)</th></tr>
 {% for it, q in d.stock %}<tr><td dir="ltr">{{ it.code }}</td><td>{{ it.name }}</td><td class="n">{{ fmt(q) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">لا يوجد</td></tr>{% endfor %}</table></div></div>
 
@@ -72,8 +53,7 @@
   <div class="card kpi"><div class="v">{{ fmt(d.per_ton) if d.per_ton else '—' }}</div><div class="l">تكلفة الطن</div></div>
   <div class="card kpi"><div class="v">{{ fmt(d.l_t) if d.l_t else '—' }}</div><div class="l">ديزل (لتر/طن)</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">الأسفلت المنتج شهريًا (طن)</h3>{{ cols([('الأطنان', '#f5b301', rp_m(d.per_m, 'tons'))], months) }}</div>
-<div class="card"><h3 style="margin-top:0">تكلفة الطن شهريًا (ريال)</h3>{{ cols([('تكلفة الطن', '#e8590c', rp_ratio(d.per_m, 'cost', 'tons'))], months, 2) }}</div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">مقارنة المواقع</h3><div class="tw"><table class="t rp">
 <tr><th>الموقع</th><th class="n">الأطنان</th><th class="n">تكلفة المواد</th><th class="n">الديزل (لتر)</th><th class="n">تكلفة الديزل</th><th class="n">تكلفة الطن</th><th class="n">لتر/طن</th><th class="n">بيتومين (كجم/طن)</th></tr>
 {% for sid, v in d.per_site.items() %}<tr><td>{{ site_name.get(sid) }}</td><td class="n">{{ fmt(v.tons, 0) }}</td><td class="n">{{ fmt(v.mat, 0) }}</td><td class="n">{{ fmt(v.dsl_l, 0) }}</td><td class="n">{{ fmt(v.dsl_v, 0) }}</td>
@@ -89,15 +69,14 @@
   <div class="card kpi"><div class="v">{{ fmt(d.avg_lt) if d.avg_lt else '—' }}</div><div class="l">متوسط لتر/طن الشهري</div></div>
   <div class="card kpi"><div class="v">{{ fmt(d.bal.values()|sum, 0) if d.bal else 0 }}</div><div class="l">الرصيد في {{ d_to }} (لتر)</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">الوارد والمنصرف شهريًا (لتر)</h3>{{ cols([('الوارد', '#0891b2', rp_m(d.per_m, 'in_l')), ('المنصرف', '#e8590c', rp_m(d.per_m, 'out_l'))], months) }}</div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">لتر لكل طن أسفلت شهريًا</h3>
   {% if d.avg_lt %}<p class="muted">الأشهر التي يزيد فيها الاستهلاك على المتوسط بنسبة 15% أو أكثر تظهر باللون الأحمر.</p>{% endif %}
   <div class="tw"><table class="t rp"><tr><th>الشهر</th><th class="n">المنصرف (لتر)</th><th class="n">أسفلت (طن)</th><th class="n">لتر/طن</th></tr>
   {% for ym in months %}{% set v = d.per_m.get(ym) %}{% if v %}<tr><td>{{ MONTHS_AR[ym[1]-1] }} {{ ym[0] }}</td><td class="n">{{ fmt(v.out_l, 0) }}</td><td class="n">{{ fmt(v.tons, 0) }}</td>
   <td class="n {{ 'low' if v.l_t and d.avg_lt and v.l_t > d.avg_lt * 1.15 }}"><b>{{ fmt(v.l_t) if v.l_t else '-' }}</b></td></tr>{% endif %}{% endfor %}</table></div></div>
 <div class="grid g2">
-  <div class="card"><h3 style="margin-top:0">الوارد حسب المورد (لتر)</h3>{{ hbars(rp_sup(d.suppliers), '#0891b2') }}</div>
-  <div class="card"><h3 style="margin-top:0">حسب الموقع</h3><div class="tw"><table class="t rp"><tr><th>الموقع</th><th class="n">الوارد</th><th class="n">المنصرف</th><th class="n">لتر/طن</th><th class="n">الرصيد</th></tr>
+    <div class="card"><h3 style="margin-top:0">حسب الموقع</h3><div class="tw"><table class="t rp"><tr><th>الموقع</th><th class="n">الوارد</th><th class="n">المنصرف</th><th class="n">لتر/طن</th><th class="n">الرصيد</th></tr>
   {% for sid, v in d.per_site.items() %}<tr><td>{{ site_name.get(sid) }}</td><td class="n">{{ fmt(v.in_l, 0) }}</td><td class="n">{{ fmt(v.out_l, 0) }}</td><td class="n">{{ fmt(v.l_t) if v.l_t else '-' }}</td><td class="n">{{ fmt(d.bal.get(sid, 0), 0) }}</td></tr>{% endfor %}</table></div></div>
 </div>
 
@@ -106,10 +85,9 @@
   <div class="card kpi"><div class="v">{{ fmt(d.total, 0) }}</div><div class="l">قيمة الصرف (ريال)</div></div>
   <div class="card kpi"><div class="v">{{ d.n }}</div><div class="l">عدد طلبات الصرف</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">الصرف شهريًا (ريال)</h3>{{ cols([('قيمة الصرف', '#7c3aed', d.per_m)], months) }}</div>
+{{ chart_grid(charts) }}
 <div class="grid g2">
-  <div class="card"><h3 style="margin-top:0">الصرف حسب الوحدة (ريال)</h3>{{ hbars(rp_units(d.units, site_name, not sel), '#7c3aed') }}</div>
-  <div class="card"><h3 style="margin-top:0">أكبر 10 أصناف صرفًا</h3><div class="tw"><table class="t rp"><tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
+    <div class="card"><h3 style="margin-top:0">أكبر 10 أصناف صرفًا</h3><div class="tw"><table class="t rp"><tr><th>الكود</th><th>الصنف</th><th class="n">الكمية</th><th class="n">القيمة</th></tr>
   {% for it, q, v in d.top %}<tr><td dir="ltr">{{ it.code }}</td><td>{{ it.name }}</td><td class="n">{{ fmt(q) }} {{ it.uom }}</td><td class="n">{{ fmt(v, 0) }}</td></tr>{% else %}<tr><td colspan="4" class="muted">لا يوجد</td></tr>{% endfor %}</table></div></div>
 </div>
 <p class="muted">الأصناف الراكدة لها صفحة مستقلة: <a href="/stagnant">الأصناف الراكدة</a>.</p>
@@ -121,7 +99,7 @@
   <div class="card kpi"><div class="v">{{ fmt(d.gross, 0) }}</div><div class="l">شامل الضريبة</div></div>
   <div class="card kpi"><div class="v">{{ d.n }}</div><div class="l">عدد الفواتير</div></div>
 </div>
-<div class="card"><h3 style="margin-top:0">المشتريات شهريًا (بدون ضريبة)</h3>{{ cols([('المشتريات', '#4F6582', d.per_m)], months) }}</div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">الموردين</h3><div class="tw"><table class="t rp"><tr><th>المورد</th><th class="n">الفواتير</th><th class="n">بدون ضريبة</th><th class="n">الضريبة</th><th class="n">شامل الضريبة</th></tr>
 {% for k, v in d.suppliers %}<tr><td>{% if k != '—' %}<a href="/suppliers/statement?k={{ k|urlencode }}">{{ v.name }}</a>{% else %}{{ v.name }}{% endif %}</td><td class="n">{{ v.n }}</td><td class="n">{{ fmt(v.net, 0) }}</td><td class="n">{{ fmt(v.vat, 0) }}</td><td class="n"><b>{{ fmt(v.gross, 0) }}</b></td></tr>
 {% else %}<tr><td colspan="5" class="muted">لا يوجد</td></tr>{% endfor %}</table></div></div>
@@ -132,6 +110,7 @@
   <div class="card kpi"><div class="v">{{ fmt(d.total, 0) }}</div><div class="l">قيمة المخزون في {{ d_to }}</div></div>
   {% for k, v in ITEM_CATS.items() %}{% if d.totals.get(k) %}<div class="card kpi"><div class="v">{{ fmt(d.totals[k], 0) }}</div><div class="l">{{ v }}</div></div>{% endif %}{% endfor %}
 </div>
+{{ chart_grid(charts) }}
 <div class="card"><h3 style="margin-top:0">قيمة المخزون حسب الموقع والنوع</h3><div class="tw"><table class="t rp">
 <tr><th>الموقع</th>{% for k, v in ITEM_CATS.items() %}<th class="n">{{ v }}</th>{% endfor %}<th class="n">الإجمالي</th></tr>
 {% for s in sites %}{% set b = d.by_site.get(s.id, {}) %}<tr><td>{{ s.name }}</td>{% for k in ITEM_CATS %}<td class="n">{{ fmt(b.get(k, 0), 0) }}</td>{% endfor %}<td class="n"><b>{{ fmt(b.values()|sum, 0) }}</b></td></tr>{% endfor %}
@@ -143,18 +122,60 @@
 <style>
 .rp-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .kpi .s{font-size:12px;margin-top:4px}.kpi .s.up{color:var(--ok)}.kpi .s.down{color:var(--err)}
-.rc-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-bottom:8px}.rc-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-left:5px;vertical-align:-1px}
-.rc-cols{display:flex;gap:6px;align-items:flex-end;overflow-x:auto;padding-top:58px}
-.rc-m{flex:1 0 46px;display:flex;flex-direction:column;align-items:stretch}
-.rc-bars{display:flex;gap:2px;align-items:flex-end;height:170px;border-bottom:1px solid var(--line)}
-.rc-b{flex:1;min-height:1px;border-radius:4px 4px 0 0;position:relative}
-.rc-b span{position:absolute;bottom:100%;left:50%;transform:translateX(-50%) rotate(-90deg);transform-origin:center;font-size:10px;white-space:nowrap;color:var(--muted);margin-bottom:14px}
-.rc-l{text-align:center;font-size:12px;color:var(--muted);margin-top:4px}
-.rc-h{display:flex;flex-direction:column;gap:6px}.rc-hr{display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;gap:8px;align-items:center;font-size:13px}
-.rc-hn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rc-ht{background:var(--line);border-radius:4px;height:12px}.rc-hb{height:12px;border-radius:4px}
-.rc-hv{font-variant-numeric:tabular-nums;white-space:nowrap}
+.rp-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+.rp-chart.wide{grid-column:1/-1}.rp-chart h3{margin:0 0 10px;font-size:15px}
+.rp-cv{position:relative;height:300px}.rp-empty{display:flex;align-items:center;justify-content:center;height:100%}.rp-cv.tall{height:300px}.rp-chart.wide .rp-cv{height:340px}
+@media (max-width:900px){.rp-charts{grid-template-columns:minmax(0,1fr)}.rp-cv,.rp-chart.wide .rp-cv{height:260px}}
+@media print{.rp-cv{height:260px}}
 </style>
+<script src="/static/vendor/chart.umd.min.js"></script>
 <script>
+(function(){
+  const CH = {{ charts|tojson }};
+  const css = getComputedStyle(document.documentElement);
+  const txt = css.getPropertyValue('--muted').trim() || '#6b7280', grid = css.getPropertyValue('--line').trim() || '#e5e7eb';
+  const nf = new Intl.NumberFormat('en', {maximumFractionDigits: 2});
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = txt;
+  CH.forEach((c, ci) => {
+    const el = document.getElementById(c.id); if (!el) return;
+    const hasData = c.datasets.some((ds) => ds.data.some((v) => v));
+    if (!hasData) { el.parentNode.innerHTML = '<p class="muted rp-empty">لا توجد بيانات في الفترة المحددة</p>'; return; }
+    const donut = c.type === 'doughnut';
+    const fmtTick = (v) => nf.format(v);
+    let scales = {};
+    if (!donut && c.horizontal) {   // أعمدة أفقية: الأسماء يمين والقيم من اليمين لليسار
+      scales = {x: {reverse: true, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}},
+                y: {position: 'right', grid: {display: false}, ticks: {autoSkip: false}}};
+    } else if (!donut) {            // الأشهر من اليمين لليسار
+      scales = {x: {reverse: true, stacked: !!c.stacked, grid: {display: false}},
+                y: {position: 'right', stacked: !!c.stacked, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}}};
+      if (c.dual) scales.y1 = {position: 'left', beginAtZero: true, grid: {drawOnChartArea: false}, ticks: {callback: fmtTick}};
+    }
+    c.datasets.forEach((ds) => { if ((ds.type || c.type) === 'bar') ds.maxBarThickness = c.horizontal ? 34 : 46; });
+    const total = donut ? c.datasets[0].data.reduce((a, b) => a + b, 0) : 0;
+    new Chart(el, {
+      type: c.type, data: {labels: c.labels, datasets: c.datasets},
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: c.horizontal ? 'y' : 'x', locale: 'en',
+        cutout: donut ? '62%' : undefined,
+        animation: {duration: 1100, easing: 'easeOutQuart',
+          delay: (ctx) => ctx.type === 'data' && ctx.mode === 'default' ? ctx.dataIndex * 70 + ctx.datasetIndex * 120 : 0},
+        interaction: {mode: donut ? 'nearest' : 'index', intersect: donut},
+        plugins: {
+          legend: {display: donut || c.datasets.length > 1, position: donut ? 'right' : 'top', rtl: true,
+                   labels: {usePointStyle: true, boxWidth: 10, padding: 14}},
+          tooltip: {rtl: true, callbacks: {label: (ctx) => {
+            const v = ctx.parsed && typeof ctx.parsed === 'object' ? (c.horizontal ? ctx.parsed.x : ctx.parsed.y) : ctx.parsed;
+            const pct = donut && total ? ' (' + (100 * v / total).toFixed(1) + '%)' : '';
+            return ' ' + (ctx.dataset.label && !donut ? ctx.dataset.label + ': ' : (donut ? ctx.label + ': ' : '')) + nf.format(v) + (c.unit ? ' ' + c.unit : '') + pct;
+          }}},
+        },
+        scales: scales,
+      },
+    });
+  });
+})();
 function rpExport(){
   const rows=[]; document.querySelectorAll('table.rp').forEach(t=>{
     const h=t.closest('.card')?.querySelector('h3'); if(h) rows.push([h.textContent.trim()]);

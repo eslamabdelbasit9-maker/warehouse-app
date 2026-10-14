@@ -242,3 +242,113 @@ def build(db: Session, tab, sites, d_from, d_to):
 def default_period(today=None):
     today = today or date.today()
     return date(today.year, 1, 1), today
+
+
+# ---------------- إعداد الرسوم (Chart.js) ----------------
+MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+PAL = ["#4F6582", "#0f9d58", "#f5b301", "#e8590c", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#9ca3af"]
+
+
+def _ser(per_m, months, key=None):
+    return [round((per_m.get(ym, {}) or {}).get(key, 0) if key else per_m.get(ym, 0) or 0, 2) for ym in months]
+
+
+def _ratio(per_m, months, a, b):
+    out = []
+    for ym in months:
+        v = per_m.get(ym)
+        out.append(round(v[a] / v[b], 2) if v and v[b] else None)
+    return out
+
+
+def _top(rows, n=6, other="أخرى"):
+    """[(الاسم، القيمة)] → أكبر n والباقي «أخرى» (للرسم الدائري)."""
+    rows = sorted([r for r in rows if r[1] > 0], key=lambda r: -r[1])
+    head, rest = rows[:n], rows[n:]
+    if rest:
+        head.append((other, sum(r[1] for r in rest)))
+    return head
+
+
+def _donut(cid, title, rows, unit="", span=1):
+    rows = _top(rows)
+    return dict(id=cid, type="doughnut", title=title, unit=unit, span=span, labels=[r[0] for r in rows],
+                datasets=[dict(data=[round(r[1], 2) for r in rows], backgroundColor=PAL[:len(rows)])])
+
+
+def _hbar(cid, title, rows, color, unit="", span=1, n=10):
+    rows = sorted(rows, key=lambda r: -r[1])[:n]
+    return dict(id=cid, type="bar", horizontal=True, title=title, unit=unit, span=span, labels=[r[0] for r in rows],
+                datasets=[dict(label=title, data=[round(r[1], 2) for r in rows], backgroundColor=color, borderRadius=6)])
+
+
+def charts(tab, d, months, site_name):
+    labels = [MONTHS_AR[m - 1] for _, m in months]
+    if not d:
+        return []
+    if tab == "overview":
+        cr, asp, st, sp = d["cr"], d["asp"], d["st"], d["sp"]
+        return [
+            dict(id="c1", type="bar", title="إنتاج ومبيعات الكسارات شهريًا (طن)", unit="طن", span=2, labels=labels,
+                 datasets=[dict(type="bar", label="الإنتاج", data=_ser(cr["prod_m"], months), backgroundColor=PAL[0], borderRadius=6),
+                           dict(type="line", label="المبيعات", data=_ser(cr["sale_m"], months), borderColor=PAL[1],
+                                backgroundColor=PAL[1], tension=.35, pointRadius=4)]),
+            _donut("c2", "قيمة المخزون حسب النوع", [(ITEM_CATS.get(k, k), v) for k, v in st["totals"].items()], "ريال"),
+            _hbar("c3", "تكلفة طن الأسفلت حسب الموقع", [(site_name.get(s), v["per_ton"]) for s, v in asp["per_site"].items() if v["per_ton"]],
+                  PAL[3], "ريال/طن"),
+            _hbar("c4", "صرف قطع الغيار حسب الموقع", [(site_name.get(s), v) for s, v in sp["per_site"].items()], PAL[4], "ريال"),
+        ]
+    if tab == "crusher":
+        return [
+            dict(id="c1", type="bar", title="الإنتاج والمبيعات شهريًا (طن)", unit="طن", span=2, labels=labels,
+                 datasets=[dict(label="الإنتاج", data=_ser(d["prod_m"], months), backgroundColor=PAL[0], borderRadius=6),
+                           dict(label="المبيعات", data=_ser(d["sale_m"], months), backgroundColor=PAL[1], borderRadius=6)]),
+            _donut("c2", "الإنتاج حسب المادة", [(it.name, q) for it, q in d["prod_items"]], "طن"),
+            _hbar("c3", "أكبر 10 عملاء (طن)", [(k, v[0]) for k, v in d["customers"]], PAL[1], "طن"),
+            _donut("c4", "الرصيد المتبقي حسب المادة", [(it.name, q) for it, q in d["stock"]], "طن"),
+        ]
+    if tab == "asphalt":
+        return [
+            dict(id="c1", type="bar", title="الأسفلت المنتج وتكلفة الطن شهريًا", unit="", span=2, labels=labels, dual=True,
+                 datasets=[dict(type="bar", label="الأطنان", data=_ser(d["per_m"], months, "tons"), backgroundColor=PAL[2],
+                                borderRadius=6, yAxisID="y"),
+                           dict(type="line", label="تكلفة الطن (ريال)", data=_ratio(d["per_m"], months, "cost", "tons"),
+                                borderColor=PAL[3], backgroundColor=PAL[3], tension=.35, pointRadius=4, yAxisID="y1", spanGaps=True)]),
+            _hbar("c2", "تكلفة الطن حسب العميل / المشروع", [(k, pt) for k, t, c, pt in d["parties"] if pt], PAL[3], "ريال/طن"),
+            _donut("c3", "الأطنان حسب العميل / المشروع", [(k, t) for k, t, c, pt in d["parties"]], "طن"),
+        ]
+    if tab == "diesel":
+        return [
+            dict(id="c1", type="bar", title="الوارد والمنصرف ولتر/طن شهريًا", unit="", span=2, labels=labels, dual=True,
+                 datasets=[dict(type="bar", label="الوارد (لتر)", data=_ser(d["per_m"], months, "in_l"), backgroundColor=PAL[5], borderRadius=6, yAxisID="y"),
+                           dict(type="bar", label="المنصرف (لتر)", data=_ser(d["per_m"], months, "out_l"), backgroundColor=PAL[3], borderRadius=6, yAxisID="y"),
+                           dict(type="line", label="لتر / طن", data=_ratio(d["per_m"], months, "out_l", "tons"), borderColor=PAL[4],
+                                backgroundColor=PAL[4], tension=.35, pointRadius=4, yAxisID="y1", spanGaps=True)]),
+            _donut("c2", "الوارد حسب المورد", [(k, v[0]) for k, v in d["suppliers"]], "لتر"),
+            _hbar("c3", "لتر / طن حسب الموقع", [(site_name.get(s), v["l_t"]) for s, v in d["per_site"].items() if v["l_t"]], PAL[4], "لتر/طن"),
+        ]
+    if tab == "spare":
+        return [
+            dict(id="c1", type="line", title="صرف قطع الغيار شهريًا (ريال)", unit="ريال", span=2, labels=labels, fill=True,
+                 datasets=[dict(label="قيمة الصرف", data=_ser(d["per_m"], months), borderColor=PAL[4], backgroundColor=PAL[4] + "33",
+                                fill=True, tension=.35, pointRadius=4)]),
+            _hbar("c2", "الصرف حسب الوحدة", [(u if len(d["units"]) else u, v) for (s, u), v in d["units"]], PAL[4], "ريال"),
+            _donut("c3", "أكبر الأصناف صرفًا", [(it.name, v) for it, q, v in d["top"]], "ريال"),
+        ]
+    if tab == "purchases":
+        return [
+            dict(id="c1", type="line", title="المشتريات شهريًا (بدون ضريبة)", unit="ريال", span=2, labels=labels, fill=True,
+                 datasets=[dict(label="المشتريات", data=_ser(d["per_m"], months), borderColor=PAL[0], backgroundColor=PAL[0] + "33",
+                                fill=True, tension=.35, pointRadius=4)]),
+            _donut("c2", "حصة الموردين", [(v["name"], v["net"]) for k, v in d["suppliers"]], "ريال"),
+            _hbar("c3", "أكبر 10 موردين", [(v["name"], v["net"]) for k, v in d["suppliers"]], PAL[0], "ريال"),
+        ]
+    if tab == "stock":
+        cats = [k for k in ITEM_CATS if d["totals"].get(k)]
+        return [
+            _donut("c1", "قيمة المخزون حسب النوع", [(ITEM_CATS[k], d["totals"][k]) for k in cats], "ريال"),
+            dict(id="c2", type="bar", title="قيمة المخزون حسب الموقع", unit="ريال", stacked=True, labels=[site_name.get(s) for s in d["by_site"]],
+                 datasets=[dict(label=ITEM_CATS[k], data=[round(v.get(k, 0), 2) for v in d["by_site"].values()],
+                                backgroundColor=PAL[i], borderRadius=4) for i, k in enumerate(cats)]),
+        ]
+    return []
