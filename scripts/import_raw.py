@@ -71,9 +71,14 @@ def run(fileobj, site_code):
             .delete(synchronize_session=False)
         for p in db.query(CrusherProduction).filter_by(site_id=site.id, notes=MARK):
             db.delete(p)
-        for rc in db.query(Receipt).filter(Receipt.site_id == site.id, Receipt.created_by_id.is_(None),
-                                           Receipt.attachment == MARK):
-            db.delete(rc)
+        # فواتير المواد الخام المستوردة (بدون مستخدم وكل سطورها مواد خام) — والمرفقات اللي اترفعت عليها بتترجع بعد الاستيراد
+        kept_att = {}
+        raw_set = set(raw_ids)
+        for rc in db.query(Receipt).filter(Receipt.site_id == site.id, Receipt.created_by_id.is_(None)):
+            if rc.lines and all(l.item_id in raw_set for l in rc.lines):
+                if rc.attachment and rc.attachment != MARK and rc.invoice_no:
+                    kept_att[rc.invoice_no] = rc.attachment
+                db.delete(rc)
         for q in db.query(Request).filter_by(site_id=site.id, type="raw", imported=True):
             db.delete(q)
         db.flush()
@@ -102,7 +107,7 @@ def run(fileobj, site_code):
         for r in _rows(wb, "الوارد"):
             rec.setdefault((to_date(r["التاريخ"]), clean(r.get("رقم الفاتورة")), clean(r.get("المورد"))), []).append(r)
         for (d, inv, sup), rs in rec.items():
-            rc = Receipt(site_id=site.id, date=d, invoice_no=inv, supplier=sup, attachment=MARK)
+            rc = Receipt(site_id=site.id, date=d, invoice_no=inv, supplier=sup, attachment=kept_att.get(inv))
             for r in rs:
                 rc.lines.append(ReceiptLine(item_id=item(r["الكود"]).id, qty=num(r.get("الكمية")),
                                             unit_price=num(r.get("السعر"))))

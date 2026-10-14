@@ -1070,6 +1070,16 @@ def test_raw_moving_average_cost(env):
     mbt = db.query(Item).filter_by(code="RM-MBT").one().id
     assert round(S.raw_stock_table(db, env["site"])[mbt]["avg"], 4) == 1625
     assert round(S.raw_stock_table(db, env["site"], upto=date(2026, 4, 4))[mbt]["avg"], 4) == 1500
+    # فاتورة اترفع عليها مرفق: إعادة الاستيراد ما تكررهاش وتحتفظ بالمرفق
+    rc = db.query(Receipt).filter_by(invoice_no="M-1").one()
+    assert rc.attachment is None
+    rc.attachment = "abc.pdf"
+    db.commit()
+    db.close()
+    run(io.BytesIO(buf.getvalue()), code)
+    db = SessionLocal()
+    rcs = db.query(Receipt).filter_by(invoice_no="M-1").all()
+    assert len(rcs) == 1 and rcs[0].attachment == "abc.pdf"
     db.close()
 
 
