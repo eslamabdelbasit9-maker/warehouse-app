@@ -224,11 +224,30 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
                 if days is None or days >= 7:
                     backup_due = days if days is not None else -1
         theme = S.get_theme(db, user.id if user is not None else None)
+        bi_links = _bi_links(db) if user is not None and user.has(*BI_ROLES) else []
     finally:
         if own is None:
             db.close()
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "backup_due": backup_due, "path": request.url.path,
-                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, **ctx})
+                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme,
+                                              "bi_links": bi_links, **ctx})
+
+
+# ---------------- روابط تقارير Power BI ----------------
+BI_ROLES = ("admin", "manager", "final")   # مين يشوف زرار التقارير (فتح التقرير نفسه محتاج صلاحية على Power BI)
+
+
+def _bi_links(db):
+    """[(الاسم، الرابط)] من الإعداد bi_links — سطر لكل تقرير: الاسم | الرابط."""
+    from .models import AppSetting
+    row = db.get(AppSetting, "bi_links")
+    out = []
+    for line in (row.value if row else "").splitlines():
+        name, _, url = line.partition("|")
+        url = url.strip() or name.strip()
+        if url.startswith("https://"):
+            out.append(((name.strip() if _ else "") or "تقرير Power BI", url))
+    return out
 
 
 def back(url):
@@ -1018,6 +1037,32 @@ async def admin_backup_restore(request: Request, user: User = Depends(require("a
     _STAGNANT_CACHE.clear()
     flash(request, f"تم استرجاع النسخة الاحتياطية ({n} سجل)")
     return back("/admin/backup")
+
+
+@app.get("/admin/reports", response_class=HTMLResponse)
+def admin_reports(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    from .models import AppSetting
+    row = db.get(AppSetting, "bi_links")
+    return render(request, "admin_reports.html", user, value=row.value if row else "")
+
+
+@app.post("/admin/reports")
+async def admin_reports_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    from .models import AppSetting
+    form = await request.form()
+    lines = [l.strip() for l in (form.get("links") or "").splitlines() if l.strip()]
+    bad = [l for l in lines if not (l.partition("|")[2].strip() or l).startswith("https://")]
+    if bad:
+        flash(request, "كل سطر يجب أن يحتوي على رابط يبدأ بـ https://", "err")
+        return back("/admin/reports")
+    row = db.get(AppSetting, "bi_links")
+    if row:
+        row.value = "\n".join(lines)
+    else:
+        db.add(AppSetting(key="bi_links", value="\n".join(lines)))
+    db.commit()
+    flash(request, "تم حفظ روابط التقارير")
+    return back("/admin/reports")
 
 
 @app.get("/admin/crusher-prices", response_class=HTMLResponse)

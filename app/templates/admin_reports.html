@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>تقارير Power BI</h1>
+{% include "_admin_nav.html" %}
+<form method="post" class="card">
+  <p class="muted">أضف رابط كل تقرير في سطر مستقل بالصيغة: <b>اسم التقرير | الرابط</b>. تظهر الروابط في القائمة الجانبية تحت «التقارير» لمدير النظام والمدير والمعتمد النهائي، وتُفتح في نافذة جديدة. فتح التقرير يتطلب أن يكون للمستخدم صلاحية عليه في Power BI.</p>
+  <textarea name="links" rows="6" dir="auto" style="width:100%" placeholder="متابعة المستودعات | https://app.powerbi.com/groups/me/reports/...">{{ value }}</textarea>
+  <button class="btn" style="margin-top:10px">حفظ</button>
+</form>
+{% endblock %}

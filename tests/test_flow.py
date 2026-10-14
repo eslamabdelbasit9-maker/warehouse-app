@@ -1451,3 +1451,15 @@ def test_receipts_filters(env):
     assert "RF-RAW" in t and "RF-SP" not in t and "RF-OLD" not in t
     t = c.get(f"/receipts?site={env['site']}&cat=spare").text
     assert "RF-SP" in t and "RF-RAW" not in t
+
+
+def test_powerbi_links(env):
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    c.post("/admin/reports", data={"links": "متابعة المستودعات | https://app.powerbi.com/groups/me/reports/abc"})
+    t = c.get("/").text
+    assert "https://app.powerbi.com/groups/me/reports/abc" in t and "متابعة المستودعات" in t
+    c.post("/admin/reports", data={"links": "سيء | javascript:alert(1)"})
+    assert "javascript:" not in c.get("/").text
+    login(c, env, "requester@example.com")
+    assert "app.powerbi.com" not in c.get("/").text
