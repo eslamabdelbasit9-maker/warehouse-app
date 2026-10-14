@@ -22,4 +22,21 @@
   <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required></div></div>
   <button class="btn" style="margin-top:10px">رفع</button>
 </form>{% endif %}
+{% if user.has('admin') %}
+<details class="card noprint">
+  <summary class="btn sec" style="display:inline-block">تعديل الفاتورة</summary>
+  <form method="post" action="/receipts/{{ r.id }}/edit" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px">
+    <label>التاريخ<input type="date" name="date" value="{{ r.date }}"></label>
+    <label>رقم الفاتورة<input name="invoice_no" value="{{ r.invoice_no or '' }}"></label>
+    <label>المورد<input name="supplier" value="{{ r.supplier or '' }}"></label>
+    {% for l in r.lines %}
+    <label>الكمية — {{ l.item.code }} ({{ l.item.uom }})<input type="number" step="any" min="0" name="qty_{{ l.id }}" value="{{ l.qty }}"></label>
+    <label>سعر الوحدة — {{ l.item.code }}<input type="number" step="any" min="0" name="price_{{ l.id }}" value="{{ l.unit_price }}"></label>
+    {% endfor %}
+    <div><button class="btn">حفظ التعديل</button></div>
+  </form>
+  <p class="muted">لحذف صنف من الفاتورة اجعل كميته صفرًا. يُعاد حساب الرصيد ومتوسط السعر تلقائيًا.</p>
+  <form method="post" action="/receipts/{{ r.id }}/delete" onsubmit="return confirm('ستُحذف هذه الفاتورة نهائيًا ولا يمكن استرجاعها. هل تريد المتابعة؟')">
+    <button class="btn red">حذف الفاتورة نهائيًا</button></form>
+</details>{% endif %}
 {% endblock %}

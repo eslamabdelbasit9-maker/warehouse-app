@@ -1114,3 +1114,27 @@ def test_admin_deletes_request(env):
     login(c, env, "admin@example.com")
     c.post(f"/requests/{rid}/delete")
     db = SessionLocal(); assert db.get(Request, rid) is None; db.close()
+
+
+def test_admin_edits_and_deletes_receipt(env):
+    from datetime import date
+    db = SessionLocal()
+    rec = Receipt(site_id=env["site"], date=date(2026, 9, 1), invoice_no="E-1", supplier="مورد")
+    rec.lines.append(ReceiptLine(item_id=env["a"], qty=4, unit_price=10))
+    db.add(rec); db.commit(); rid, lid = rec.id, rec.lines[0].id
+    before = S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"]
+    db.close()
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    c.post(f"/receipts/{rid}/edit", data={f"qty_{lid}": "9"})
+    login(c, env, "admin@example.com")
+    assert "تعديل الفاتورة" in c.get(f"/receipts/{rid}").text
+    c.post(f"/receipts/{rid}/edit", data={"date": "2026-09-02", "invoice_no": "E-2", "supplier": "مورد",
+                                          f"qty_{lid}": "6", f"price_{lid}": "12"})
+    db = SessionLocal()
+    r = db.get(Receipt, rid)
+    assert r.invoice_no == "E-2" and r.date == date(2026, 9, 2) and r.lines[0].qty == 6 and r.lines[0].unit_price == 12
+    assert S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"] == before + 2
+    db.close()
+    c.post(f"/receipts/{rid}/delete")
+    db = SessionLocal(); assert db.get(Receipt, rid) is None; db.close()

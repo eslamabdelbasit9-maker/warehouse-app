@@ -1261,6 +1261,63 @@ async def receipt_attach(rid: int, request: Request, db: Session = Depends(get_d
     return back(f"/receipts/{rid}")
 
 
+@app.post("/receipts/{rid}/edit")
+async def receipt_edit(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """تعديل فاتورة وارد مسجّلة (التاريخ، الرقم، المورد، الكميات والأسعار) — للأدمن فقط."""
+    rec = db.get(Receipt, rid)
+    if not rec:
+        raise Forbidden()
+    form = await request.form()
+    changes = []
+    d = parse_date(form.get("date"))
+    if d and d != rec.date:
+        changes.append(f"التاريخ: {rec.date} ← {d}")
+        rec.date = d
+    for f, label in (("invoice_no", "رقم الفاتورة"), ("supplier", "المورد")):
+        v = (form.get(f) or "").strip() or None
+        if v != getattr(rec, f):
+            changes.append(label)
+            setattr(rec, f, v)
+    for l in list(rec.lines):
+        q, p = parse_float(form.get(f"qty_{l.id}")), parse_float(form.get(f"price_{l.id}"))
+        if q is not None and q <= 0:
+            changes.append(f"حذف {l.item.code}")
+            rec.lines.remove(l)
+            continue
+        if q is not None and abs(q - (l.qty or 0)) > 1e-9:
+            changes.append(f"كمية {l.item.code}: {S.fmt(l.qty)} ← {S.fmt(q)}")
+            l.qty = q
+        if p is not None and p >= 0 and abs(p - (l.unit_price or 0)) > 1e-9:
+            changes.append(f"سعر {l.item.code}: {S.fmt(l.unit_price)} ← {S.fmt(p)}")
+            l.unit_price = p
+    if not changes:
+        flash(request, "لم يتم إجراء أي تعديل")
+        return back(f"/receipts/{rid}")
+    if not rec.lines:
+        flash(request, "لا يمكن ترك الفاتورة بدون أصناف؛ استخدم حذف الفاتورة", "err")
+        db.rollback()
+        return back(f"/receipts/{rid}")
+    db.flush()
+    S.revalue_raw(db, rec.site_id)
+    db.commit()
+    flash(request, "تم التعديل: " + "، ".join(changes))
+    return back(f"/receipts/{rid}")
+
+
+@app.post("/receipts/{rid}/delete")
+def receipt_delete(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    rec = db.get(Receipt, rid)
+    if not rec:
+        raise Forbidden()
+    site_id, label = rec.site_id, rec.invoice_no or rec.date
+    db.delete(rec)
+    db.flush()
+    S.revalue_raw(db, site_id)
+    db.commit()
+    flash(request, f"تم حذف الفاتورة {label} نهائيًا")
+    return back(f"/receipts?site={site_id}")
+
+
 @app.get("/receipts/new", response_class=HTMLResponse)
 def receipt_new(request: Request, site: str | None = None, db: Session = Depends(get_db),
                 user: User = Depends(require("storekeeper"))):
