@@ -1069,3 +1069,31 @@ def test_raw_moving_average_cost(env):
     assert round(S.raw_stock_table(db, env["site"])[mbt]["avg"], 4) == 1625
     assert round(S.raw_stock_table(db, env["site"], upto=date(2026, 4, 4))[mbt]["avg"], 4) == 1500
     db.close()
+
+
+def test_admin_fixes_approved_issue_qty_and_cancels(env):
+    """الأدمن يصحح كمية صرف معتمد أو يلغي صرف مسجّل بالخطأ، والرصيد يتعدل."""
+    from app.models import RequestLine
+    from datetime import datetime
+    db = SessionLocal()
+    req = Request(req_no="FIX-1", type="spare", work_date=datetime.now().date(), site_id=env["site"], unit_id=env["crusher"], requester_name="استيراد",
+                  status="approved", current_stage=3, imported=True, closed_at=datetime.now())
+    req.lines.append(RequestLine(item_id=env["a"], qty=2, status="approved", unit_cost=10, value=20))
+    db.add(req); db.commit()
+    rid, lid = req.id, req.lines[0].id
+    before = S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"]
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    assert f"qty_{lid}" in c.get(f"/requests/{rid}").text
+    c.post(f"/requests/{rid}/edit", data={f"qty_{lid}": "5"})
+    db = SessionLocal()
+    l = db.get(RequestLine, lid)
+    assert l.qty == 5 and l.value == 50
+    assert S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"] == before - 3
+    db.close()
+    c.post(f"/requests/{rid}/edit", data={"cancel": "1"})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "cancelled"
+    assert S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"] == before + 2
+    db.close()

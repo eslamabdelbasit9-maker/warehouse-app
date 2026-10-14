@@ -931,6 +931,19 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
     if reason and reason != (req.reason or ""):
         changes.append("السبب")
         req.reason = reason
+    if req.status in ("approved", "partial"):
+        for l in req.lines:
+            if l.status != "approved":
+                continue
+            q = parse_float(form.get(f"qty_{l.id}"))
+            if q is not None and q > 0 and abs(q - (l.qty or 0)) > 1e-9:
+                changes.append(f"كمية {l.item.code}: {S.fmt(l.qty)} ← {S.fmt(q)}")
+                l.qty = q
+                l.value = round((l.unit_cost or 0) * q, 2)
+        if form.get("cancel"):
+            changes.append("إلغاء الطلب")
+            req.status = "cancelled"
+            req.reason = ((req.reason or "") + f" | أُلغي بواسطة {user.name} {date.today()}").strip(" |")
     if not changes:
         flash(request, "لم يتم إجراء أي تعديل")
         return back(f"/requests/{rid}")

@@ -37,9 +37,13 @@
       <label>التاريخ<input type="date" name="work_date" value="{{ r.work_date }}"></label>
       {% if not r.requester_id %}<label>طالب الصرف<input name="requester_name" value="{{ r.requester_name or '' }}"></label>{% endif %}
       <label style="grid-column:1/-1">السبب<textarea name="reason" rows="2">{{ r.reason or '' }}</textarea></label>
-      <div><button class="btn">حفظ التعديل</button></div>
+      {% if r.status in ('approved','partial') %}
+      {% for l in r.lines if l.status == 'approved' %}<label>الكمية المنصرفة — {{ l.item.code }} ({{ l.item.uom }})<input type="number" step="any" min="0.0001" name="qty_{{ l.id }}" value="{{ l.qty }}"></label>{% endfor %}
+      <label style="grid-column:1/-1;display:flex;gap:8px;align-items:center"><input type="checkbox" name="cancel" value="1"> إلغاء الطلب (صرف مسجّل بالخطأ، فلا يُخصم من الرصيد)</label>
+      {% endif %}
+      <div><button class="btn" onclick="if(this.form.cancel&&this.form.cancel.checked&&!confirm('سيُلغى الطلب ويُعاد المنصرف إلى الرصيد. هل تريد المتابعة؟'))return false">حفظ التعديل</button></div>
     </form>
-    <p class="muted">يقتصر التعديل هنا على بيانات الطلب، أما الكميات والاعتماد فتُعدَّل من صفحة الاعتمادات.</p>
+    <p class="muted">تعديل الكمية أو إلغاء الطلب يُعيد حساب الرصيد وقيمة الصرف تلقائيًا.</p>
   </details>
   {% endif %}
 </div>
