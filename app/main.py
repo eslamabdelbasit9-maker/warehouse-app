@@ -711,11 +711,12 @@ def new_raw(request: Request, site: str | None = None, dest: str = "", unit: str
     def _ulabel(u):   # «اسفلت» ← «اسفلت — خلاطة أسفلت»؛ «خلاطة اسفلت» تفضل زي ما هي
         n = u.name.replace("أ", "ا").replace("ة", "ه")
         return u.name if ("خلاط" in n or "خرسان" in n or "محطه" in n or "كسار" in n) else f"{u.name} — {RAW_DESTS[u.kind]}"
-    targets = [(f"u{u.id}", _ulabel(u), u.kind, u) for u in units] + \
-              [("sale", RAW_DESTS["sale"], "sale", None), ("project", RAW_DESTS["project"], "project", None)]
+    # العميل أو المشروع بيتحدد تحت في كل سطر (نوع الجهة)، فالقايمة فوق فيها الوحدات بس
+    targets = [(f"u{u.id}", _ulabel(u), u.kind, u) for u in units]
+    if not targets:
+        return render(request, "request_raw.html", user, sites=sites, sel=sel, targets=[], chosen=("", "", "", None),
+                      items=[], today=date.today(), dest="", unit=None)
     chosen = next((t for t in targets if t[0] == f"u{unit}"), None) if unit else None
-    if not chosen and dest in ("sale", "project"):
-        chosen = next(t for t in targets if t[0] == dest)
     if not chosen and dest in ("crusher", "asphalt", "concrete"):
         chosen = next((t for t in targets if t[2] == dest), None)
     chosen = chosen or targets[0]
@@ -771,10 +772,12 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                     raise S.BusinessError(f"أدخل سعر البيع للمادة «{item.name}»")
                 lines.append(dict(item=item, qty=parse_float(qty), sale_price=p))
         else:
-            for et, en, iid, qty in zip(form.getlist("entity_type"), form.getlist("entity_name"),
-                                        form.getlist("item_id"), form.getlist("qty")):
+            prices = form.getlist("sale_price")
+            for n, (et, en, iid, qty) in enumerate(zip(form.getlist("entity_type"), form.getlist("entity_name"),
+                                                       form.getlist("item_id"), form.getlist("qty"))):
                 if not (en or "").strip() and not qty:
                     continue
+                sp = parse_float(prices[n]) if n < len(prices) else None   # سعر البيع (اختياري — للعميل)
                 item = db.get(Item, int(iid)) if str(iid).isdigit() else None
                 if not item or item.category != "raw" or item.code == DIESEL_CODE:
                     raise S.BusinessError("اختر المادة من القائمة")
@@ -782,7 +785,8 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                     raise S.BusinessError("اختر نوع الجهة (مشروع / عميل)")
                 if not (en or "").strip():
                     raise S.BusinessError("أدخل اسم الجهة")
-                lines.append(dict(item=item, qty=parse_float(qty), entity_type=et, entity_name=en.strip()))
+                lines.append(dict(item=item, qty=parse_float(qty), entity_type=et, entity_name=en.strip(),
+                                  sale_price=sp if sp and sp > 0 else None))
         if dest == "asphalt":
             diesel = db.query(Item).filter(Item.code == DIESEL_CODE).one()
             for purpose in DIESEL_PURPOSES:

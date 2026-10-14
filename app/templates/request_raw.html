@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>صرف مواد خام</h1>
+{% if not targets %}<div class="flash err">لا توجد كسارة أو خلاطة أو محطة خرسانة مسجلة في هذا الموقع — أضفها من الإدارة ← المواقع والوحدات.</div>{% endif %}
 <form method="post" class="card">
   <input type="hidden" name="dest" value="{{ dest }}">
   {% if unit %}<input type="hidden" name="unit_id" value="{{ unit.id }}">{% endif %}
@@ -37,7 +38,7 @@
   {% else %}
   <h2 style="margin-top:16px">المواد حسب الجهة</h2>
   <div class="tw"><table class="t lines" id="lines">
-    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th><th></th></tr>
+    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th><th style="width:140px">سعر البيع (للعميل)</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
   {% endif %}
@@ -79,6 +80,7 @@
   <td><input name="entity_name" class="en"></td>
   <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
   <td><input name="qty" type="number" step="any" min="0"></td>
+  <td><input name="sale_price" type="number" step="any" min="0" placeholder="اختياري"></td>
   <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>
 </tr></template>
 {% endif %}

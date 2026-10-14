@@ -11,7 +11,7 @@
       <th>الحالة</th></tr>
     {% for l in r.lines %}<tr>
       <td>{{ loop.index }}</td><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
-      {% if r.type=='raw' %}<td>{{ l.entity_type or ('ديزل' if l.diesel_purpose else ('بيع' if l.sale_price else '')) }}</td><td>{% if l.sale_price %}{{ r.customer }} — السعر {{ fmt(l.sale_price) }} — القيمة <b>{{ fmt(l.sale_price * l.qty) }}</b>{% else %}{{ l.entity_name or l.diesel_purpose or '' }}{% endif %}</td>
+      {% if r.type=='raw' %}<td>{{ l.entity_type or ('ديزل' if l.diesel_purpose else ('بيع' if l.sale_price else '')) }}</td><td>{% if l.sale_price %}{{ l.entity_name or r.customer }} — السعر {{ fmt(l.sale_price) }} — القيمة <b>{{ fmt(l.sale_price * l.qty) }}</b>{% else %}{{ l.entity_name or l.diesel_purpose or '' }}{% endif %}</td>
       {% else %}{{ issued_td(l, st, iss) }}<td class="n">{{ fmt(l.unit_cost) }}</td><td class="n">{{ fmt(l.value) }}</td>{% endif %}
       <td><span class="st st-{{ l.status }}">{{ LINE_STATUS[l.status] }}{% if l.rejected_stage %} ({{ STAGES[l.rejected_stage] }}){% endif %}</span></td></tr>
     {% endfor %}

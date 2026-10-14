@@ -916,7 +916,9 @@ def test_raw_project_issue_and_single_destination(env):
     c = TestClient(app)
     login(c, env, "requester@example.com")
     page = c.get(f"/requests/new/raw?site={env['site']}&dest=project").text
-    assert "الصرف إلى" in page and "تأخذ من" not in page and "اسم المشروع" in page and "seg-tg" not in page
+    sel_box = page.split("الصرف إلى")[1].split("</select>")[0]
+    assert "بيع لعميل" not in sel_box and "مشروع للشركة" not in sel_box and "seg-tg" not in page   # العميل/المشروع تحت في السطور
+    assert "سعر البيع (للعميل)" in page
     assert "اسم الخلاطة" not in page
     page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['asphalt']}").text
     assert 'id="tons"' in page
@@ -1168,3 +1170,20 @@ def test_crusher_issue_to_projects_and_clients(env):
     login(c, env, "eng.crusher@example.com")
     page = c.get(f"/unit-statement?site={env['site']}&unit={env['crusher']}").text
     assert "صرف الكسارة" in page and "طريق نجران" in page
+
+
+def test_crusher_line_sale_price(env):
+    """سعر البيع اختياري في سطر العميل (من غير اختيار «بيع» فوق)."""
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "crusher", "unit_id": env["crusher"],
+                                          "entity_type": ["عميل", "مشروع"], "entity_name": ["مؤسسة الفجر", "طريق 15"],
+                                          "item_id": [g, g], "qty": ["10", "5"], "sale_price": ["30", ""]},
+               follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    page = c.get(f"/requests/{rid}").text
+    assert "قيمة البيع للعملاء" in page and "300" in page and "مؤسسة الفجر — السعر" in page
+
