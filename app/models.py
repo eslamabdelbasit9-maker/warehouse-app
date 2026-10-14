@@ -131,6 +131,7 @@ class OpeningBalance(Base):
     location: Mapped[str | None] = mapped_column(String(100))
     qty: Mapped[float] = mapped_column(Float, default=0)
     value: Mapped[float] = mapped_column(Float, default=0)
+    as_of: Mapped[date | None] = mapped_column(Date)   # تاريخ الرصيد الافتتاحي
     item: Mapped[Item] = relationship()
     __table_args__ = (UniqueConstraint("site_id", "item_id"),)
 

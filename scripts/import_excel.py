@@ -115,7 +115,8 @@ def run(path, site_code, site_name, replace=False):
             items[code] = it
             n_items += 1
         q, v = num(r.get("الرصيد الافتتاحي")), num(r.get("قيمة الرصيد الافتتاحي"))
-        db.add(OpeningBalance(site_id=site.id, item_id=it.id, qty=q, value=v, location=clean(r.get("الموقع"))))
+        db.add(OpeningBalance(site_id=site.id, item_id=it.id, qty=q, value=v, location=clean(r.get("الموقع")),
+                              as_of=date(date.today().year, 1, 1)))
 
     def item_for(code, name):
         code = clean(code)

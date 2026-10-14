@@ -127,7 +127,8 @@ DIESEL_CODE = "RM-DSL"
 NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT"),
                ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
                ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT"),
-               ("custody_records", "item_id", "INTEGER"), ("receipts", "no_vat", "BOOLEAN DEFAULT FALSE")]
+               ("custody_records", "item_id", "INTEGER"), ("receipts", "no_vat", "BOOLEAN DEFAULT FALSE"),
+               ("opening_balances", "as_of", "DATE")]
 DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
 CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
@@ -141,6 +142,8 @@ def _add_missing_columns():
                 if (table, col) == ("items", "crusher"):   # أول مرة: البحص والبودرة نواتج كسارة
                     conn.execute(text("UPDATE items SET crusher = :t WHERE code IN :codes")
                                  .bindparams(bindparam("codes", expanding=True)), {"t": True, "codes": list(CRUSHER_CODES)})
+                if (table, col) == ("opening_balances", "as_of"):   # الأرصدة المستوردة قبل كده = أول السنة
+                    conn.execute(text("UPDATE opening_balances SET as_of = '2026-01-01'"))
                 if (table, col) == ("requests", "raw_dest"):
                     conn.execute(text("UPDATE requests SET raw_dest = 'asphalt' WHERE type = 'raw'"))
 
@@ -1317,8 +1320,8 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
         sub = it.name.split(" - ", 1)[1].strip() if " - " in it.name and "كسارة" in it.name.split(" - ", 1)[1] else None
         if sub and it.id not in st:
             continue
-        if sub or it.id in st or it.active:
-            groups.setdefault(sub, []).append((it, st.get(it.id, empty)))
+        if it.id in st:   # الصنف يظهر في الموقع بس لو له رصيد أو حركة فيه
+            groups.setdefault(sub, []).append((it, st[it.id]))
     # الترتيب: نواتج الكسارة (البحص من الأكبر للأصغر ثم البودرة والخلطة) ثم البيتومين وباقي المواد ثم الديزل آخرًا
     order = ["G15", "G1", "G34", "G38", "PWD", "PWD3", "MIX", "BIT", "PMB", "MC1", "RC2"]
 
@@ -1336,8 +1339,8 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
 
 
 @app.get("/stock/{item_id}", response_class=HTMLResponse)
-def item_card(item_id: int, request: Request, site: str | None = None, db: Session = Depends(get_db),
-              user: User = Depends(current_user)):
+def item_card(item_id: int, request: Request, site: str | None = None, date_from: str = "", date_to: str = "",
+              db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
     item = db.get(Item, item_id)
     if not item:
@@ -1345,7 +1348,8 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
     moves = []
     ob = db.query(OpeningBalance).filter_by(site_id=sel.id, item_id=item_id).first()
     if ob:
-        moves.append(dict(d=None, kind="رصيد افتتاحي", ref="", inq=ob.qty, outq=0, price=(ob.value / ob.qty) if ob.qty else 0, who=""))
+        moves.append(dict(d=None, od=ob.as_of, kind="رصيد افتتاحي", ref="", inq=ob.qty, outq=0,
+                          price=(ob.value / ob.qty) if ob.qty else 0, who=""))
     for rl in (db.query(ReceiptLine).join(Receipt).filter(Receipt.site_id == sel.id, ReceiptLine.item_id == item_id)):
         moves.append(dict(d=rl.receipt.date, kind="وارد", ref=rl.receipt.invoice_no or "", inq=rl.qty, outq=0,
                           price=rl.unit_price, who=rl.receipt.supplier or "", link=f"/receipts/{rl.receipt_id}",
@@ -1381,13 +1385,27 @@ def item_card(item_id: int, request: Request, site: str | None = None, db: Sessi
             q = tl.recv_qty or 0
             moves.append(dict(d=t.date, kind="تحويل وارد", ref=t.tr_no, inq=q, outq=0, price=tl.unit_cost,
                               who=f"من {t.from_site.name}", link=f"/transfers/{t.id}", value=round(q * (tl.unit_cost or 0), 2)))
-    moves.sort(key=lambda m: (m["d"] is not None, m["d"] or date.min))
+    moves.sort(key=lambda m: (m["d"] is not None, m["d"] or date.min, m["outq"] > 0))
     bal = 0
     for m in moves:
         bal += m["inq"] - m["outq"]
         m["bal"] = bal
-    st = (S.raw_stock_table(db, sel.id) if item.category == "raw" else S.stock_table(db, sel.id, [item_id])).get(item_id)
-    return render(request, "item_card.html", user, sites=sites, sel=sel, item=item, moves=moves, st=st)
+    # فلتر الفترة: رصيد أول الفترة = كل الحركات قبلها، والحركات جوه الفترة بس
+    d_from, d_to = parse_date(date_from), parse_date(date_to)
+    if d_from and d_to and d_to < d_from:
+        d_from, d_to = d_to, d_from
+    if d_from or d_to:
+        before = [m for m in moves if m["d"] is None or (d_from and m["d"] < d_from)]
+        inside = [m for m in moves if m["d"] is not None and (not d_from or m["d"] >= d_from) and (not d_to or m["d"] <= d_to)]
+        b0 = before[-1]["bal"] if before else 0
+        moves = ([dict(d=d_from, kind="رصيد أول الفترة", ref="", inq=b0 if b0 > 0 else 0, outq=-b0 if b0 < 0 else 0,
+                       price=None, who="", bal=b0)] if d_from else [m for m in before if m["d"] is None]) + inside
+    if item.category == "raw":
+        st = S.raw_stock_table(db, sel.id, upto=d_to).get(item_id)
+    else:
+        st = S.stock_table(db, sel.id, [item_id], upto=d_to).get(item_id)
+    return render(request, "item_card.html", user, sites=sites, sel=sel, item=item, moves=moves, st=st,
+                  d_from=d_from, d_to=d_to)
 
 
 # ---------------- الوارد ----------------

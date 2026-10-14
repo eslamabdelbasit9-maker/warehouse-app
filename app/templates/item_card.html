@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>كرت الصنف: {{ item.code }} — {{ item.name }}</h1>
-<form class="filters card noprint" method="get">{% include "_site_pick.html" %}</form>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to or '' }}"></div>
+  <button class="btn">عرض</button>
+  {% if d_from or d_to %}<a class="btn sec" href="/stock/{{ item.id }}?site={{ sel.id }}">إلغاء الفلتر</a>{% endif %}</form>
 <div class="grid g4">
-  <div class="card kpi"><div class="v">{{ fmt(st.cur if st else 0) }} {{ item.uom }}</div><div class="l">الرصيد الحالي</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(st.cur if st else 0) }} {{ item.uom }}</div><div class="l">{{ 'الرصيد في ' ~ d_to if d_to else 'الرصيد الحالي' }}</div></div>
   <div class="card kpi"><div class="v">{{ fmt(st.avg if st else 0) }}</div><div class="l">متوسط السعر المرجح</div></div>
   <div class="card kpi"><div class="v">{{ fmt(st.value if st else 0) }}</div><div class="l">قيمة الرصيد</div></div>
   <div class="card kpi"><div class="v">{{ fmt(st.pending_qty if st else 0) }}</div><div class="l">قيد الاعتماد</div></div>
@@ -20,10 +24,12 @@
 {% endif %}
 <div class="card"><h3 style="margin-top:0">كل الحركات</h3><div class="tw"><table class="t">
 <tr><th>التاريخ</th><th>الحركة</th><th>المرجع</th><th>المورد / الوحدة</th><th class="n">وارد</th><th class="n">منصرف</th><th class="n">السعر</th><th class="n">المبلغ</th><th class="n">الرصيد</th><th>الفاتورة</th></tr>
-{% for m in moves %}<tr><td>{{ m.d or '' }}</td><td>{{ m.kind }}</td><td>{% if m.link %}<a href="{{ m.link }}">{{ m.ref }}</a>{% else %}{{ m.ref }}{% endif %}</td>
+{% for m in moves %}<tr><td>{{ (m.od or '') if m.kind == 'رصيد افتتاحي' else (m.d or '') }}</td><td>{{ m.kind }}</td><td>{% if m.link %}<a href="{{ m.link }}">{{ m.ref }}</a>{% else %}{{ m.ref }}{% endif %}</td>
 <td>{{ m.who }}</td><td class="n">{{ fmt(m.inq) if m.inq else '' }}</td><td class="n">{{ fmt(m.outq) if m.outq else '' }}</td>
-<td class="n">{{ fmt(m.price) }}</td><td class="n">{{ fmt(m.value) if m.value else '' }}</td><td class="n">{{ fmt(m.bal) }}</td>
+<td class="n">{{ fmt(m.price) if m.price is not none else '' }}</td><td class="n">{{ fmt(m.value) if m.value else '' }}</td><td class="n">{{ fmt(m.bal) }}</td>
 <td>{% if m.att %}<a href="{{ att_url(m.att) }}" target="_blank" rel="noopener">عرض</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="10" class="muted">لا توجد حركات</td></tr>{% endfor %}
+{% if moves %}{% set mv = moves|rejectattr('kind', 'in', ['رصيد افتتاحي', 'رصيد أول الفترة'])|list %}
+<tr class="total"><td colspan="4"><b>إجمالي {{ 'الفترة' if d_from or d_to else 'الحركات' }}</b></td><td class="n"><b>{{ fmt(mv|sum(attribute='inq')) }}</b></td><td class="n"><b>{{ fmt(mv|sum(attribute='outq')) }}</b></td><td></td><td></td><td class="n"><b>{{ fmt(moves[-1].bal) }}</b></td><td></td></tr>{% endif %}
 </table></div></div>
 {% endblock %}

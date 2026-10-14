@@ -1414,3 +1414,24 @@ def test_receipt_no_vat(env):
     login(c, env, "admin@example.com")
     c.post(f"/receipts/{rid}/edit", data={"supplier": "شركة المسار", "invoice_no": "NV-1", "date": "2026-09-01"})
     db = SessionLocal(); r = db.get(Receipt, rid); assert not r.no_vat and r.vat == 15; db.close()
+
+
+def test_item_card_date_filter_and_raw_site_items(env):
+    from datetime import date
+    db = SessionLocal()
+    it = Item(code="RM-FLT", name="مادة فلتر", uom="طن", category="raw")
+    db.add(it); db.flush()
+    db.add(OpeningBalance(site_id=env["site"], item_id=it.id, qty=10, value=100, as_of=date(2026, 4, 1)))
+    for d, q in [(date(2026, 5, 1), 5), (date(2026, 6, 1), 7)]:
+        rc = Receipt(site_id=env["site"], date=d, invoice_no=f"F-{d.month}", supplier="مورد")
+        rc.lines.append(ReceiptLine(item_id=it.id, qty=q, unit_price=10)); db.add(rc)
+    other = Site(code="OT3", name="موقع ثالث"); db.add(other)
+    db.commit(); iid, oid = it.id, other.id; db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    t = c.get(f"/stock/{iid}?site={env['site']}").text
+    assert "2026-04-01" in t
+    t = c.get(f"/stock/{iid}?site={env['site']}&date_from=2026-06-01&date_to=2026-06-30").text
+    assert "رصيد أول الفترة" in t and "F-6" in t and "F-5" not in t and "15" in t
+    assert "RM-FLT" in c.get(f"/raw-stock?site={env['site']}").text
+    assert "RM-FLT" not in c.get(f"/raw-stock?site={oid}").text
