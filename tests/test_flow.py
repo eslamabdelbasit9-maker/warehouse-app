@@ -1463,3 +1463,15 @@ def test_powerbi_links(env):
     assert "javascript:" not in c.get("/").text
     login(c, env, "requester@example.com")
     assert "app.powerbi.com" not in c.get("/").text
+
+
+def test_reports_pages(env):
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    for tab in ("overview", "crusher", "asphalt", "diesel", "spare", "purchases", "stock"):
+        r = c.get(f"/reports?tab={tab}&date_from=2026-01-01&date_to=2026-12-31")
+        assert r.status_code == 200, tab
+        assert "التقارير" in r.text
+    login(c, env, "requester@example.com")
+    r = c.get("/reports", follow_redirects=False)
+    assert r.status_code in (302, 303, 403)

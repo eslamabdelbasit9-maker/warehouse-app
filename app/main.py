@@ -1339,6 +1339,38 @@ def stock(request: Request, site: str | None = None, q: str = "", only: str = ""
                   unit_total=sum(v for _, v in unit_out.values()))
 
 
+# مساعدات قالب التقارير (تحويل البيانات لصفوف الرسوم)
+T.env.globals.update(
+    rp_items=lambda rows: [(it.name, q, "") for it, q in rows],
+    rp_cust=lambda rows: [(k, v[0], S.fmt(v[1], 0) + " ريال") for k, v in rows],
+    rp_sup=lambda rows: [(k, v[0], S.fmt(v[1], 0) + " ريال") for k, v in rows],
+    rp_m=lambda per_m, key: {ym: v[key] for ym, v in per_m.items()},
+    rp_ratio=lambda per_m, a, b: {ym: v[a] / v[b] for ym, v in per_m.items() if v[b]},
+    rp_units=lambda rows, names, with_site: [((f"{names.get(sid, '')} — " if with_site else "") + u, v, "") for (sid, u), v in rows[:15]],
+)
+
+
+@app.get("/reports", response_class=HTMLResponse)
+def reports_page(request: Request, tab: str = "overview", site: str = "", date_from: str = "", date_to: str = "",
+                 db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """التقارير: لوحة الإدارة والكسارات والأسفلت والديزل وقطع الغيار والمشتريات والمخزون."""
+    from . import reports as R
+    if not (can_see_full_dashboard(user) or user.has("admin")):
+        raise Forbidden()
+    tab = tab if tab in dict(R.TABS) else "overview"
+    all_sites = user_sites(db, user)
+    sel = next((s for s in all_sites if str(s.id) == str(site)), None)
+    sites = [sel] if sel else all_sites
+    f0, t0 = R.default_period()
+    f, t = parse_date(date_from) or f0, parse_date(date_to) or t0
+    if t < f:
+        f, t = t, f
+    data = R.build(db, tab, sites, f, t) if sites else {}
+    return render(request, "reports.html", user, tabs=R.TABS, tab=tab, all_sites=all_sites, sel=sel, sites=sites,
+                  site_name={s.id: s.name for s in all_sites}, d_from=f, d_to=t, d=data,
+                  months=R.months_between(f, t), ITEM_CATS=ITEM_CATS)
+
+
 @app.get("/raw-stock", response_class=HTMLResponse)
 def raw_stock(request: Request, site: str | None = None, date_from: str = "", date_to: str = "",
               db: Session = Depends(get_db), user: User = Depends(current_user)):
