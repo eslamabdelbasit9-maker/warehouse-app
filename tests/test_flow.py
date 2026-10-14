@@ -1097,3 +1097,20 @@ def test_admin_fixes_approved_issue_qty_and_cancels(env):
     assert db.get(Request, rid).status == "cancelled"
     assert S.stock_table(db, env["site"], [env["a"]])[env["a"]]["cur"] == before + 2
     db.close()
+
+
+def test_admin_deletes_request(env):
+    from datetime import datetime
+    from app.models import RequestLine
+    db = SessionLocal()
+    req = Request(req_no="DEL-1", type="spare", work_date=datetime.now().date(), site_id=env["site"], unit_id=env["crusher"],
+                  requester_name="استيراد", status="approved", current_stage=3, imported=True)
+    req.lines.append(RequestLine(item_id=env["a"], qty=1, status="approved", unit_cost=1, value=1))
+    db.add(req); db.commit(); rid = req.id; db.close()
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    c.post(f"/requests/{rid}/delete")
+    db = SessionLocal(); assert db.get(Request, rid) is not None; db.close()
+    login(c, env, "admin@example.com")
+    c.post(f"/requests/{rid}/delete")
+    db = SessionLocal(); assert db.get(Request, rid) is None; db.close()

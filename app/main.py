@@ -955,6 +955,22 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
     return back(f"/requests/{rid}")
 
 
+@app.post("/requests/{rid}/delete")
+def request_delete(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """حذف طلب نهائيًا (صرف مسجّل بالخطأ) — للأدمن فقط."""
+    req = db.get(Req, rid)
+    if not req:
+        raise Forbidden()
+    no, site_id, raw = req.req_no, req.site_id, req.type == "raw"
+    db.delete(req)
+    db.flush()
+    if raw:
+        S.revalue_raw(db, site_id)
+    db.commit()
+    flash(request, f"تم حذف الطلب {no} نهائيًا")
+    return back("/requests")
+
+
 @app.post("/requests/{rid}/cancel")
 def request_cancel(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
     req = db.get(Req, rid)

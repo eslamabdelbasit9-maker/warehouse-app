@@ -44,6 +44,8 @@
       <div><button class="btn" onclick="if(this.form.cancel&&this.form.cancel.checked&&!confirm('سيُلغى الطلب ويُعاد المنصرف إلى الرصيد. هل تريد المتابعة؟'))return false">حفظ التعديل</button></div>
     </form>
     <p class="muted">تعديل الكمية أو إلغاء الطلب يُعيد حساب الرصيد وقيمة الصرف تلقائيًا.</p>
+    <form method="post" action="/requests/{{ r.id }}/delete" onsubmit="return confirm('سيُحذف الطلب {{ r.req_no }} نهائيًا ولا يمكن استرجاعه. هل تريد المتابعة؟')">
+      <button class="btn red">حذف الطلب نهائيًا</button></form>
   </details>
   {% endif %}
 </div>
