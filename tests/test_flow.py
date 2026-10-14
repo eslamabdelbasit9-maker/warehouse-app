@@ -1226,3 +1226,45 @@ def test_asset_invoice_and_custody_stock(env):
     assert S.custody_stock(db, env["site"])[lid]["avail"] == 3
     db.close()
     assert "رصيد الأصول وأدوات السلامة" in c.get(f"/custody/stock?site={env['site']}").text
+
+
+def test_backup_download_and_restore(env):
+    """النسخة الاحتياطية: ZIP فيه Excel ومرفقات وdata.json، والاسترجاع بيرجّع البيانات زي ما كانت."""
+    import io, zipfile
+    from app.models import Attachment
+    db = SessionLocal()
+    db.add(Attachment(key="bk-test.pdf", filename="فاتورة.pdf", content_type="application/pdf", data=b"%PDF-1.4 hello"))
+    db.add(Item(code="BK-ONE", name="صنف النسخة", uom="قطعة"))
+    db.commit()
+    n_items = db.query(Item).count()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/admin/backup/download", follow_redirects=False).status_code == 403
+    login(c, env, "admin@example.com")
+    assert "تحميل نسختين" in c.get("/admin/backup").text
+    r = c.get("/admin/backup/download")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    names = z.namelist()
+    assert "data.json" in names and "بيانات.xlsx" in names and "مرفقات/bk-test.pdf" in names
+    assert z.read("مرفقات/bk-test.pdf") == b"%PDF-1.4 hello"
+    # نغيّر في البيانات وبعدين نسترجع
+    db = SessionLocal()
+    db.query(Item).filter_by(code="BK-ONE").delete()
+    db.add(Item(code="BK-NEW", name="اتضاف بعد النسخة", uom="قطعة"))
+    db.commit()
+    db.close()
+    bad = c.post("/admin/backup/restore", data={"confirm": "لا"}, files={"file": ("b.zip", r.content, "application/zip")},
+                 follow_redirects=True)
+    assert "للتأكيد" in bad.text
+    ok = c.post("/admin/backup/restore", data={"confirm": "استرجاع"}, files={"file": ("b.zip", r.content, "application/zip")},
+                follow_redirects=True)
+    assert "تم استرجاع النسخة الاحتياطية" in ok.text
+    db = SessionLocal()
+    assert db.query(Item).filter_by(code="BK-ONE").count() == 1 and db.query(Item).filter_by(code="BK-NEW").count() == 0
+    assert db.query(Item).count() == n_items
+    assert db.query(Attachment).filter_by(key="bk-test.pdf").one().data == b"%PDF-1.4 hello"
+    db.add(Item(code="BK-AFTER", name="بعد الاسترجاع", uom="قطعة"))   # الأرقام التلقائية شغالة بعد الاسترجاع
+    db.commit()
+    db.close()

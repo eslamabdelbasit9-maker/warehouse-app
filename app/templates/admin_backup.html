@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>النسخ الاحتياطي</h1>
+{% include "_admin_nav.html" %}
+<div class="card">
+  <h2 style="margin-top:0">تحميل نسخة احتياطية</h2>
+  <p class="muted" style="margin-top:0">ملف واحد بصيغة <b>ZIP</b> فيه كل بيانات البرنامج والفواتير والصور. يُفتح بالضغط عليه مرتين في الويندوز، وبداخله:</p>
+  <ul class="muted">
+    <li><b>بيانات.xlsx</b> — كل البيانات (شيت لكل جدول) وتُفتح بـ Excel.</li>
+    <li><b>مرفقات</b> — الفواتير والصور بصيغتها الأصلية (PDF / صور).</li>
+    <li><b>data.json</b> — يُستخدم لاسترجاع النسخة من داخل البرنامج.</li>
+  </ul>
+  <button type="button" class="btn" id="bk2">تحميل نسختين (الجهاز + OneDrive)</button>
+  <a class="btn sec" href="/admin/backup/download">تحميل نسخة واحدة</a>
+  <p class="muted" id="bk-msg" style="margin-bottom:0">عند «تحميل نسختين» يُطلب منك مكان الحفظ مرتين: الأولى على الجهاز (مثل التنزيلات)، والثانية اختر فيها مجلد <b>OneDrive</b> على جهازك فيُرفع تلقائياً.</p>
+</div>
+<form method="post" action="/admin/backup/restore" enctype="multipart/form-data" class="card" style="border:1px solid var(--err)">
+  <h2 style="margin-top:0;color:var(--err)">استرجاع نسخة احتياطية</h2>
+  <p class="muted" style="margin-top:0">⚠ الاسترجاع <b>يحذف كل البيانات الحالية</b> ويضع مكانها بيانات الملف. يُنصح بتحميل نسخة من الوضع الحالي أولاً.</p>
+  <div class="meta">
+    <div class="f"><label>ملف النسخة (ZIP)</label><input type="file" name="file" accept=".zip" required></div>
+    <div class="f"><label>اكتب «استرجاع» للتأكيد</label><input name="confirm" required autocomplete="off"></div>
+  </div>
+  <button class="btn" style="margin-top:10px;background:var(--err)" onclick="return confirm('سيتم حذف البيانات الحالية واسترجاع النسخة. هل تريد المتابعة؟')">استرجاع</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('bk2').addEventListener('click', async function () {
+  var msg = document.getElementById('bk-msg'), btn = this;
+  if (!window.showSaveFilePicker) {   // متصفح ما يدعمش اختيار المكان: تحميل عادي، وانسخ الملف لـ OneDrive
+    location.href = '/admin/backup/download';
+    msg.innerHTML = 'تم تحميل النسخة في التنزيلات — انسخها إلى مجلد OneDrive لعمل النسخة الثانية.';
+    return;
+  }
+  btn.disabled = true; msg.textContent = 'جارٍ تجهيز النسخة...';
+  try {
+    var r = await fetch('/admin/backup/download'); if (!r.ok) throw new Error('فشل التحميل');
+    var blob = await r.blob();
+    var cd = r.headers.get('Content-Disposition') || '', m = cd.match(/filename="([^"]+)"/), name = m ? m[1] : 'backup.zip';
+    var opts = { suggestedName: name, types: [{ description: 'نسخة احتياطية', accept: { 'application/zip': ['.zip'] } }] };
+    async function save(title) { msg.textContent = title; var h = await window.showSaveFilePicker(opts); var w = await h.createWritable(); await w.write(blob); await w.close(); }
+    await save('١/٢ — اختر مكان الحفظ على الجهاز');
+    await save('٢/٢ — اختر مجلد OneDrive');
+    msg.textContent = '✓ تم حفظ النسختين: ' + name;
+  } catch (e) {
+    msg.textContent = e.name === 'AbortError' ? 'تم الإلغاء.' : ('حدث خطأ: ' + e.message);
+  } finally { btn.disabled = false; }
+});
+</script>
+{% endblock %}

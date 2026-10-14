@@ -873,6 +873,58 @@ def production_delete(pid: int, request: Request, db: Session = Depends(get_db),
     return back("/production")
 
 
+# ---------------- النسخ الاحتياطي ----------------
+@app.get("/admin/backup", response_class=HTMLResponse)
+def admin_backup(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    return render(request, "admin_backup.html", user)
+
+
+@app.get("/admin/backup/download")
+def admin_backup_download(user: User = Depends(require("admin"))):
+    from .backup import make_backup
+    f = make_backup()
+    name = f"backup_{datetime.now():%Y-%m-%d_%H%M}.zip"
+
+    def chunks():
+        try:
+            while True:
+                b = f.read(1024 * 256)
+                if not b:
+                    break
+                yield b
+        finally:
+            f.close()
+    return StreamingResponse(chunks(), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@app.post("/admin/backup/restore")
+async def admin_backup_restore(request: Request, user: User = Depends(require("admin"))):
+    from .backup import restore_backup
+    form = await request.form()
+    up = form.get("file")
+    if (form.get("confirm") or "").strip() != "استرجاع":
+        flash(request, "اكتب كلمة «استرجاع» للتأكيد", "err")
+        return back("/admin/backup")
+    if up is None or not getattr(up, "filename", ""):
+        flash(request, "اختر ملف النسخة الاحتياطية", "err")
+        return back("/admin/backup")
+    import tempfile, shutil
+    tmp = tempfile.TemporaryFile()
+    shutil.copyfileobj(up.file, tmp)
+    tmp.seek(0)
+    try:
+        n = restore_backup(tmp)
+    except Exception as e:   # ملف تالف أو مش نسخة من البرنامج — ما يتمسحش حاجة (العملية كلها في transaction واحدة)
+        flash(request, f"تعذّر الاسترجاع: {e}", "err")
+        return back("/admin/backup")
+    finally:
+        tmp.close()
+    _STAGNANT_CACHE.clear()
+    flash(request, f"تم استرجاع النسخة الاحتياطية ({n} سجل)")
+    return back("/admin/backup")
+
+
 @app.get("/admin/crusher-prices", response_class=HTMLResponse)
 def admin_crusher_prices(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
     sites = db.query(Site).order_by(Site.id).all()
