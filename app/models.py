@@ -143,6 +143,7 @@ class Receipt(Base):
     invoice_no: Mapped[str | None] = mapped_column(String(100))
     supplier: Mapped[str | None] = mapped_column(String(200))
     attachment: Mapped[str | None] = mapped_column(String(300))
+    no_vat: Mapped[bool] = mapped_column(Boolean, default=False)   # وارد بدون ضريبة (زي المحوّل من شركة المسار)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     site: Mapped[Site] = relationship()
@@ -159,8 +160,8 @@ class Receipt(Base):
 
     @property
     def vat(self):
-        """الضريبة 15% على الفاتورة (التحويلات بين الفروع مالهاش ضريبة)."""
-        return 0.0 if self.is_transfer else round(self.net * VAT_RATE, 2)
+        """الضريبة 15% على الفاتورة (التحويلات بين الفروع والوارد المعفى مالهمش ضريبة)."""
+        return 0.0 if (self.is_transfer or self.no_vat) else round(self.net * VAT_RATE, 2)
 
     @property
     def gross(self):

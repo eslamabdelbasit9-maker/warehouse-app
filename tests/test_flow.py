@@ -1399,3 +1399,18 @@ def test_raw_stock_sub_crusher_groups(env):
     db = SessionLocal()
     other = Site(code="OT2", name="موقع آخر"); db.add(other); db.commit(); oid = other.id; db.close()
     assert "RM-ARD-T" not in c.get(f"/raw-stock?site={oid}").text
+
+
+def test_receipt_no_vat(env):
+    from datetime import date
+    db = SessionLocal()
+    rec = Receipt(site_id=env["site"], date=date(2026, 9, 1), invoice_no="NV-1", supplier="شركة المسار", no_vat=True)
+    rec.lines.append(ReceiptLine(item_id=env["a"], qty=10, unit_price=10))
+    db.add(rec); db.commit()
+    assert rec.vat == 0 and rec.gross == 100
+    rid = rec.id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    c.post(f"/receipts/{rid}/edit", data={"supplier": "شركة المسار", "invoice_no": "NV-1", "date": "2026-09-01"})
+    db = SessionLocal(); r = db.get(Receipt, rid); assert not r.no_vat and r.vat == 15; db.close()

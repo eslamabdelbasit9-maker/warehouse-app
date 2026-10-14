@@ -127,7 +127,7 @@ DIESEL_CODE = "RM-DSL"
 NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT"),
                ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
                ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT"),
-               ("custody_records", "item_id", "INTEGER")]
+               ("custody_records", "item_id", "INTEGER"), ("receipts", "no_vat", "BOOLEAN DEFAULT FALSE")]
 DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
 CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
@@ -1447,6 +1447,10 @@ async def receipt_edit(rid: int, request: Request, db: Session = Depends(get_db)
         if v != getattr(rec, f):
             changes.append(label)
             setattr(rec, f, v)
+    nv = bool(form.get("no_vat"))
+    if nv != bool(rec.no_vat):
+        changes.append("بدون ضريبة" if nv else "خاضعة للضريبة")
+        rec.no_vat = nv
     for l in list(rec.lines):
         q, p = parse_float(form.get(f"qty_{l.id}")), parse_float(form.get(f"price_{l.id}"))
         if q is not None and q <= 0:
@@ -1503,7 +1507,8 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     try:
         rec = Receipt(site_id=sel.id, date=parse_date(form.get("date"), date.today()),
                       invoice_no=(form.get("invoice_no") or "").strip() or None,
-                      supplier=(form.get("supplier") or "").strip() or None, created_by_id=user.id)
+                      supplier=(form.get("supplier") or "").strip() or None, created_by_id=user.id,
+                      no_vat=bool(form.get("no_vat")))
         for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("unit_price")):
             if not iid and not qty:
                 continue

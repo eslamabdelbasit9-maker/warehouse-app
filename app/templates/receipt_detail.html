@@ -12,7 +12,7 @@
     {% for l in r.lines %}<tr><td>{{ l.item.code }}</td><td>{{ l.item.name }}</td><td class="n">{{ fmt(l.qty) }}</td><td>{{ l.item.uom }}</td>
     <td class="n">{{ fmt(l.unit_price) }}</td><td class="n">{{ fmt(l.total) }}</td></tr>{% endfor %}
     <tr><td colspan="5"><b>الإجمالي بدون ضريبة</b></td><td class="n"><b>{{ fmt(r.net) }}</b></td></tr>
-    <tr><td colspan="5">ضريبة القيمة المضافة 15%{% if r.is_transfer %} (تحويل — بدون ضريبة){% endif %}</td><td class="n">{{ fmt(r.vat) }}</td></tr>
+    <tr><td colspan="5">ضريبة القيمة المضافة 15%{% if r.is_transfer %} (تحويل — بدون ضريبة){% elif r.no_vat %} (بدون ضريبة){% endif %}</td><td class="n">{{ fmt(r.vat) }}</td></tr>
     <tr><td colspan="5"><b>الإجمالي شامل الضريبة</b></td><td class="n"><b>{{ fmt(r.gross) }}</b></td></tr>
   </table></div>
 </div>
@@ -29,6 +29,7 @@
     <label>التاريخ<input type="date" name="date" value="{{ r.date }}"></label>
     <label>رقم الفاتورة<input name="invoice_no" value="{{ r.invoice_no or '' }}"></label>
     <label>المورد<input name="supplier" value="{{ r.supplier or '' }}"></label>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="no_vat" value="1" {{ 'checked' if r.no_vat }}> بدون ضريبة</label>
     {% for l in r.lines %}
     <label>الكمية — {{ l.item.code }} ({{ l.item.uom }})<input type="number" step="any" min="0" name="qty_{{ l.id }}" value="{{ l.qty }}"></label>
     <label>سعر الوحدة — {{ l.item.code }}<input type="number" step="any" min="0" name="price_{{ l.id }}" value="{{ l.unit_price }}"></label>

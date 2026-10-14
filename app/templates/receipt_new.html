@@ -11,6 +11,7 @@
     <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
     <div class="f"><label>رقم الفاتورة</label><input name="invoice_no"></div>
     <div class="f"><label>المورد</label><input name="supplier"></div>
+    <label class="f" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="no_vat" value="1"> بدون ضريبة (مثل الوارد من شركة المسار)</label>
     <div class="f"><label>مرفق الفاتورة</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.docx,.doc"></div>
   </div>
   <datalist id="items">{% for i in items %}<option value="{{ i.code }} — {{ i.name }}" data-id="{{ i.id }}" data-uom="{{ i.uom }}">{% endfor %}</datalist>
@@ -44,10 +45,11 @@ function addRow() {
 function sums() {
   let n = 0; document.querySelectorAll('#lines tr').forEach(tr => { const q = tr.querySelector('[name=qty]'), p = tr.querySelector('[name=unit_price]');
     if (q && p) n += (+q.value || 0) * (+p.value || 0); });
-  const tr = (document.querySelector('[name=supplier]').value || '').trim().startsWith('تحويل'), v = tr ? 0 : n * 0.15, f = x => x.toLocaleString('en', {maximumFractionDigits: 2});
+  const tr = (document.querySelector('[name=supplier]').value || '').trim().startsWith('تحويل') || document.querySelector('[name=no_vat]').checked, v = tr ? 0 : n * 0.15, f = x => x.toLocaleString('en', {maximumFractionDigits: 2});
   document.getElementById('s_net').textContent = f(n); document.getElementById('s_vat').textContent = f(v); document.getElementById('s_gross').textContent = f(n + v);
 }
 document.querySelector('[name=supplier]').addEventListener('input', sums);
+document.querySelector('[name=no_vat]').addEventListener('change', sums);
 document.getElementById('lines').addEventListener('click', () => setTimeout(sums));
 addRow(); addRow();
 document.getElementById('frm').addEventListener('submit', e => {

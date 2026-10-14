@@ -4,7 +4,7 @@
   الأصناف:  الكود | الاسم | الوحدة | ناتج كسارة (1/0)
   الافتتاحي: الكود | الكمية | القيمة
   الإنتاج:  التاريخ | الكود | الكمية | السعر
-  الوارد:   التاريخ | رقم الفاتورة | المورد | الكود | الكمية | السعر
+  الوارد:   التاريخ | رقم الفاتورة | المورد | الكود | الكمية | السعر | بدون ضريبة (1/0)
   الصرف:   المرجع | التاريخ | الجهة (asphalt/concrete/sale/project) | الوحدة | العميل | الكود | الكمية | التكلفة | سعر البيع
             | نوع الجهة | اسم الجهة | غرض الديزل | أطنان الأسفلت
   أطنان الجهات: المرجع | نوع الجهة | اسم الجهة | الأطنان
@@ -107,7 +107,8 @@ def run(fileobj, site_code):
         for r in _rows(wb, "الوارد"):
             rec.setdefault((to_date(r["التاريخ"]), clean(r.get("رقم الفاتورة")), clean(r.get("المورد"))), []).append(r)
         for (d, inv, sup), rs in rec.items():
-            rc = Receipt(site_id=site.id, date=d, invoice_no=inv, supplier=sup, attachment=kept_att.get(inv))
+            rc = Receipt(site_id=site.id, date=d, invoice_no=inv, supplier=sup, attachment=kept_att.get(inv),
+                         no_vat=bool(num(rs[0].get("بدون ضريبة"))))
             for r in rs:
                 rc.lines.append(ReceiptLine(item_id=item(r["الكود"]).id, qty=num(r.get("الكمية")),
                                             unit_price=num(r.get("السعر"))))
