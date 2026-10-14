@@ -41,6 +41,8 @@ ENTITY_TYPES = ["مشروع", "عميل"]
 DIESEL_PURPOSES = ["تشغيل", "تسخين"]
 VAT_RATE = 0.15  # ضريبة القيمة المضافة — للعرض في المشتريات بس، أسعار الوارد ومتوسط التكلفة والصرف كلها من غير ضريبة
 CUSTODY_CATEGORIES = ["الأصول", "أدوات السلامة"]
+ITEM_CATS = {"spare": "قطع غيار", "raw": "مواد خام", "asset": "أصول", "safety": "أدوات سلامة"}   # أنواع الأصناف والفواتير
+CUSTODY_ITEM_CAT = {"الأصول": "asset", "أدوات السلامة": "safety"}   # نوع العهدة ← نوع الصنف في المخزن
 CUSTODY_OLD_NAMES = {"أصول": "الأصول", "مهمات سلامة": "أدوات السلامة"}  # أسماء قديمة تتحدّث تلقائياً
 TRANSFER_STATUS = {"in_transit": "في الطريق", "received": "تم الاستلام", "cancelled": "ملغي"}
 
@@ -295,6 +297,7 @@ class CustodyRecord(Base):
     issued_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     attachment: Mapped[str | None] = mapped_column(String(300))
     photo: Mapped[str | None] = mapped_column(String(300))  # صورة البند
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("items.id"))  # الصنف من المخزن (لو اتسلّم من الرصيد)
     notes: Mapped[str | None] = mapped_column(Text)
     returned_at: Mapped[date | None] = mapped_column(Date)
     return_condition: Mapped[str | None] = mapped_column(String(100))

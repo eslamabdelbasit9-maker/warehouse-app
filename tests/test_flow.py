@@ -1187,3 +1187,42 @@ def test_crusher_line_sale_price(env):
     page = c.get(f"/requests/{rid}").text
     assert "قيمة البيع للعملاء" in page and "300" in page and "مؤسسة الفجر — السعر" in page
 
+
+
+def test_asset_invoice_and_custody_stock(env):
+    """فاتورة أصول بتضيف لمخزن الأصول، والتسليم للموظف بيخصم، والإرجاع السليم بيرجع للرصيد."""
+    from app.models import CustodyRecord
+    db = SessionLocal()
+    lap = Item(code="AS-LAP", name="لابتوب", uom="جهاز", category="asset")
+    db.add(lap)
+    db.commit()
+    lid = lap.id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    page = c.get(f"/receipts/new?site={env['site']}&kind=asset").text
+    assert "تسجيل وارد — أصول" in page and "AS-LAP" in page and "SP-" not in page.split("<datalist")[1].split("</datalist>")[0]
+    r = c.post("/receipts/new", data={"site_id": env["site"], "kind": "asset", "date": "2026-10-01", "invoice_no": "AS-1",
+                                      "item_id": [lid], "qty": ["3"], "unit_price": ["2500"]}, follow_redirects=False)
+    assert r.status_code == 303
+    db = SessionLocal()
+    assert S.custody_stock(db, env["site"])[lid]["avail"] == 3
+    db.close()
+    base = {"site_id": env["site"], "employee_no": "E77", "employee_name": "سعيد", "category": "الأصول", "row": ["0"]}
+    r = c.post("/custody/new", data={**base, "item_name_0": "AS-LAP — لابتوب", "qty_0": "5"}, follow_redirects=True)
+    assert "أكبر من الرصيد المتاح" in r.text
+    r = c.post("/custody/new", data={**base, "item_name_0": "حاجة مش في المخزن", "qty_0": "1"}, follow_redirects=True)
+    assert "من أصناف المخزن" in r.text
+    c.post("/custody/new", data={**base, "item_name_0": "AS-LAP — لابتوب", "qty_0": "2"})
+    db = SessionLocal()
+    st = S.custody_stock(db, env["site"])[lid]
+    assert st["avail"] == 1 and st["held"] == 2
+    rec = db.query(CustodyRecord).filter_by(employee_no="E77").order_by(CustodyRecord.id.desc()).first()
+    assert rec.item_id == lid and rec.item_name == "لابتوب"
+    rid = rec.id
+    db.close()
+    c.post(f"/custody/{rid}/return", data={"return_condition": "سليمة"})
+    db = SessionLocal()
+    assert S.custody_stock(db, env["site"])[lid]["avail"] == 3
+    db.close()
+    assert "رصيد الأصول وأدوات السلامة" in c.get(f"/custody/stock?site={env['site']}").text

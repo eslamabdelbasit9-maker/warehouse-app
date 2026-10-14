@@ -179,6 +179,33 @@ def stock_table(db: Session, site_id: int, item_ids=None, upto=None):
     return t
 
 
+# ---------------- مخزن الأصول وأدوات السلامة ----------------
+def custody_stock(db: Session, site_id: int):
+    """رصيد الأصول وأدوات السلامة: الوارد (فواتير) − المسلّم للموظفين + المرتجع سليم.
+    التالف والمفقود ما بيرجعش للرصيد."""
+    from .models import CustodyRecord
+    t = defaultdict(lambda: dict(in_qty=0.0, in_val=0.0, out_qty=0.0, back_qty=0.0, lost_qty=0.0))
+    cats = select(Item.id).where(Item.category.in_(["asset", "safety"]))
+    for iid, q, v in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
+                      .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(cats)).group_by(ReceiptLine.item_id)):
+        t[iid]["in_qty"] += q or 0
+        t[iid]["in_val"] += v or 0
+    for r in db.query(CustodyRecord).filter(CustodyRecord.site_id == site_id, CustodyRecord.item_id.isnot(None)):
+        x = t[r.item_id]
+        x["out_qty"] += r.qty or 0
+        if r.returned_at:
+            if (r.return_condition or "") == "سليمة":
+                x["back_qty"] += r.qty or 0
+            else:
+                x["lost_qty"] += r.qty or 0
+    for x in t.values():
+        x["held"] = x["out_qty"] - x["back_qty"] - x["lost_qty"]        # لدى الموظفين الآن
+        x["avail"] = x["in_qty"] - x["out_qty"] + x["back_qty"]          # المتاح في المخزن
+        x["avg"] = x["in_val"] / x["in_qty"] if x["in_qty"] else 0.0
+        x["value"] = x["avail"] * x["avg"]
+    return t
+
+
 # ---------------- المواد الخام ----------------
 def crusher_price(db: Session, site_id: int):
     """سعر الطن الثابت لإنتاج كسارات الموقع (بيحدده مدير النظام بس)."""
@@ -517,7 +544,8 @@ def unissued_purchases(db: Session, site_ids, since, cache=None):
             if r["open_qty"] > 0:
                 inflow[iid].append((None, r["open_qty"], 0, False))
         for iid, d, q, p in (db.query(ReceiptLine.item_id, Receipt.date, ReceiptLine.qty, ReceiptLine.unit_price)
-                             .join(Receipt).filter(Receipt.site_id == sid)):
+                             .join(Receipt).filter(Receipt.site_id == sid,   # رواكد المشتريات لقطع الغيار بس
+                                                   ReceiptLine.item_id.in_(select(Item.id).where(Item.category == "spare")))):
             inflow[iid].append((d, q or 0, p or 0, True))
         for iid, d, q in (db.query(TransferLine.item_id, Transfer.date, TransferLine.recv_qty).join(Transfer)
                           .filter(Transfer.status == "received", Transfer.to_site_id == sid)):

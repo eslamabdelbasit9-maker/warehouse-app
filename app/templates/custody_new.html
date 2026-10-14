@@ -7,10 +7,12 @@
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
     <div class="f"><label>الرقم الوظيفي *</label><input name="employee_no" value="{{ emp }}" required></div>
     <div class="f"><label>اسم الموظف *</label><input name="employee_name" value="{{ emp_name }}" required></div>
-    <div class="f"><label>النوع *</label><select name="category">{% for c in CUSTODY_CATEGORIES %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}</select></div>
+    <div class="f"><label>النوع *</label><select name="category" id="cat" onchange="setList()">{% for c in CUSTODY_CATEGORIES %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}</select></div>
     <div class="f"><label>تاريخ التسليم</label><input type="date" name="issued_at" value="{{ today }}"></div>
     <div class="f"><label>مرفق (نموذج استلام موقّع)</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc"></div>
   </div>
+  {% for c, lst in picks.items() %}<datalist id="dl-{{ loop.index }}" data-cat="{{ c }}">{% for it, av in lst %}<option value="{{ it.code }} — {{ it.name }}" label="المتاح: {{ fmt(av) }}">{% endfor %}</datalist>{% endfor %}
+  <p class="muted" id="stock-note" style="margin:10px 0 0">اختر البند من أصناف المخزن — يُخصم من الرصيد عند الحفظ، ويعود إليه عند الإرجاع بحالة «سليمة».</p>
   <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
     <tr><th style="width:40%">البند</th><th style="width:100px">الكمية</th><th>الرقم التسلسلي</th><th>صورة البند</th><th></th></tr>
   </table></div>
@@ -23,12 +25,21 @@
 <script>
 let K = 0;
 function addRow() { const tr = document.createElement('tr'); const k = K++;
-  tr.innerHTML = `<td><input type="hidden" name="row" value="${k}"><input name="item_name_${k}"></td>
+  tr.innerHTML = `<td><input type="hidden" name="row" value="${k}"><input name="item_name_${k}" class="it" placeholder="ابحث بالكود أو الاسم..." autocomplete="off"></td>
   <td><input name="qty_${k}" type="number" step="any" min="0" value="1"></td><td><input name="serial_no_${k}"></td>
   <td><label class="btn sec sm photo-btn">📷 صورة<input type="file" name="photo_${k}" accept="image/*" data-shrink hidden></label>
       <img class="thumb" hidden></td>
   <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>`;
-  document.getElementById('lines').appendChild(tr); }
+  document.getElementById('lines').appendChild(tr); setList(); }
+// البنود من مخزن النوع المختار (لو مفيش أصناف متسجلة للنوع ده، الكتابة حرة)
+function setList() {
+  var c = document.getElementById('cat').value, dl = document.querySelector('datalist[data-cat="' + c + '"]');
+  var has = dl && dl.options.length;
+  document.getElementById('stock-note').hidden = !has;
+  document.querySelectorAll('#lines .it').forEach(function (i) {
+    if (has) { i.setAttribute('list', dl.id); i.dataset.list = dl.id; } else { i.removeAttribute('list'); delete i.dataset.list; }
+  });
+}
 addRow(); addRow();
 </script>
 {% endblock %}

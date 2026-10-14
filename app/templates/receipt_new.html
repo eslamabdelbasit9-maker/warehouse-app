@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>تسجيل وارد</h1>
+<h1>تسجيل وارد — {{ ITEM_CATS[kind] }}</h1>
 <form method="post" enctype="multipart/form-data" class="card" id="frm">
+  <input type="hidden" name="kind" value="{{ kind }}">
   <div class="meta">
+    <div class="f"><label>نوع الفاتورة</label><select onchange="location='?site={{ sel.id }}&kind='+this.value">
+      {% for k, v in ITEM_CATS.items() %}<option value="{{ k }}" {{ 'selected' if k == kind }}>{{ v }}</option>{% endfor %}</select></div>
     <div class="f"><label>الموقع</label><select name="site_id">
       {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
     <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>

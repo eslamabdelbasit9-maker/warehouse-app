@@ -20,7 +20,7 @@ from .auth import (Forbidden, LoginRequired, check_password, current_user, hash_
 from .config import settings
 from .db import Base, engine, get_db, SessionLocal
 from .models import (CUSTODY_CATEGORIES, CUSTODY_OLD_NAMES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
-                     RAW_DESTS, CrusherProduction, CrusherProductionLine,
+                     RAW_DESTS, ITEM_CATS, CUSTODY_ITEM_CAT, CrusherProduction, CrusherProductionLine,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
                      Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
                      TRANSFER_STATUS, VAT_RATE, Transfer, TransferLine)
@@ -60,7 +60,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.include_router(auth_router)
 T = Jinja2Templates(directory=APP_DIR / "templates")
-T.env.globals.update(fmt=S.fmt, RAW_DESTS=RAW_DESTS, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
+T.env.globals.update(fmt=S.fmt, ITEM_CATS=ITEM_CATS, RAW_DESTS=RAW_DESTS, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
                      TRANSFER_STATUS=TRANSFER_STATUS)
@@ -109,7 +109,8 @@ DIESEL_CODE = "RM-DSL"
 # أعمدة اتضافت لجداول موجودة — create_all ما بيضيفهاش، فبنضيفها هنا مرة واحدة
 NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "asphalt_tons", "FLOAT"),
                ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
-               ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT")]
+               ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT"),
+               ("custody_records", "item_id", "INTEGER")]
 DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
 CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
@@ -177,7 +178,7 @@ def _forbidden(request: Request, exc: Forbidden):
 
 
 def flash(request: Request, msg: str, kind="ok"):
-    request.session.setdefault("flash", []).append([kind, msg])
+    request.session["flash"] = list(request.session.get("flash", [])) + [[kind, msg]]   # تخصيص جديد عشان الجلسة تتحفظ
 
 
 def render(request: Request, name: str, user: User | None = None, **ctx):
@@ -1323,11 +1324,12 @@ def receipt_delete(rid: int, request: Request, db: Session = Depends(get_db), us
 
 
 @app.get("/receipts/new", response_class=HTMLResponse)
-def receipt_new(request: Request, site: str | None = None, db: Session = Depends(get_db),
+def receipt_new(request: Request, site: str | None = None, kind: str = "spare", db: Session = Depends(get_db),
                 user: User = Depends(require("storekeeper"))):
     sites, sel = pick_site(db, user, site)
-    items = db.query(Item).filter(Item.category == "spare", Item.active.is_(True)).order_by(Item.code).all()
-    return render(request, "receipt_new.html", user, sites=sites, sel=sel, items=items, today=date.today())
+    kind = kind if kind in ITEM_CATS else "spare"   # نوع الفاتورة: قطع غيار / مواد خام / أصول / أدوات سلامة
+    items = db.query(Item).filter(Item.category == kind, Item.active.is_(True)).order_by(Item.code).all()
+    return render(request, "receipt_new.html", user, sites=sites, sel=sel, items=items, today=date.today(), kind=kind)
 
 
 @app.post("/receipts/new")
@@ -1359,7 +1361,7 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
-        return back(f"/receipts/new?site={sel.id}")
+        return back(f"/receipts/new?site={sel.id}&kind={form.get('kind') or 'spare'}")
     flash(request, "تم تسجيل الوارد")
     return back(f"/receipts/{rec.id}")
 
@@ -1677,8 +1679,11 @@ def custody_new(request: Request, site: str | None = None, emp: str = "", cat: s
     if emp:
         last = db.query(CustodyRecord).filter_by(employee_no=emp).order_by(CustodyRecord.id.desc()).first()
         name = last.employee_name if last else ""
+    stock = S.custody_stock(db, sel.id)
+    picks = {c: [(it, stock.get(it.id, {}).get("avail", 0)) for it in db.query(Item).filter(Item.category == k, Item.active.is_(True))
+                 .order_by(Item.code)] for c, k in CUSTODY_ITEM_CAT.items()}
     return render(request, "custody_new.html", user, sites=sites, sel=sel, today=date.today(), emp=emp, emp_name=name,
-                  cat=cat)
+                  cat=cat, picks=picks)
 
 
 @app.post("/custody/new")
@@ -1694,15 +1699,27 @@ async def custody_new_post(request: Request, db: Session = Depends(get_db), user
         if cat not in CUSTODY_CATEGORIES:
             raise S.BusinessError("اختر النوع (الأصول / أدوات السلامة)")
         att = save_upload(db, form.get("attachment"))
+        # الأصناف المتسجلة في المخزن لنوع العهدة ده: التسليم منها بيتخصم من الرصيد
+        stock_items = {f"{i.code} — {i.name}": i for i in db.query(Item).filter(Item.category == CUSTODY_ITEM_CAT[cat])}
+        avail = {iid: v["avail"] for iid, v in S.custody_stock(db, sel.id).items()}
         n = 0
         for k in form.getlist("row"):  # كل سطر ليه رقم، وصورته اسمها photo_<رقم>
             name = (form.get(f"item_name_{k}") or "").strip()
             if not name:
                 continue
             q = parse_float(form.get(f"qty_{k}")) or 1
+            it = stock_items.get(name)
+            if stock_items and not it:
+                raise S.BusinessError(f"اختر «{name}» من أصناف المخزن (أو سجّله في الوارد أولاً)")
+            if it:
+                if q > avail.get(it.id, 0) + 1e-9:
+                    raise S.BusinessError(f"الكمية المطلوبة من «{it.name}» ({S.fmt(q)}) أكبر من الرصيد المتاح ({S.fmt(avail.get(it.id, 0))})")
+                avail[it.id] = avail.get(it.id, 0) - q
+                name = it.name
             photo = save_upload(db, form.get(f"photo_{k}"), images_only=True)
             db.add(CustodyRecord(site_id=sel.id, employee_no=emp_no, employee_name=emp_name, category=cat,
-                                 item_name=name, qty=q, serial_no=(form.get(f"serial_no_{k}") or "").strip() or None,
+                                 item_name=name, item_id=it.id if it else None, qty=q,
+                                 serial_no=(form.get(f"serial_no_{k}") or "").strip() or None,
                                  issued_at=parse_date(form.get("issued_at"), date.today()), issued_by_id=user.id,
                                  attachment=att, photo=photo, notes=(form.get("notes") or "").strip() or None))
             n += 1
@@ -1715,6 +1732,19 @@ async def custody_new_post(request: Request, db: Session = Depends(get_db), user
         return back(f"/custody/new?site={sel.id}")
     flash(request, f"تم تسجيل {n} بند")
     return back(f"/custody/employee/{emp_no}?site={sel.id}")
+
+
+@app.get("/custody/stock", response_class=HTMLResponse)
+def custody_stock_page(request: Request, site: str | None = None, db: Session = Depends(get_db),
+                       user: User = Depends(current_user)):
+    sites, sel = pick_site(db, user, site)
+    st = S.custody_stock(db, sel.id)
+    groups = []
+    for c, k in CUSTODY_ITEM_CAT.items():
+        rows = [(it, st.get(it.id, dict(in_qty=0, out_qty=0, back_qty=0, lost_qty=0, avail=0, avg=0, value=0)))
+                for it in db.query(Item).filter(Item.category == k).order_by(Item.code) if it.active or it.id in st]
+        groups.append((c, k, rows))
+    return render(request, "custody_stock.html", user, sites=sites, sel=sel, groups=groups)
 
 
 @app.get("/custody/employee/{emp_no}", response_class=HTMLResponse)
@@ -1895,7 +1925,7 @@ async def admin_items_post(request: Request, db: Session = Depends(get_db),
         code = DIESEL_CODE
     it.code, it.name = code, name
     it.uom = (form.get("uom") or "قطعة").strip()
-    it.category = form.get("category") if form.get("category") in ("spare", "raw") else "spare"
+    it.category = form.get("category") if form.get("category") in ITEM_CATS else "spare"
     it.active = bool(form.get("active"))
     it.crusher = bool(form.get("crusher")) and it.category == "raw"
     db.add(it)

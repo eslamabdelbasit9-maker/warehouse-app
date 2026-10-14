@@ -11,6 +11,7 @@
     <option value="open" {{ 'selected' if state=='open' }}>لدى الموظف</option><option value="returned" {{ 'selected' if state=='returned' }}>مُرجعة</option>
     <option value="all" {{ 'selected' if state=='all' }}>الكل</option></select></div>
   <button class="btn">بحث</button><span class="right"></span>
+  <a class="btn sec" href="/custody/stock?site={{ sel.id }}">رصيد المخزن</a>
   <a class="btn sec" href="/export/custody.xlsx?site={{ sel.id }}">تصدير Excel</a>
   {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&cat={{ cat|urlencode }}">+ تسليم {{ cat or 'أصول' }}</a>{% endif %}
 </form>

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>رصيد الأصول وأدوات السلامة — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}<span class="right"></span>
+  {% if user.has('storekeeper') %}<a class="btn sec" href="/receipts/new?site={{ sel.id }}&kind=asset">+ فاتورة أصول</a>
+  <a class="btn sec" href="/receipts/new?site={{ sel.id }}&kind=safety">+ فاتورة أدوات سلامة</a>{% endif %}
+  <a class="btn sec" href="/custody?site={{ sel.id }}">العهد لدى الموظفين</a></form>
+{% for c, k, rows in groups %}
+<div class="card">
+  <h2 style="margin-top:0">{{ c }}</h2>
+  <div class="tw"><table class="t">
+    <tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th class="n">الوارد (فواتير)</th><th class="n">مسلّم للموظفين</th><th class="n">مرتجع سليم</th><th class="n">تالف / مفقود</th><th class="n">لدى الموظفين الآن</th><th class="n">المتاح في المخزن</th><th class="n">متوسط السعر</th><th class="n">قيمة المتاح</th></tr>
+    {% for it, r in rows %}<tr><td>{{ it.code }}</td><td>{{ it.name }}</td><td>{{ it.uom or '' }}</td>
+      <td class="n">{{ fmt(r.in_qty) }}</td><td class="n">{{ fmt(r.out_qty) }}</td><td class="n">{{ fmt(r.back_qty) }}</td><td class="n">{{ fmt(r.lost_qty) }}</td>
+      <td class="n">{{ fmt(r.held if r.held is defined else 0) }}</td><td class="n {{ 'low' if r.avail <= 0 }}"><b>{{ fmt(r.avail) }}</b></td>
+      <td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
+    {% else %}<tr><td colspan="11" class="muted">لا توجد أصناف مسجلة — أضفها من الإدارة ← الأصناف بتصنيف «{{ ITEM_CATS[k] }}»، ثم سجّل فاتورتها من الوارد.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endfor %}
+{% endblock %}
