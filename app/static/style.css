@@ -488,3 +488,16 @@ html[data-mode=dark] table.t th.grp-in{background:rgba(15,123,63,.22)}html[data-
 .flash.warn{background:var(--warnbg);color:var(--warn);border:1px solid rgba(161,92,0,.25)}
 .flash.warn a{color:inherit;font-weight:700;text-decoration:underline}
 html[data-mode=dark] .flash.warn{background:rgba(245,179,1,.14);color:#F5C451}
+/* الطباعة: الصفحة كلها على عرض الورقة — من غير القائمة الجانبية ولا شريط تمرير، والجداول تتطبع كاملة */
+@media print{
+  @page{size:A4;margin:10mm}
+  html,body{background:#fff !important}
+  .noprint,aside.side,.menu-btn,.side-scrim,.tip{display:none !important}
+  body.has-side main,main{margin:0 !important;padding:0 !important;max-width:none !important}
+  .tw,.scroll,.tw.sticky{overflow:visible !important;max-height:none !important;border:0}
+  table.t{width:100% !important;font-size:10.5px}
+  table.t th,table.t td{padding:4px 5px !important;white-space:normal !important}
+  table.t th{color:#000 !important;background:#e5e7eb !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  tr{break-inside:avoid}
+  html.gsap-on main>*,main>*{visibility:visible !important;opacity:1 !important;transform:none !important}
+}

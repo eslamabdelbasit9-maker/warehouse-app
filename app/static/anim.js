@@ -54,9 +54,20 @@
   gsap.set(items, from);
   gsap.to(now, Object.assign({}, to, { stagger: 0.07, onComplete: done }));
   if (!now.length) done();
-  if (later.length && window.ScrollTrigger) {
-    ScrollTrigger.batch(later, { start: 'top 92%', once: true, onEnter: function (b) { gsap.to(b, Object.assign({}, to, { stagger: 0.08 })); } });
-  } else if (later.length) gsap.to(later, to);
+  // اللي تحت بيظهر لما يقرّب من الشاشة — وأي حاجة فوق الشاشة (لو المتصفح رجّع مكان التمرير) بتظهر على طول
+  if (later.length) {
+    var reveal = function () {
+      var go = [];
+      later = later.filter(function (el) { if (el.getBoundingClientRect().top < innerHeight * 0.95) { go.push(el); return false; } return true; });
+      if (go.length) gsap.to(go, Object.assign({}, to, { stagger: 0.08 }));
+      if (!later.length) { removeEventListener('scroll', reveal); removeEventListener('resize', reveal); document.removeEventListener('toggle', reveal, true); }
+    };
+    addEventListener('scroll', reveal, { passive: true });
+    addEventListener('resize', reveal);
+    addEventListener('pageshow', reveal);
+    document.addEventListener('toggle', reveal, true);   // فتح/قفل كارت في اللوحة بيغيّر أماكن اللي تحته
+    setTimeout(reveal, 150); setTimeout(reveal, 900);
+  }
 
   // صفوف الجداول اللي باينة: بتنزل ورا بعض
   document.querySelectorAll('main table.t:not(.lines):not(.cards)').forEach(function (t) {
