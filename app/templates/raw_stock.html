@@ -1,14 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-<h1>أرصدة المواد الخام — {{ sel.name }}</h1>
-<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
-  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from or '' }}"></div>
-  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to or '' }}"></div>
-  <button class="btn">عرض</button>
-  {% if d_from or d_to %}<a class="btn sec" href="/raw-stock?site={{ sel.id }}">إلغاء الفلتر</a>{% endif %}
-</form>
-<div class="card">
-  <p class="muted" style="margin-top:0">حركة كل مادة: الإضافة (الإنتاج والفواتير) والصرف حسب الجهة (الكسارة والأسفلت والخرسانة والبيع والمشاريع){% if d_from or d_to %} — من {{ d_from or 'البداية' }} إلى {{ d_to or 'اليوم' }}{% endif %}.</p>
+{% macro stock_table(rows, empty_msg) %}
   <div class="tw sticky"><table class="t">
   <thead>
     <tr><th rowspan="2">الكود</th><th rowspan="2">المادة</th><th rowspan="2">الوحدة</th><th class="n" rowspan="2">{{ 'رصيد أول الفترة' if d_from else 'افتتاحي' }}</th>
@@ -23,7 +15,24 @@
     <td class="n">{{ fmt(r.out_crusher) }}</td><td class="n">{{ fmt(r.out_asphalt) }}</td><td class="n">{{ fmt(r.out_concrete) }}</td><td class="n">{{ fmt(r.out_sale) }}</td><td class="n">{{ fmt(r.out_project) }}</td><td class="n"><b>{{ fmt(r.out_qty) }}</b></td>
     <td class="n {{ 'low' if r.cur < 0 }}"><b>{{ fmt(r.cur) }}</b></td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
     <td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
-  {% else %}<tr><td colspan="16" class="muted">لا توجد مواد خام مسجلة</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="16" class="muted">{{ empty_msg }}</td></tr>{% endfor %}
   </tbody></table></div>
+  {% if rows %}<p style="margin:8px 0 0"><b>إجمالي القيمة: {{ fmt(rows|sum(attribute='1.value')) }}</b></p>{% endif %}
+{% endmacro %}
+
+<h1>أرصدة المواد الخام — {{ sel.name }}</h1>
+<form class="filters card noprint" method="get">{% include "_site_pick.html" %}
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to or '' }}"></div>
+  <button class="btn">عرض</button>
+  {% if d_from or d_to %}<a class="btn sec" href="/raw-stock?site={{ sel.id }}">إلغاء الفلتر</a>{% endif %}
+</form>
+<div class="card">
+  <p class="muted" style="margin-top:0">حركة كل مادة: الإضافة (الإنتاج والفواتير) والصرف حسب الجهة (الكسارة والأسفلت والخرسانة والبيع والمشاريع){% if d_from or d_to %} — من {{ d_from or 'البداية' }} إلى {{ d_to or 'اليوم' }}{% endif %}.</p>
+  {{ stock_table(rows, 'لا توجد مواد خام مسجلة') }}
 </div>
+{% for title, grows in sub_groups %}
+<h2 style="margin-top:18px">أرصدة {{ title }} — تابعة لـ{{ sel.name }}</h2>
+<div class="card">{{ stock_table(grows, '') }}</div>
+{% endfor %}
 {% endblock %}

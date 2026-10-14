@@ -1311,8 +1311,18 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
     empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0,
                  out_crusher=0, out_asphalt=0, out_concrete=0, out_sale=0, out_project=0)
-    rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
-    return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows, d_from=d_from, d_to=d_to)
+    # أرصدة كسارات تابعة للموقع (زي العارضة والحقو للكدمى) بتظهر في جدول لوحدها — اسم الصنف «المادة - كسارة X»
+    groups = {}
+    for it in items:
+        sub = it.name.split(" - ", 1)[1].strip() if " - " in it.name and "كسارة" in it.name.split(" - ", 1)[1] else None
+        if sub and it.id not in st:
+            continue
+        if sub or it.id in st or it.active:
+            groups.setdefault(sub, []).append((it, st.get(it.id, empty)))
+    main_rows = groups.pop(None, [])
+    sub_groups = sorted(groups.items())
+    return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=main_rows, sub_groups=sub_groups,
+                  d_from=d_from, d_to=d_to)
 
 
 @app.get("/stock/{item_id}", response_class=HTMLResponse)

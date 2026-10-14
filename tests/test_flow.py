@@ -1383,3 +1383,19 @@ def test_issue_chart_by_unit_kind_links(env):
         for r in reqs:
             if r.work_date.strftime("%Y-%m") == m:
                 assert (r.req_no in html) == (r.unit.kind == k)
+
+
+def test_raw_stock_sub_crusher_groups(env):
+    """أرصدة كسارة تابعة (اسم الصنف «المادة - كسارة X») بتظهر في جدول لوحدها في صفحة الموقع بس."""
+    db = SessionLocal()
+    it = Item(code="RM-ARD-T", name="بحص تجربة - كسارة العارضة", uom="طن", category="raw", crusher=True)
+    db.add(it); db.flush()
+    db.add(OpeningBalance(site_id=env["site"], item_id=it.id, qty=100, value=800))
+    db.commit(); db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    t = c.get(f"/raw-stock?site={env['site']}").text
+    assert "أرصدة كسارة العارضة" in t and "RM-ARD-T" in t
+    db = SessionLocal()
+    other = Site(code="OT2", name="موقع آخر"); db.add(other); db.commit(); oid = other.id; db.close()
+    assert "RM-ARD-T" not in c.get(f"/raw-stock?site={oid}").text
