@@ -707,16 +707,16 @@ def new_raw(request: Request, site: str | None = None, dest: str = "", unit: str
             user: User = Depends(require("requester", "storekeeper"))):
     sites, sel = pick_site(db, user, site)
     # «الجهة المستلمة» حقل واحد: وحدات الموقع (خلاطة أسفلت / محطة خرسانة) + بيع لعميل + مشروع للشركة
-    units = [u for u in sel.units if u.active and u.kind in ("asphalt", "concrete")]
+    units = [u for u in sel.units if u.active and u.kind in ("crusher", "asphalt", "concrete")]
     def _ulabel(u):   # «اسفلت» ← «اسفلت — خلاطة أسفلت»؛ «خلاطة اسفلت» تفضل زي ما هي
         n = u.name.replace("أ", "ا").replace("ة", "ه")
-        return u.name if ("خلاط" in n or "خرسان" in n or "محطه" in n) else f"{u.name} — {RAW_DESTS[u.kind]}"
+        return u.name if ("خلاط" in n or "خرسان" in n or "محطه" in n or "كسار" in n) else f"{u.name} — {RAW_DESTS[u.kind]}"
     targets = [(f"u{u.id}", _ulabel(u), u.kind, u) for u in units] + \
               [("sale", RAW_DESTS["sale"], "sale", None), ("project", RAW_DESTS["project"], "project", None)]
     chosen = next((t for t in targets if t[0] == f"u{unit}"), None) if unit else None
     if not chosen and dest in ("sale", "project"):
         chosen = next(t for t in targets if t[0] == dest)
-    if not chosen and dest in ("asphalt", "concrete"):
+    if not chosen and dest in ("crusher", "asphalt", "concrete"):
         chosen = next((t for t in targets if t[2] == dest), None)
     chosen = chosen or targets[0]
     items = db.query(Item).filter(Item.category == "raw", Item.code != DIESEL_CODE, Item.active.is_(True)).order_by(Item.id).all()
@@ -732,10 +732,10 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
     dest = form.get("dest") if form.get("dest") in RAW_DESTS else "asphalt"
     try:
         unit, tons, customer = None, None, None
-        if dest in ("asphalt", "concrete"):
+        if dest in ("crusher", "asphalt", "concrete"):
             unit = db.get(Unit, int(form.get("unit_id") or 0))
             if not unit or unit.site_id != sel.id or unit.kind != dest:
-                raise S.BusinessError("اختر خلاطة الاسفلت" if dest == "asphalt" else "اختر محطة الخرسانة")
+                raise S.BusinessError({"asphalt": "اختر خلاطة الاسفلت", "concrete": "اختر محطة الخرسانة"}.get(dest, "اختر الكسارة"))
         party_tons = []
         if dest == "asphalt":
             # أطنان الأسفلت لكل جهة؛ الإجمالي = مجموعها (أو الرقم المكتوب لو مفيش توزيع)
@@ -1157,11 +1157,11 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
             b0 = before.get(iid)
             if b0:
                 r["open_qty"] = b0["cur"]
-                for k in ("prod_qty", "in_qty", "out_qty", "out_asphalt", "out_concrete", "out_sale", "out_project"):
+                for k in ("prod_qty", "in_qty", "out_qty", "out_crusher", "out_asphalt", "out_concrete", "out_sale", "out_project"):
                     r[k] -= b0[k]
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
     empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0,
-                 out_asphalt=0, out_concrete=0, out_sale=0, out_project=0)
+                 out_crusher=0, out_asphalt=0, out_concrete=0, out_sale=0, out_project=0)
     rows = [(it, st.get(it.id, empty)) for it in items if it.id in st or it.active]
     return render(request, "raw_stock.html", user, sites=sites, sel=sel, rows=rows, d_from=d_from, d_to=d_to)
 
@@ -1504,7 +1504,7 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
                         *in_period(CrusherProduction.date)).all())
         items = {}
         def row(it):
-            return items.setdefault(it.id, dict(item=it, prod=0.0, prod_val=0.0, asphalt=0.0, concrete=0.0, sale=0.0, project=0.0, out_val=0.0))
+            return items.setdefault(it.id, dict(item=it, prod=0.0, prod_val=0.0, crusher=0.0, asphalt=0.0, concrete=0.0, sale=0.0, project=0.0, out_val=0.0))
         for l in prod:
             r = row(l.item); r["prod"] += l.qty or 0; r["prod_val"] += l.value
         crusher_ids = [i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))]
@@ -1513,8 +1513,9 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
         parties = defaultdict(lambda: [0.0, 0.0])
         for l in outs:
             d = l.request.raw_dest or "asphalt"
-            r = row(l.item); r[d if d in ("asphalt", "concrete", "sale", "project") else "asphalt"] += l.qty or 0; r["out_val"] += l.value or 0
+            r = row(l.item); r[d if d in RAW_DESTS else "asphalt"] += l.qty or 0; r["out_val"] += l.value or 0
             who = (f"بيع — {l.request.customer}" if d == "sale" else f"مشروع — {l.request.customer}" if d == "project"
+                   else f"{l.entity_type or ''} {l.entity_name or '—'}".strip() if d == "crusher"
                    else (l.request.unit.name if l.request.unit else RAW_DESTS.get(d, "")))
             parties[who][0] += l.qty or 0; parties[who][1] += l.value or 0
         ctx.update(kind="crusher", c_items=sorted(items.values(), key=lambda r: r["item"].code), outs=outs,

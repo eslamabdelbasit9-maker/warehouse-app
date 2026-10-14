@@ -205,7 +205,7 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
     سعر الوحدة: نواتج الكسارة بالسعر الثابت للموقع، والباقي (زي البيتومين والديزل) بمتوسط سعر الافتتاحي والفواتير."""
     from .models import CrusherProduction, CrusherProductionLine
     t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, prod_qty=0.0, in_qty=0.0, in_val=0.0,
-                                 out_qty=0.0, pending_qty=0.0, out_asphalt=0.0, out_concrete=0.0, out_sale=0.0,
+                                 out_qty=0.0, pending_qty=0.0, out_crusher=0.0, out_asphalt=0.0, out_concrete=0.0, out_sale=0.0,
                                  out_project=0.0))
     raw_ids = select(Item.id).where(Item.category == "raw")
     for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(raw_ids)):
@@ -228,7 +228,7 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
                                  .group_by(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest)):
         if ls == "approved" and rs in ("approved", "partial"):
             t[iid]["out_qty"] += q or 0
-            t[iid]["out_" + (dest if dest in ("asphalt", "concrete", "sale", "project") else "asphalt")] += q or 0
+            t[iid]["out_" + (dest if dest in ("crusher", "asphalt", "concrete", "sale", "project") else "asphalt")] += q or 0
         elif ls == "pending" and rs == "pending":
             t[iid]["pending_qty"] += q or 0
     price = crusher_price(db, site_id)

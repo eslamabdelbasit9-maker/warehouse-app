@@ -916,7 +916,7 @@ def test_raw_project_issue_and_single_destination(env):
     c = TestClient(app)
     login(c, env, "requester@example.com")
     page = c.get(f"/requests/new/raw?site={env['site']}&dest=project").text
-    assert "الصرف إلى" in page and "الكسارة — " in page and "اسم المشروع" in page and "seg-tg" not in page
+    assert "الصرف إلى" in page and "تأخذ من" not in page and "اسم المشروع" in page and "seg-tg" not in page
     assert "اسم الخلاطة" not in page
     page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['asphalt']}").text
     assert 'id="tons"' in page
@@ -1138,3 +1138,33 @@ def test_admin_edits_and_deletes_receipt(env):
     db.close()
     c.post(f"/receipts/{rid}/delete")
     db = SessionLocal(); assert db.get(Receipt, rid) is None; db.close()
+
+
+def test_crusher_issue_to_projects_and_clients(env):
+    """الكسارة جهة صرف زي الخلاطات (مشروع/عميل لكل سطر)، وبتظهر في كشف الكسارة وأرصدة المواد الخام."""
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['crusher']}").text
+    assert "الصرف إلى" in page and "الديزل" not in page.split("ملاحظات")[0].split("الصرف إلى")[1]
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "crusher", "unit_id": env["crusher"],
+                                          "entity_type": "مشروع", "entity_name": "طريق نجران", "item_id": g, "qty": "25"},
+               follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.raw_dest == "crusher" and req.current_stage == 2
+    lid = req.lines[0].id
+    db.close()
+    for who in ("prod.manager@example.com", "final@example.com"):
+        login(c, env, who)
+        c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
+    db = SessionLocal()
+    assert db.get(Request, rid).status == "approved"
+    assert S.raw_stock_table(db, env["site"])[g]["out_crusher"] == 25
+    db.close()
+    login(c, env, "eng.crusher@example.com")
+    page = c.get(f"/unit-statement?site={env['site']}&unit={env['crusher']}").text
+    assert "صرف الكسارة" in page and "طريق نجران" in page
