@@ -8,9 +8,14 @@
     <div class="f"><label>الموقع</label>
       <select name="site_id" onchange="location='?site='+this.value">
         {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id }}>{{ s.name }}</option>{% endfor %}</select></div>
-    <div class="f"><label>الجهة المستلمة *</label>
+    <div class="f"><label>الصرف إلى *</label>
       <select onchange="var v=this.value; location='?site={{ sel.id }}&'+(v.charAt(0)=='u'?'unit='+v.slice(1):'dest='+v)">
-        {% for k, label, d, u in targets %}<option value="{{ k }}" {{ 'selected' if k == chosen[0] }}>{{ label }}</option>{% endfor %}</select></div>
+        <optgroup label="الخلاطات (تأخذ من إنتاج الكسارة)">
+        {% for k, label, d, u in targets if d in ('asphalt', 'concrete') %}<option value="{{ k }}" {{ 'selected' if k == chosen[0] }}>{{ label }}</option>{% endfor %}
+        </optgroup>
+        <optgroup label="الكسارة مباشرة">
+        {% for k, label, d, u in targets if d in ('sale', 'project') %}<option value="{{ k }}" {{ 'selected' if k == chosen[0] }}>الكسارة — {{ label }}</option>{% endfor %}
+        </optgroup></select></div>
     {% if dest == 'sale' %}
     <div class="f"><label>اسم العميل *</label><input name="customer" required></div>
     {% elif dest == 'project' %}

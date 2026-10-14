@@ -916,7 +916,7 @@ def test_raw_project_issue_and_single_destination(env):
     c = TestClient(app)
     login(c, env, "requester@example.com")
     page = c.get(f"/requests/new/raw?site={env['site']}&dest=project").text
-    assert "الجهة المستلمة" in page and "اسم المشروع" in page and "seg-tg" not in page
+    assert "الصرف إلى" in page and "الكسارة — " in page and "اسم المشروع" in page and "seg-tg" not in page
     assert "اسم الخلاطة" not in page
     page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['asphalt']}").text
     assert 'id="tons"' in page
