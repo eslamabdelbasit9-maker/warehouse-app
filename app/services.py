@@ -269,14 +269,17 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
                       .group_by(ReceiptLine.item_id)):
         t[iid]["in_qty"] += q or 0
         t[iid]["in_val"] += v or 0
-    for iid, ls, rs, dest, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest,
-                                          func.sum(RequestLine.qty))
-                                 .join(Request).filter(Request.site_id == site_id, Request.type == "raw",
-                                                       *([Request.work_date <= upto] if upto else []))
-                                 .group_by(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest)):
+    for iid, ls, rs, dest, et, sp, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest,
+                                                  RequestLine.entity_type, RequestLine.sale_price.isnot(None), func.sum(RequestLine.qty))
+                                         .join(Request).filter(Request.site_id == site_id, Request.type == "raw",
+                                                               *([Request.work_date <= upto] if upto else []))
+                                         .group_by(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest,
+                                                   RequestLine.entity_type, RequestLine.sale_price.isnot(None))):
         if ls == "approved" and rs in ("approved", "partial"):
             t[iid]["out_qty"] += q or 0
-            t[iid]["out_" + (dest if dest in ("crusher", "asphalt", "concrete", "sale", "project") else "asphalt")] += q or 0
+            t[iid]["out_crusher" if dest == "crusher" else "out_" + (dest if dest in ("asphalt", "concrete", "sale", "project") else "asphalt")] += q or 0
+            if dest == "crusher":   # صرف الكسارة لجهة: يُضاف إلى عمود البيع أو المشاريع حسب نوع الجهة
+                t[iid]["out_sale" if (et == "عميل" or sp) else "out_project"] += q or 0
         elif ls == "pending" and rs == "pending":
             t[iid]["pending_qty"] += q or 0
     price = crusher_price(db, site_id)

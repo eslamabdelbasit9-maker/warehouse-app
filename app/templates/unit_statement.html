@@ -21,10 +21,10 @@
 </div>
 <h2>الإنتاج والصرف حسب المادة</h2>
 <div class="card"><div class="tw"><table class="t">
-<tr><th>الكود</th><th>المادة</th><th class="n">{{ 'رصيد أول الفترة' if d_from else 'الرصيد الافتتاحي' }}</th><th class="n">الإنتاج</th><th class="n">صرف الكسارة (مشاريع/عملاء)</th><th class="n">خلاطة الأسفلت</th><th class="n">الخرسانة</th><th class="n">بيع</th><th class="n">مشاريع</th><th class="n">إجمالي المصروف</th><th class="n">{{ 'الرصيد في ' ~ d_to if d_to else 'الرصيد الحالي' }}</th></tr>
+<tr><th>الكود</th><th>المادة</th><th class="n">{{ 'رصيد أول الفترة' if d_from else 'الرصيد الافتتاحي' }}</th><th class="n">الإنتاج</th><th class="n">خلاطة الأسفلت</th><th class="n">الخرسانة</th><th class="n">بيع</th><th class="n">مشاريع</th><th class="n">إجمالي المصروف</th><th class="n">{{ 'الرصيد في ' ~ d_to if d_to else 'الرصيد الحالي' }}</th></tr>
 {% for r in c_items %}{% set o = r.crusher + r.asphalt + r.concrete + r.sale + r.project %}<tr>
 <td dir="ltr">{{ r.item.code }}</td><td><a href="/stock/{{ r.item.id }}?site={{ sel.id }}">{{ r.item.name }}</a></td>
-<td class="n">{{ fmt(r.open) }}</td><td class="n">{{ fmt(r.prod) }}</td><td class="n">{{ fmt(r.crusher) }}</td><td class="n">{{ fmt(r.asphalt) }}</td><td class="n">{{ fmt(r.concrete) }}</td><td class="n">{{ fmt(r.sale) }}</td><td class="n">{{ fmt(r.project) }}</td>
+<td class="n">{{ fmt(r.open) }}</td><td class="n">{{ fmt(r.prod) }}</td><td class="n">{{ fmt(r.asphalt) }}</td><td class="n">{{ fmt(r.concrete) }}</td><td class="n">{{ fmt(r.sale) }}</td><td class="n">{{ fmt(r.project) }}</td>
 <td class="n"><b>{{ fmt(o) }}</b></td><td class="n {{ 'low' if r.close < 0 }}"><b>{{ fmt(r.close) }}</b></td></tr>
 {% else %}<tr><td colspan="11" class="muted">لا توجد حركة في الفترة</td></tr>{% endfor %}
 </table></div></div>

@@ -1163,6 +1163,7 @@ def test_crusher_issue_to_projects_and_clients(env):
     g = db.query(Item).filter_by(code="RM-G34").one().id
     db.close()
     c = TestClient(app)
+    db = SessionLocal(); before = S.raw_stock_table(db, env["site"]).get(g, {}).get("out_project", 0); db.close()
     login(c, env, "requester@example.com")
     page = c.get(f"/requests/new/raw?site={env['site']}&unit={env['crusher']}").text
     assert "الصرف إلى" in page and "الديزل" not in page.split("ملاحظات")[0].split("الصرف إلى")[1]
@@ -1180,11 +1181,11 @@ def test_crusher_issue_to_projects_and_clients(env):
         c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
     db = SessionLocal()
     assert db.get(Request, rid).status == "approved"
-    assert S.raw_stock_table(db, env["site"])[g]["out_crusher"] == 25
+    assert S.raw_stock_table(db, env["site"])[g]["out_project"] - before == 25   # صرف الكسارة لمشروع يظهر في عمود المشاريع
     db.close()
     login(c, env, "eng.crusher@example.com")
     page = c.get(f"/unit-statement?site={env['site']}&unit={env['crusher']}").text
-    assert "صرف الكسارة" in page and "طريق نجران" in page
+    assert "مشروع طريق نجران" in page and "(مشاريع/عملاء)" not in page
 
 
 def test_crusher_line_sale_price(env):

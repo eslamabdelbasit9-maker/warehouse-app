@@ -1819,7 +1819,8 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
         parties = defaultdict(lambda: [0.0, 0.0])
         for l in outs:
             d = l.request.raw_dest or "asphalt"
-            r = row(l.item); r[d if d in RAW_DESTS else "asphalt"] += l.qty or 0; r["out_val"] += l.value or 0
+            col = ("sale" if (l.entity_type == "عميل" or l.sale_price) else "project") if d == "crusher" else (d if d in RAW_DESTS else "asphalt")
+            r = row(l.item); r[col] += l.qty or 0; r["out_val"] += l.value or 0
             who = (f"بيع — {l.request.customer}" if d == "sale" else f"مشروع — {l.request.customer}" if d == "project"
                    else f"{l.entity_type or ''} {l.entity_name or '—'}".strip() if d == "crusher"
                    else (l.request.unit.name if l.request.unit else RAW_DESTS.get(d, "")))
