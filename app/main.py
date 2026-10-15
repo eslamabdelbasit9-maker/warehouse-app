@@ -2118,8 +2118,28 @@ def custody(request: Request, site: str | None = None, q: str = "", state: str =
     vals = {c.id: (c.qty or 0) * st[c.item_id]["avg"] for c in rows if c.item_id and c.item_id in st}
     tot = dict(purchases=sum(x["in_val"] for x in st.values()), held=sum(x["held_val"] for x in st.values()),
                avail=sum(x["value"] for x in st.values()))
+    link_items = (db.query(Item).filter(Item.category.in_(list(CUSTODY_ITEM_CAT.values())), Item.active.is_(True))
+                  .order_by(Item.code).all() if user.has("admin") else [])
     return render(request, "custody.html", user, sites=sites, sel=sel, rows=rows, q=q, state=state, cat=cat,
-                  counts=counts, vals=vals, tot=tot)
+                  counts=counts, vals=vals, tot=tot, link_items=link_items)
+
+
+@app.post("/custody/{cid}/link")
+async def custody_link(cid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """ربط عهدة مسجّلة بصنف الأصول (من فاتورته) — عشان تظهر قيمتها وتتخصم من رصيد المخزن. للإدارة فقط."""
+    rec = db.get(CustodyRecord, cid)
+    if not rec:
+        raise Forbidden()
+    form = await request.form()
+    iid = form.get("item_id")
+    item = db.get(Item, int(iid)) if str(iid or "").isdigit() else None
+    if iid and (not item or item.category not in CUSTODY_ITEM_CAT.values()):
+        flash(request, "اختر صنفًا من الأصول أو أدوات السلامة", "err")
+    else:
+        rec.item_id = item.id if item else None
+        db.commit()
+        flash(request, f"تم ربط «{rec.item_name}» بالصنف {item.code}" if item else f"تم إلغاء ربط «{rec.item_name}»")
+    return back(request.headers.get("referer") or f"/custody?site={rec.site_id}")
 
 
 @app.get("/custody/new", response_class=HTMLResponse)

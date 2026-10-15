@@ -1599,3 +1599,27 @@ def test_delete_empty_site_only(env):
     db = SessionLocal()
     assert db.get(Site, env["site"]) is not None and db.get(Site, dup) is None
     db.close()
+
+
+def test_custody_link_item_value(env):
+    from datetime import date
+    """عهدة قديمة من غير صنف: الإدارة تربطها بصنف الفاتورة فتظهر قيمتها."""
+    from app.models import CustodyRecord
+    db = SessionLocal()
+    it = Item(code="AS-PMP", name="مضخة", uom="قطعة", category="asset")
+    db.add(it)
+    db.flush()
+    rc = Receipt(site_id=env["site"], date=date(2026, 10, 1), invoice_no="AS-9", supplier="مورد")
+    rc.lines.append(ReceiptLine(item_id=it.id, qty=1, unit_price=1300))
+    cr = CustodyRecord(site_id=env["site"], employee_no="3555", employee_name="زاهد", category="الأصول",
+                       item_name="طرمبة مشحمة", qty=1, issued_at=date(2026, 10, 12))
+    db.add_all([rc, cr])
+    db.commit()
+    cid, iid = cr.id, it.id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    assert f"/custody/{cid}/link" in c.get(f"/custody?site={env['site']}").text
+    c.post(f"/custody/{cid}/link", data={"item_id": iid})
+    page = c.get(f"/custody?site={env['site']}").text
+    assert "1,300" in page and f"/custody/{cid}/link" not in page

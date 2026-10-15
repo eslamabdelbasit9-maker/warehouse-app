@@ -23,7 +23,9 @@
 <div class="card"><div class="tw"><table class="t">
 <tr><th>الرقم الوظيفي</th><th>الموظف</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th class="n">القيمة</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>الإرجاع</th><th>مرفق</th></tr>
 {% for c in rows %}<tr><td><a href="/custody/employee/{{ c.employee_no }}?site={{ sel.id }}">{{ c.employee_no }}</a></td><td>{{ c.employee_name }}</td>
-<td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}{% if c.photo.startswith('http') %}<a href="{{ c.photo }}" target="_blank">📷 الصورة</a>{% else %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td class="n">{{ fmt(vals[c.id]) if c.id in vals else '' }}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
+<td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}{% if c.photo.startswith('http') %}<a href="{{ c.photo }}" target="_blank">📷 الصورة</a>{% else %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td class="n">{% if c.id in vals %}{{ fmt(vals[c.id]) }}{% elif link_items %}<form method="post" action="/custody/{{ c.id }}/link" class="noprint" style="margin:0">
+  <select name="item_id" onchange="this.form.submit()" style="max-width:170px" title="اربط العهدة بصنفها من فاتورة الأصول لتظهر قيمتها"><option value="">ربط بصنف…</option>
+  {% for it in link_items %}<option value="{{ it.id }}">{{ it.code }} — {{ it.name }}</option>{% endfor %}</select></form>{% endif %}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
 <td>{% if c.returned_at %}<span class="st st-approved">{{ c.returned_at }}</span>{% else %}<span class="st st-pending">لدى الموظف</span>{% endif %}</td>
 <td>{% if c.attachment %}<a href="{{ att_url(c.attachment) }}" target="_blank">عرض</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="11" class="muted">لا يوجد</td></tr>{% endfor %}
