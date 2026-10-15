@@ -289,7 +289,7 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
     for iid, r in t.items():
         r["cur"] = r["open_qty"] + r["prod_qty"] + r["in_qty"] - r["out_qty"]
         r["available"] = r["cur"] - r["pending_qty"]
-        r["avg"] = price if iid in crusher else mavg.get(iid, 0.0)
+        r["avg"] = price if (iid in crusher and price > 0) else mavg.get(iid, 0.0)
         r["value"] = r["cur"] * r["avg"]
     return t
 
@@ -300,7 +300,9 @@ def raw_moving_avg(db: Session, site_id: int, upto=None, write=False):
     = (قيمة الرصيد + قيمة الوارد) / (كمية الرصيد + كمية الوارد)، وكل صرف يُسعَّر بالمتوسط وقت صرفه.
     write=True يُعيد تسعير سطور الصرف المعتمدة بهذا المتوسط. يرجع dict[item_id] = المتوسط في نهاية الفترة."""
     from .models import Request as Req
-    non_crusher = select(Item.id).where(Item.category == "raw", Item.crusher.is_not(True))
+    # موقع من غير كسارة (سعر ثابت = 0): البحص والبودرة مشتراة، فتتسعّر بالمتوسط المتحرك زي أي مادة
+    non_crusher = (select(Item.id).where(Item.category == "raw", Item.crusher.is_not(True)) if crusher_price(db, site_id) > 0
+                   else select(Item.id).where(Item.category == "raw"))
     ev = defaultdict(list)   # item_id -> [(date, order, id, kind, qty, price|line)]
     for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(non_crusher)):
         ev[ob.item_id].append((date.min, 0, ob.id, "in", ob.qty or 0, ob.value or 0))

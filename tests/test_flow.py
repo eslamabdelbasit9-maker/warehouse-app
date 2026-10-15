@@ -1641,3 +1641,17 @@ def test_supplier_rename_merges_regions(env):
     assert names == {"الشامل الجديد"}
     assert [s.name for s in db.query(Supplier) if "الشامل" in s.name] == ["الشامل الجديد"]
     db.close()
+
+
+def test_site_without_crusher_prices_aggregates_by_average(env):
+    """موقع من غير سعر كسارة: البحص المشترى بيتسعّر بالمتوسط (مش صفر)."""
+    db = SessionLocal()
+    s = Site(code="NOCR", name="موقع بلا كسارة")
+    db.add(s)
+    db.flush()
+    g = db.query(Item).filter_by(code="RM-G34").one()
+    db.add(OpeningBalance(site_id=s.id, item_id=g.id, qty=100, value=1823))
+    db.commit()
+    st = S.raw_stock_table(db, s.id)
+    assert round(st[g.id]["avg"], 2) == 18.23 and round(st[g.id]["value"], 2) == 1823
+    db.close()
