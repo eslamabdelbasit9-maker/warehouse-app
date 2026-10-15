@@ -191,21 +191,14 @@ def init_db():
 
 def sync_suppliers(db):
     """أي مورد مكتوب في فواتير قديمة ومش في قائمة الموردين بيتضاف لها (مرة لكل مورد — بدون تكرار نفس المورد بصيغ مختلفة)."""
-    keys = {supplier_ident(n) for (n,) in db.query(Supplier.name)}
+    keys = {S.supplier_parts(n)[0] for (n,) in db.query(Supplier.name)}
     for (name,) in db.query(Receipt.supplier).filter(Receipt.supplier.isnot(None)).distinct().order_by(Receipt.supplier):
         name = " ".join(name.split())
-        k = supplier_ident(name)
-        if not name or name.startswith("تحويل") or not k[0] or k in keys:
+        k = S.supplier_parts(name)[0]
+        if not name or name.startswith("تحويل") or not k or k in keys:
             continue
         keys.add(k)
         db.add(Supplier(name=name[:200]))
-
-
-def supplier_ident(name):
-    """هوية المورد: الاسم الموحّد + الفرع (الشامل الجديد (صبيا) غير الشامل الجديد (خميس مشيط))."""
-    key, region, _ = S.supplier_parts(name)
-    norm = lambda x: x.replace("ة", "ه").replace("ى", "ي").replace("أ", "ا").replace("إ", "ا").strip()
-    return key, norm(region)
 
 
 def supplier_names(db):
@@ -2033,8 +2026,8 @@ async def supplier_add(request: Request, db: Session = Depends(get_db), user: Us
             return JSONResponse({"error": "اكتب اسم المورد"}, status_code=400)
         flash(request, "اكتب اسم المورد", "err")
         return back("/suppliers")
-    k = supplier_ident(name)
-    existing = next((n for n in supplier_names(db) if supplier_ident(n) == k), None)
+    k = S.supplier_parts(name)[0]
+    existing = next((n for n in supplier_names(db) if S.supplier_parts(n)[0] == k), None)
     if not existing:
         db.add(Supplier(name=name, created_by_id=user.id))
         db.commit()
