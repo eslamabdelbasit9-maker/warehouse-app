@@ -28,7 +28,7 @@ STAGE_ROLE = {1: "engineer", 2: "manager", 3: "final"}
 REQ_TYPES = {"spare": "صرف قطع غيار", "raw": "صرف مواد خام"}
 # جهة صرف المواد الخام ومسار اعتمادها (المراحل بالترتيب)
 RAW_DESTS = {"crusher": "كسارة", "asphalt": "خلاطة أسفلت", "concrete": "محطة خرسانة", "sale": "بيع لعميل", "project": "مشروع للشركة"}
-RAW_FLOWS = {"crusher": [2, 3], "asphalt": [1, 2, 3], "concrete": [2], "sale": [2, 3], "project": [2, 3]}
+RAW_FLOWS = {"crusher": [1, 2, 3], "asphalt": [1, 2, 3], "concrete": [2], "sale": [2, 3], "project": [2, 3]}
 REQ_STATUS = {
     "pending": "قيد الاعتماد",
     "approved": "معتمد",

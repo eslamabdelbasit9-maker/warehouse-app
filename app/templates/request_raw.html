@@ -20,7 +20,7 @@
     <div class="f"><label>التاريخ</label><input type="date" name="work_date" value="{{ today }}"></div>
     <div class="f"><label>طالب الصرف</label><input value="{{ user.name }}" disabled></div>
   </div>
-  <p class="muted" style="margin:8px 0 0">مسار الاعتماد: {% if dest == 'asphalt' %}المهندس ← مدير الإنتاج ← الاعتماد النهائي{% elif dest == 'concrete' %}مدير الإنتاج{% else %}مدير الإنتاج ← الاعتماد النهائي{% endif %}</p>
+  <p class="muted" style="margin:8px 0 0">مسار الاعتماد: {% if dest in ('asphalt', 'crusher') %}المهندس ← مدير الإنتاج ← الاعتماد النهائي{% elif dest == 'concrete' %}مدير الإنتاج{% else %}مدير الإنتاج ← الاعتماد النهائي{% endif %}</p>
 
 
   {% if dest == 'project' %}

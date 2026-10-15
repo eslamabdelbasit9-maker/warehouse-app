@@ -1184,10 +1184,12 @@ def test_crusher_issue_to_projects_and_clients(env):
     rid = int(r.headers["location"].rsplit("/", 1)[1])
     db = SessionLocal()
     req = db.get(Request, rid)
-    assert req.raw_dest == "crusher" and req.current_stage == 2
+    assert req.raw_dest == "crusher" and req.current_stage == 1   # الكسارة: مهندس الكسارة ← مدير الإنتاج ← النهائي
     lid = req.lines[0].id
     db.close()
-    for who in ("prod.manager@example.com", "final@example.com"):
+    login(c, env, "eng.asphalt@example.com")   # مهندس الخلاطة ما يعتمدش طلب الكسارة
+    assert c.get(f"/approvals/{rid}", follow_redirects=False).status_code != 200
+    for who in ("eng.crusher@example.com", "prod.manager@example.com", "final@example.com"):
         login(c, env, who)
         c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})
     db = SessionLocal()
