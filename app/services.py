@@ -5,7 +5,7 @@ from datetime import date, datetime
 from html import escape
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -255,7 +255,7 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
     from .models import CrusherProduction, CrusherProductionLine
     t = defaultdict(lambda: dict(open_qty=0.0, open_val=0.0, prod_qty=0.0, in_qty=0.0, in_val=0.0,
                                  out_qty=0.0, pending_qty=0.0, out_crusher=0.0, out_asphalt=0.0, out_concrete=0.0, out_sale=0.0,
-                                 out_project=0.0))
+                                 out_project=0.0, out_transfer=0.0, tin_qty=0.0))
     raw_ids = select(Item.id).where(Item.category == "raw")
     for ob in db.query(OpeningBalance).filter(OpeningBalance.site_id == site_id, OpeningBalance.item_id.in_(raw_ids)):
         t[ob.item_id]["open_qty"] += ob.qty or 0
@@ -264,12 +264,15 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
                    .filter(CrusherProduction.site_id == site_id, *([CrusherProduction.date <= upto] if upto else []))
                    .group_by(CrusherProductionLine.item_id)):
         t[iid]["prod_qty"] += q or 0
-    for iid, q, v in (db.query(ReceiptLine.item_id, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
-                      .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids),
-                                            *([Receipt.date <= upto] if upto else []))
-                      .group_by(ReceiptLine.item_id)):
-        t[iid]["in_qty"] += q or 0
+    is_tr = or_(Receipt.supplier.like("تحويل%"), Receipt.invoice_no.like("%تحويل%"))
+    for iid, tr, q, v in (db.query(ReceiptLine.item_id, is_tr, func.sum(ReceiptLine.qty), func.sum(ReceiptLine.qty * ReceiptLine.unit_price))
+                          .join(Receipt).filter(Receipt.site_id == site_id, ReceiptLine.item_id.in_(raw_ids),
+                                                *([Receipt.date <= upto] if upto else []))
+                          .group_by(ReceiptLine.item_id, is_tr)):
+        t[iid]["in_qty"] += q or 0          # كل الوارد (فواتير + تحويلات واردة)
         t[iid]["in_val"] += v or 0
+        if tr:
+            t[iid]["tin_qty"] += q or 0     # منه: تحويلات واردة من فروع أخرى
     for iid, ls, rs, dest, et, sp, q in (db.query(RequestLine.item_id, RequestLine.status, Request.status, Request.raw_dest,
                                                   RequestLine.entity_type, RequestLine.sale_price.isnot(None), func.sum(RequestLine.qty))
                                          .join(Request).filter(Request.site_id == site_id, Request.type == "raw",
@@ -278,7 +281,7 @@ def raw_stock_table(db: Session, site_id: int, upto=None):
                                                    RequestLine.entity_type, RequestLine.sale_price.isnot(None))):
         if ls == "approved" and rs in ("approved", "partial"):
             t[iid]["out_qty"] += q or 0
-            t[iid]["out_crusher" if dest == "crusher" else "out_" + (dest if dest in ("asphalt", "concrete", "sale", "project") else "asphalt")] += q or 0
+            t[iid]["out_crusher" if dest == "crusher" else "out_" + (dest if dest in ("asphalt", "concrete", "sale", "project", "transfer") else "asphalt")] += q or 0
             if dest == "crusher":   # صرف الكسارة لجهة: يُضاف إلى عمود البيع أو المشاريع حسب نوع الجهة
                 t[iid]["out_sale" if (et == "عميل" or sp) else "out_project"] += q or 0
         elif ls == "pending" and rs == "pending":

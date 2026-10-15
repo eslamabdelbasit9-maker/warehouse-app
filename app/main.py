@@ -1505,11 +1505,11 @@ def raw_stock(request: Request, site: str | None = None, date_from: str = "", da
             b0 = before.get(iid)
             if b0:
                 r["open_qty"] = b0["cur"]
-                for k in ("prod_qty", "in_qty", "out_qty", "out_crusher", "out_asphalt", "out_concrete", "out_sale", "out_project"):
+                for k in ("prod_qty", "in_qty", "tin_qty", "out_qty", "out_crusher", "out_asphalt", "out_concrete", "out_sale", "out_project", "out_transfer"):
                     r[k] -= b0[k]
     items = db.query(Item).filter(Item.category == "raw").order_by(Item.code).all()
     empty = dict(open_qty=0, prod_qty=0, in_qty=0, out_qty=0, pending_qty=0, cur=0, avg=0, value=0,
-                 out_crusher=0, out_asphalt=0, out_concrete=0, out_sale=0, out_project=0)
+                 out_crusher=0, out_asphalt=0, out_concrete=0, out_sale=0, out_project=0, out_transfer=0, tin_qty=0)
     # أرصدة كسارات تابعة للموقع (زي العارضة والحقو للكدمى) بتظهر في جدول لوحدها — اسم الصنف «المادة - كسارة X»
     groups = {}
     for it in items:
@@ -1916,7 +1916,7 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
                         *in_period(CrusherProduction.date)).all())
         items = {}
         def row(it):
-            return items.setdefault(it.id, dict(item=it, prod=0.0, prod_val=0.0, crusher=0.0, asphalt=0.0, concrete=0.0, sale=0.0, project=0.0, out_val=0.0))
+            return items.setdefault(it.id, dict(item=it, prod=0.0, prod_val=0.0, crusher=0.0, asphalt=0.0, concrete=0.0, sale=0.0, project=0.0, transfer=0.0, out_val=0.0))
         for l in prod:
             r = row(l.item); r["prod"] += l.qty or 0; r["prod_val"] += l.value
         crusher_ids = [i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))]

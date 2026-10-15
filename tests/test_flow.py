@@ -1655,3 +1655,25 @@ def test_site_without_crusher_prices_aggregates_by_average(env):
     st = S.raw_stock_table(db, s.id)
     assert round(st[g.id]["avg"], 2) == 18.23 and round(st[g.id]["value"], 2) == 1823
     db.close()
+
+
+def test_raw_transfer_columns(env):
+    """التحويل بين الفروع: يظهر «تحويل لفرع» عند المرسل و«تحويل من فرع» عند المستلم، مش صرف ولا فواتير."""
+    from datetime import date
+    db = SessionLocal()
+    bit = db.query(Item).filter_by(code="RM-BIT").one()
+    rc = Receipt(site_id=env["site"], date=date(2026, 3, 1), invoice_no="TR-1", supplier="تحويل من فرع الكدمي")
+    rc.lines.append(ReceiptLine(item_id=bit.id, qty=20, unit_price=2000))
+    rq = Request(req_no="RM-TR-1", type="raw", site_id=env["site"], requester_name="استيراد", work_date=date(2026, 3, 2),
+                 raw_dest="transfer", status="approved", current_stage=3)
+    from app.models import RequestLine as RL
+    rq.lines.append(RL(item_id=bit.id, qty=5, status="approved", unit_cost=2000, value=10000))
+    db.add_all([rc, rq])
+    db.commit()
+    st = S.raw_stock_table(db, env["site"])[bit.id]
+    assert st["tin_qty"] == 20 and st["out_transfer"] == 5
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    page = c.get(f"/raw-stock?site={env['site']}").text
+    assert "تحويل لفرع" in page and "تحويل من فرع" in page
