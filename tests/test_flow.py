@@ -1623,3 +1623,21 @@ def test_custody_link_item_value(env):
     c.post(f"/custody/{cid}/link", data={"item_id": iid})
     page = c.get(f"/custody?site={env['site']}").text
     assert "1,300" in page and f"/custody/{cid}/link" not in page
+
+
+def test_supplier_rename_merges_regions(env):
+    from datetime import date
+    db = SessionLocal()
+    for n in ("الشامل الجديد التجارية (صبيا)", "الشامل الجديد (خميس مشيط)"):
+        db.add(Receipt(site_id=env["site"], date=date(2026, 9, 1), invoice_no="SHM9-" + str(len(n)), supplier=n))
+    db.add(Supplier(name="الشامل الجديد (خميس مشيط)"))
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    c.post("/suppliers/rename", data={"k": "الشامل الجديد", "name": "الشامل الجديد"})
+    db = SessionLocal()
+    names = {r.supplier for r in db.query(Receipt).filter(Receipt.invoice_no.like("SHM9-%"))}
+    assert names == {"الشامل الجديد"}
+    assert [s.name for s in db.query(Supplier) if "الشامل" in s.name] == ["الشامل الجديد"]
+    db.close()

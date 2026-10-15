@@ -2037,6 +2037,36 @@ async def supplier_add(request: Request, db: Session = Depends(get_db), user: Us
     return back("/suppliers")
 
 
+@app.post("/suppliers/rename")
+async def supplier_rename(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    """توحيد اسم المورد: كل صيغه (بالفروع/المناطق) في القائمة والفواتير تتغيّر للاسم الجديد. للإدارة فقط."""
+    form = await request.form()
+    key = (form.get("k") or "").strip()
+    new = " ".join((form.get("name") or "").split())[:200]
+    if not key or len(new) < 2:
+        flash(request, "اكتب اسم المورد الجديد", "err")
+        return back("/suppliers")
+    same = lambda n: _sup_key(n)[0] == key
+    n_rec = 0
+    for r in db.query(Receipt).filter(Receipt.supplier.isnot(None)):
+        if same(r.supplier) and r.supplier != new:
+            r.supplier = new
+            n_rec += 1
+    sups = [s for s in db.query(Supplier) if same(s.name)]
+    keep = next((s for s in sups if s.name == new), None) or (sups[0] if sups else None)
+    for s in sups:
+        if s is not keep:
+            db.delete(s)
+    db.flush()
+    if keep:
+        keep.name = new
+    elif not db.query(Supplier).filter(Supplier.name == new).first():
+        db.add(Supplier(name=new, created_by_id=user.id))
+    db.commit()
+    flash(request, f"تم توحيد اسم المورد إلى «{new}» ({n_rec} فاتورة)")
+    return back("/suppliers")
+
+
 @app.get("/suppliers", response_class=HTMLResponse)
 def suppliers(request: Request, site: str | None = None, d_from: str | None = Query(None, alias="from"),
               d_to: str | None = Query(None, alias="to"), db: Session = Depends(get_db),

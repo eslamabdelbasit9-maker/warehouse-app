@@ -19,7 +19,10 @@
 <tr><th>المورد</th><th>المواقع</th><th class="n">عدد الفواتير</th><th class="n">بدون ضريبة</th><th class="n">الضريبة 15%</th><th class="n">شامل الضريبة</th><th>آخر فاتورة</th></tr>
 {% for g in rows %}<tr>
 <td><a href="/suppliers/statement?k={{ g.key|urlencode }}{% if sel %}&site={{ sel.id }}{% endif %}{% if d_from %}&from={{ d_from }}{% endif %}{% if d_to %}&to={{ d_to }}{% endif %}"><b>{{ g.name }}</b></a>
-  {% if g.names|length > 1 %}<div class="muted" style="font-size:12px">{{ g.names|length }} أسماء مختلفة مدمجة</div>{% endif %}</td>
+  {% if g.names|length > 1 %}<div class="muted" style="font-size:12px">{{ g.names|length }} أسماء مختلفة مدمجة</div>{% endif %}
+  {% if user.has('admin') and g.key %}<details class="noprint" style="margin-top:4px"><summary class="muted" style="font-size:12px;cursor:pointer">تعديل الاسم</summary>
+    <form method="post" action="/suppliers/rename" style="display:flex;gap:6px;margin-top:4px"><input type="hidden" name="k" value="{{ g.key }}">
+      <input name="name" value="{{ g.name }}" required style="min-width:180px"><button class="btn sm" onclick="return confirm('سيتغيّر اسم المورد في القائمة وكل فواتيره. متابعة؟')">حفظ</button></form></details>{% endif %}</td>
 <td>{{ g.sites|sort|join('، ') }}</td>
 <td class="n">{{ g.n }}{% if g.no_att %} <span class="muted" title="فواتير بلا مرفق">({{ g.no_att }} بلا مرفق)</span>{% endif %}</td>
 <td class="n">{{ fmt(g.net) }}</td><td class="n">{{ fmt(g.vat) }}</td><td class="n"><b>{{ fmt(g.gross) }}</b></td><td>{{ g.last or '' }}</td></tr>
