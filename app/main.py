@@ -885,12 +885,35 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
 
 # ---------------- إنتاج الكسارات ----------------
 @app.get("/production", response_class=HTMLResponse)
-def production_list(request: Request, site: str | None = None, db: Session = Depends(get_db),
-                    user: User = Depends(current_user)):
+def production_list(request: Request, site: str | None = None, date_from: str | None = None, date_to: str | None = None,
+                    unit: str | None = None, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites, sel = pick_site(db, user, site)
-    rows = (db.query(CrusherProduction).filter(CrusherProduction.site_id == sel.id)
-            .order_by(CrusherProduction.date.desc(), CrusherProduction.id.desc()).limit(300).all())
-    return render(request, "production.html", user, sites=sites, sel=sel, rows=rows, price=S.crusher_price(db, sel.id))
+    today = date.today()
+    d_from, d_to = parse_date(date_from, today.replace(month=1, day=1)), parse_date(date_to, today)
+    if d_to < d_from:
+        d_from, d_to = d_to, d_from
+    units = [u for u in sel.units if u.kind == "crusher"]
+    unit_id = int(unit) if unit and unit.isdigit() and any(u.id == int(unit) for u in units) else None
+    qry = (db.query(CrusherProduction).options(selectinload(CrusherProduction.lines).selectinload(CrusherProductionLine.item),
+                                               selectinload(CrusherProduction.unit), selectinload(CrusherProduction.user))
+           .filter(CrusherProduction.site_id == sel.id, CrusherProduction.date.between(d_from, d_to)))
+    if unit_id:
+        qry = qry.filter(CrusherProduction.unit_id == unit_id)
+    rows = qry.order_by(CrusherProduction.date.desc(), CrusherProduction.id.desc()).all()
+    # عمود لكل مادة، وإجمالي كل مادة (الكمية والقيمة) في الفترة
+    mats = {}
+    for p in rows:
+        for l in p.lines:
+            m = mats.setdefault(l.item_id, dict(item=l.item, qty=0.0, value=0.0))
+            m["qty"] += l.qty or 0
+            m["value"] += l.value
+    mats = sorted(mats.values(), key=lambda m: m["item"].id)
+    for p in rows:
+        p.by_item = {}
+        for l in p.lines:
+            p.by_item[l.item_id] = p.by_item.get(l.item_id, 0) + (l.qty or 0)
+    return render(request, "production.html", user, sites=sites, sel=sel, rows=rows, mats=mats, units=units,
+                  unit_id=unit_id, d_from=d_from, d_to=d_to, price=S.crusher_price(db, sel.id))
 
 
 @app.get("/production/new", response_class=HTMLResponse)

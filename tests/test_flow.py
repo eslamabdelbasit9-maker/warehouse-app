@@ -737,6 +737,11 @@ def test_raw_materials_production_concrete_sale(env):
     assert st[gid]["prod_qty"] == 500 and st[gid]["avg"] == 12.95
     assert db.query(CrusherProduction).count() == 1
     db.close()
+    # صفحة الإنتاج: عمود لكل مادة وإجمالي المادة، وفلتر التاريخ
+    page = c.get(f"/production?site={env['site']}").text
+    assert "إجمالي الإنتاج حسب المادة" in page and f"<th class=\"n\">{g.name}</th>" in page and "6,475" in page
+    old_page = c.get(f"/production?site={env['site']}&date_from=2000-01-01&date_to=2000-12-31").text
+    assert "لا يوجد إنتاج في هذه الفترة" in old_page and "6,475" not in old_page
     # صرف خرسانة: اعتماد مدير الإنتاج بس، والتكلفة بالسعر الثابت
     login(c, env, "requester@example.com")
     r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "concrete", "unit_id": conc_id,

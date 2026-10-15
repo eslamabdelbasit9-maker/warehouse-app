@@ -39,6 +39,8 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/', 'لوحة المتابعة', 'home', path == '/') }}
     {{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}
     {{ nl('/requests', 'الطلبات', 'file', path == '/requests' or (path.startswith('/requests/') and not path.startswith('/requests/new'))) }}
+    {% if user.has('engineer', 'manager', 'final', 'admin') %}{{ nl('/reports', 'التقارير', 'chart', path.startswith('/reports')) }}{% endif %}
+    {% if bi_links %}{% for name, url in bi_links %}<a href="{{ url }}" target="_blank" rel="noopener" title="{{ name }}">{{ icon('chart', 19) }}<span>{{ name }} ↗</span></a>{% endfor %}{% endif %}
     {% if user.has('requester', 'storekeeper') %}<div class="sg">الصرف</div>
     {{ nl('/requests/new/spare', 'قطع غيار', 'wrench', path.startswith('/requests/new/spare')) }}
     {{ nl('/requests/new/raw', 'مواد خام', 'layers', path.startswith('/requests/new/raw')) }}{% endif %}
@@ -47,8 +49,6 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/raw-stock', 'مواد خام', 'layers', path.startswith('/raw-stock')) }}
     {{ nl('/production', 'إنتاج الكسارات', 'chart', path.startswith('/production')) }}
     {{ nl('/unit-statement', 'كشف حساب الوحدة', 'file', path.startswith('/unit-statement')) }}
-    {% if user.has('engineer', 'manager', 'final', 'admin') %}{{ nl('/reports', 'التقارير', 'chart', path.startswith('/reports')) }}{% endif %}
-    {% if bi_links %}<div class="sg">التقارير</div>{% for name, url in bi_links %}<a href="{{ url }}" target="_blank" rel="noopener" title="{{ name }}">{{ icon('chart', 19) }}<span>{{ name }} ↗</span></a>{% endfor %}{% endif %}
     <div class="sg">المستودع</div>
     {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}
     {{ nl('/receipts', 'الوارد', 'cart', path.startswith('/receipts')) }}
