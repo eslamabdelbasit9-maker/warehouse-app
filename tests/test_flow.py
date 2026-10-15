@@ -1185,10 +1185,14 @@ def test_crusher_issue_to_projects_and_clients(env):
     db = SessionLocal()
     req = db.get(Request, rid)
     assert req.raw_dest == "crusher" and req.current_stage == 1   # الكسارة: مهندس الكسارة ← مدير الإنتاج ← النهائي
-    lid = req.lines[0].id
+    lid, req_no = req.lines[0].id, req.req_no
     db.close()
-    login(c, env, "eng.asphalt@example.com")   # مهندس الخلاطة ما يعتمدش طلب الكسارة
+    login(c, env, "eng.asphalt@example.com")   # مهندس الخلاطة لا يعتمد طلب الكسارة ولا يراه
     assert c.get(f"/approvals/{rid}", follow_redirects=False).status_code != 200
+    assert c.get(f"/requests/{rid}", follow_redirects=False).status_code != 200
+    assert req_no not in c.get("/requests").text
+    login(c, env, "eng.crusher@example.com")
+    assert req_no in c.get("/requests").text
     for who in ("eng.crusher@example.com", "prod.manager@example.com", "final@example.com"):
         login(c, env, who)
         c.post(f"/approvals/{rid}", data={"action": "approve", "line": [lid]})

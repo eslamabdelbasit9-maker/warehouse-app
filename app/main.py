@@ -348,7 +348,29 @@ def parse_date(v, default=None):
         return default
 
 
+def engineer_kinds(db, user):
+    """المهندس المعتمد (من غير صلاحيات أوسع) يشوف طلبات وحداته بس: أنواع الوحدات المسندة له في المرحلة 1.
+    يرجّع None لو مفيش تقييد."""
+    if not user.has("engineer") or user.has("manager", "final", "storekeeper", "requester", "transfer"):
+        return None
+    kinds = {k for (k,) in db.query(ApprovalRoute.unit_kind).filter(ApprovalRoute.user_id == user.id, ApprovalRoute.stage == 1)}
+    return None if (not kinds or None in kinds) else kinds
+
+
+def engineer_filter(db, user):
+    """شرط SQLAlchemy لطلبات المهندس (طلباته + اللي اعتمدها + وحداته)، أو None."""
+    kinds = engineer_kinds(db, user)
+    if kinds is None:
+        return None
+    return or_(Req.requester_id == user.id, Req.decisions.any(LineDecision.user_id == user.id),
+               Req.unit.has(Unit.kind.in_(kinds)))
+
+
 def can_view_request(db, user, req):
+    kinds = engineer_kinds(db, user)
+    if kinds is not None:
+        return (req.requester_id == user.id or any(d.user_id == user.id for d in req.decisions)
+                or (req.unit is not None and req.unit.kind in kinds))
     if req.site_id in user.site_ids(db) or (req.requester_id == user.id):
         return True
     return any(d.user_id == user.id for d in req.decisions) or S.can_approve(db, user, req)
@@ -613,6 +635,9 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
 
     my_pending = S.pending_for(db, user)
     base = db.query(Req).filter(Req.site_id.in_(ids))
+    ef = engineer_filter(db, user)
+    if ef is not None:
+        base = base.filter(ef)
     pending_by_stage = {s: base.filter(Req.status == "pending", Req.current_stage == s).count() for s in STAGES}
     period_reqs = base.filter(period).count()
     approved = [Req.site_id.in_(ids), Req.status.in_(["approved", "partial"]), RequestLine.status == "approved", period]
@@ -742,6 +767,9 @@ def requests_list(request: Request, type: str = "", status: str = "", site: str 
                   db: Session = Depends(get_db), user: User = Depends(current_user)):
     sites = user_sites(db, user)
     qry = db.query(Req).filter(or_(Req.site_id.in_([s.id for s in sites]), Req.requester_id == user.id))
+    ef = engineer_filter(db, user)
+    if ef is not None:   # مهندس الكسارة يشوف طلبات الكسارة بس، ومهندس الخلاطة طلبات الخلاطة بس
+        qry = qry.filter(ef)
     if type in REQ_TYPES:
         qry = qry.filter(Req.type == type)
     if status in REQ_STATUS:
@@ -2602,6 +2630,9 @@ def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str 
                     db: Session = Depends(get_db), user: User = Depends(current_user)):
     ids = user.site_ids(db)
     qry = (db.query(RequestLine).join(Req).filter(Req.site_id.in_(ids), Req.type == (type if type in REQ_TYPES else "spare")))
+    ef = engineer_filter(db, user)
+    if ef is not None:
+        qry = qry.filter(ef)
     if site.isdigit():
         qry = qry.filter(Req.site_id == int(site))
     if parse_date(frm):
