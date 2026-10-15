@@ -136,6 +136,15 @@ class OpeningBalance(Base):
     __table_args__ = (UniqueConstraint("site_id", "item_id"),)
 
 
+class Supplier(Base):
+    """قائمة الموردين المعتمدة — الوارد لا يُسجَّل إلا لمورد من هذه القائمة."""
+    __tablename__ = "suppliers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class Receipt(Base):
     __tablename__ = "receipts"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -389,6 +398,7 @@ class CrusherProduction(Base):
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
     date: Mapped[date] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
+    attachment: Mapped[str | None] = mapped_column(String(300))   # تقرير الإنتاج / الميزان
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     site: Mapped[Site] = relationship()

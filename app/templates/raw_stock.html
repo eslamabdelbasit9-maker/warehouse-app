@@ -6,7 +6,7 @@
   <thead>
     <tr><th rowspan="2">الكود</th><th rowspan="2">المادة</th><th rowspan="2">الوحدة</th><th class="n" rowspan="2">{{ 'رصيد أول الفترة' if d_from else 'افتتاحي' }}</th>
       <th class="n grp-in" colspan="2">الإضافة</th><th class="n grp-out" colspan="5">الصرف</th>
-      <th class="n" rowspan="2">{{ 'الرصيد في ' ~ d_to if d_to else 'الرصيد الحالي' }}</th><th class="n" rowspan="2">قيد الاعتماد</th><th class="n" rowspan="2">سعر الوحدة</th><th class="n" rowspan="2">القيمة</th></tr>
+      <th class="n curb" rowspan="2">{{ 'الرصيد في ' ~ d_to if d_to else 'الرصيد الحالي' }}</th><th class="n" rowspan="2">قيد الاعتماد</th><th class="n" rowspan="2">سعر الوحدة</th><th class="n" rowspan="2">القيمة</th></tr>
     <tr><th class="n grp-in">إنتاج الكسارة</th><th class="n grp-in">فواتير</th>
       <th class="n grp-out">خلاطة الأسفلت</th><th class="n grp-out">الخرسانة</th><th class="n grp-out">بيع</th><th class="n grp-out">مشاريع</th><th class="n grp-out">الإجمالي</th></tr>
   </thead>
@@ -14,7 +14,7 @@
   {% for it, r in rows %}<tr><td>{{ it.code }}</td><td><a href="/stock/{{ it.id }}?site={{ sel.id }}">{{ it.name }}</a></td><td>{{ it.uom or '' }}</td>
     <td class="n">{{ fmt(r.open_qty) }}</td><td class="n">{{ fmt(r.prod_qty) }}</td><td class="n">{{ fmt(r.in_qty) }}</td>
     <td class="n">{{ fmt(r.out_asphalt) }}</td><td class="n">{{ fmt(r.out_concrete) }}</td><td class="n">{{ fmt(r.out_sale) }}</td><td class="n">{{ fmt(r.out_project) }}</td><td class="n"><b>{{ fmt(r.out_qty) }}</b></td>
-    <td class="n {{ 'low' if r.cur < 0 }}"><b>{{ fmt(r.cur) }}</b></td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
+    <td class="n curb {{ 'low' if r.cur < 0 }}"><b>{{ fmt(r.cur) }}</b></td><td class="n">{{ fmt(r.pending_qty) if r.pending_qty else '' }}</td>
     <td class="n">{{ fmt(r.avg) }}</td><td class="n">{{ fmt(r.value) }}</td></tr>
   {% else %}<tr><td colspan="15" class="muted">{{ empty_msg }}</td></tr>{% endfor %}
   </tbody></table></div>

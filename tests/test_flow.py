@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.db import SessionLocal  # noqa: E402
 from app.main import app, init_db  # noqa: E402
+from app.models import Supplier  # noqa: E402
 from app.models import (CustodyRecord, Item, MailLog, OpeningBalance, Receipt, ReceiptLine, Request, Site, Transfer, Unit,  # noqa: E402
                         User)
 from app import services as S  # noqa: E402
@@ -32,6 +33,7 @@ def env():
     db.flush()
     db.add_all([OpeningBalance(site_id=site.id, item_id=a.id, qty=10, value=1000),
                 OpeningBalance(site_id=site.id, item_id=b.id, qty=4, value=200)])
+    db.add(Supplier(name="مورد"))
     db.commit()
     ids = dict(site=site.id, a=a.id, b=b.id,
                crusher=db.query(Unit).filter_by(site_id=site.id, kind="crusher").first().id,
@@ -45,6 +47,15 @@ def login(c, env, email):
     c.cookies.clear()
     r = c.post("/dev-login", data={"uid": env[email]}, follow_redirects=False)
     assert r.status_code == 303
+
+
+@pytest.fixture
+def sale_on():
+    """تشغيل سعر البيع مؤقتًا (موقوف افتراضيًا لحين قرار الإدارة)."""
+    import app.main as M
+    M.SALE_PRICE_ON = True; M.T.env.globals["SALE_PRICE_ON"] = True
+    yield
+    M.SALE_PRICE_ON = False; M.T.env.globals["SALE_PRICE_ON"] = False
 
 
 def test_spare_full_cycle(env):
@@ -703,7 +714,7 @@ def test_admin_edits_request_header(env):
     db.close()
 
 
-def test_raw_materials_production_concrete_sale(env):
+def test_raw_materials_production_concrete_sale(env, sale_on):
     from app.models import CrusherProduction
     db = SessionLocal()
     site = db.get(Site, env["site"])
@@ -916,7 +927,7 @@ def test_transfer_by_invoice_no_not_a_supplier(env):
     assert "استلام تحويل من الدار" in c.get(f"/transfers?site={env['site']}").text
 
 
-def test_raw_project_issue_and_single_destination(env):
+def test_raw_project_issue_and_single_destination(env, sale_on):
     """صرف مواد خام لمشروع للشركة: حقل «الجهة المستلمة» واحد، والمشروع بيظهر في كارت الصنف."""
     c = TestClient(app)
     login(c, env, "requester@example.com")
@@ -1188,7 +1199,7 @@ def test_crusher_issue_to_projects_and_clients(env):
     assert "مشروع طريق نجران" in page and "(مشاريع/عملاء)" not in page
 
 
-def test_crusher_line_sale_price(env):
+def test_crusher_line_sale_price(env, sale_on):
     """سعر البيع اختياري في سطر العميل (من غير اختيار «بيع» فوق)."""
     db = SessionLocal()
     g = db.query(Item).filter_by(code="RM-G34").one().id
@@ -1218,7 +1229,7 @@ def test_asset_invoice_and_custody_stock(env):
     login(c, env, "storekeeper@example.com")
     page = c.get(f"/receipts/new?site={env['site']}&kind=asset").text
     assert "تسجيل وارد — أصول" in page and "AS-LAP" in page and "SP-" not in page.split("<datalist")[1].split("</datalist>")[0]
-    r = c.post("/receipts/new", data={"site_id": env["site"], "kind": "asset", "date": "2026-10-01", "invoice_no": "AS-1",
+    r = c.post("/receipts/new", data={"site_id": env["site"], "kind": "asset", "date": "2026-10-01", "invoice_no": "AS-1", "supplier": "مورد",
                                       "item_id": [lid], "qty": ["3"], "unit_price": ["2500"]}, follow_redirects=False)
     assert r.status_code == 303
     db = SessionLocal()
@@ -1481,3 +1492,75 @@ def test_reports_pages(env):
     login(c, env, "requester@example.com")
     r = c.get("/reports", follow_redirects=False)
     assert r.status_code in (302, 303, 403)
+
+
+def test_sale_price_hidden_by_default(env):
+    """صرف المواد الخام بسعر المستودع — خانة سعر البيع للعميل مخفية والطلب بيتسجل من غيرها."""
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    page = c.get(f"/requests/new/raw?site={env['site']}&dest=sale").text
+    assert 'name="sale_price"' not in page
+    r = c.post("/requests/new/raw", data={"site_id": env["site"], "dest": "sale", "customer": "مؤسسة النور",
+                                          "item_id": g, "qty": "3", "sale_price": "50"}, follow_redirects=False)
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    l = db.get(Request, rid).lines[0]
+    assert l.sale_price is None and l.qty == 3
+    db.close()
+
+
+def test_supplier_must_be_from_list(env):
+    """الوارد لا يُسجَّل إلا لمورد من القائمة، والإضافة لا تكرر نفس المورد بصيغة مختلفة."""
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    data = {"site_id": env["site"], "date": "2026-10-02", "invoice_no": "INV-X", "supplier": "مورد غير معروف",
+            "item_id": [env["b"]], "qty": ["1"], "unit_price": ["10"]}
+    c.post("/receipts/new", data=data, follow_redirects=False)
+    db = SessionLocal()
+    assert not db.query(Receipt).filter_by(invoice_no="INV-X").first()
+    db.close()
+    r = c.post("/suppliers/add", data={"name": "شركة النجم الذهبي"}, headers={"Accept": "application/json"})
+    assert r.json() == {"name": "شركة النجم الذهبي", "existed": False}
+    r = c.post("/suppliers/add", data={"name": "النجم الذهبي التجارية"}, headers={"Accept": "application/json"})
+    assert r.json()["existed"] and r.json()["name"] == "شركة النجم الذهبي"
+    assert 'list="sup-list"' in c.get(f"/receipts/new?site={env['site']}").text
+    data["supplier"] = "شركة النجم الذهبي"
+    assert c.post("/receipts/new", data=data, follow_redirects=False).status_code == 303
+    db = SessionLocal()
+    assert db.query(Receipt).filter_by(invoice_no="INV-X").one().supplier == "شركة النجم الذهبي"
+    db.close()
+
+
+def test_production_attachment_print_and_filters(env):
+    """مرفق إنتاج الكسارة + زر الطباعة وملف الفلاتر في كل صفحة + الرصيد الحالي مميز."""
+    from app.models import CrusherProduction
+    db = SessionLocal()
+    g = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/production/new", data={"site_id": env["site"], "unit_id": env["crusher"], "date": "2026-10-03",
+                                        "item_id": [g], "qty": ["40"]},
+               files={"attachment": ("prod.pdf", b"%PDF-1.4 p", "application/pdf")}, follow_redirects=False)
+    assert r.status_code == 303
+    db = SessionLocal()
+    p = db.query(CrusherProduction).order_by(CrusherProduction.id.desc()).first()
+    assert p.attachment and p.attachment.endswith(".pdf")
+    pid = p.id
+    db.close()
+    page = c.get(f"/production?site={env['site']}").text
+    assert f"/files/" in page and f"/production/{pid}/attach" in page
+    page = c.get(f"/raw-stock?site={env['site']}").text
+    assert "print-fab" in page and "tables.js" in page and 'class="n curb' in page
+
+
+def test_approvals_link_only_for_approvers(env):
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    assert 'href="/approvals"' not in c.get("/").text
+    assert c.get("/approvals", follow_redirects=False).status_code == 303
+    login(c, env, "final@example.com")
+    assert 'href="/approvals"' in c.get("/").text

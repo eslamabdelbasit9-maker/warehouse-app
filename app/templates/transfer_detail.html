@@ -32,7 +32,7 @@
   </form>{% endif %}
   <div class="noprint" style="display:flex;gap:8px;margin-top:12px">
     {% if can_cancel %}<form method="post" action="/transfers/{{ t.id }}/cancel" onsubmit="return confirm('هل تريد إلغاء التحويل؟ ستُعاد الكميات إلى رصيد {{ t.from_site.name }}')"><button class="btn red">إلغاء التحويل</button></form>{% endif %}
-    <button class="btn sec" onclick="print()">طباعة</button>
+   
   </div>
 </div>
 {% endblock %}

@@ -8,7 +8,7 @@
   <div class="f"><label>إلى</label><input type="date" name="to" value="{{ d_to or '' }}"></div>
   <button class="btn">عرض</button><span class="right"></span>
   <a class="btn sec" href="/suppliers{% if sel %}?site={{ sel.id }}{% endif %}">← الموردين</a>
-  <button type="button" class="btn sec" onclick="print()">طباعة</button></form>
+ </form>
 {% if variants|length > 1 %}<p class="muted">الأسماء المدمجة: {{ variants|join(' / ') }}</p>{% endif %}
 <div class="card"><div class="tw"><table class="t">
 <tr><th>#</th><th>التاريخ</th><th>رقم الفاتورة</th><th>الموقع</th><th class="n">بدون ضريبة</th><th class="n">الضريبة 15%</th><th class="n">شامل الضريبة</th><th class="n">الرصيد التراكمي</th><th>الفاتورة</th></tr>

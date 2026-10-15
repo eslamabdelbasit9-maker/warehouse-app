@@ -8,7 +8,13 @@
   <div class="f"><label>إلى</label><input type="date" name="to" value="{{ d_to or '' }}"></div>
   <div class="f"><label>بحث</label><input data-live="#stbl"></div>
   <button class="btn">عرض</button><span class="right"></span>
-  <button type="button" class="btn sec" onclick="print()">طباعة</button></form>
+ </form>
+{% if user.has('storekeeper', 'admin') %}
+<form class="card noprint" method="post" action="/suppliers/add" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <div class="f" style="flex:1;min-width:220px"><label>إضافة مورد جديد</label><input name="name" required placeholder="اسم المورد كما في الفاتورة"></div>
+  <button class="btn green">+ إضافة مورد</button>
+  <span class="muted" style="font-size:12px">الوارد لا يُسجَّل إلا لمورد من القائمة ({{ n_master }} مورد).</span>
+</form>{% endif %}
 <div class="card"><div class="tw"><table class="t" id="stbl">
 <tr><th>المورد</th><th>المواقع</th><th class="n">عدد الفواتير</th><th class="n">بدون ضريبة</th><th class="n">الضريبة 15%</th><th class="n">شامل الضريبة</th><th>آخر فاتورة</th></tr>
 {% for g in rows %}<tr>
@@ -16,7 +22,7 @@
   {% if g.names|length > 1 %}<div class="muted" style="font-size:12px">{{ g.names|length }} أسماء مختلفة مدمجة</div>{% endif %}</td>
 <td>{{ g.sites|sort|join('، ') }}</td>
 <td class="n">{{ g.n }}{% if g.no_att %} <span class="muted" title="فواتير بلا مرفق">({{ g.no_att }} بلا مرفق)</span>{% endif %}</td>
-<td class="n">{{ fmt(g.net) }}</td><td class="n">{{ fmt(g.vat) }}</td><td class="n"><b>{{ fmt(g.gross) }}</b></td><td>{{ g.last }}</td></tr>
+<td class="n">{{ fmt(g.net) }}</td><td class="n">{{ fmt(g.vat) }}</td><td class="n"><b>{{ fmt(g.gross) }}</b></td><td>{{ g.last or '' }}</td></tr>
 {% else %}<tr><td colspan="7" class="muted">لا يوجد</td></tr>{% endfor %}
 {% if rows %}<tr><td colspan="2"><b>الإجمالي</b></td><td class="n"><b>{{ total.n }}</b></td><td class="n"><b>{{ fmt(total.net) }}</b></td><td class="n"><b>{{ fmt(total.vat) }}</b></td><td class="n"><b>{{ fmt(total.gross) }}</b></td><td></td></tr>{% endif %}
 </table></div></div>

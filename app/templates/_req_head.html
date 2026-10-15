@@ -8,8 +8,8 @@
   <div><b>الحالة</b><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}</span></div>
   {% if r.type == 'raw' %}<div><b>جهة الصرف</b>{{ RAW_DESTS.get(r.raw_dest or 'asphalt') }}</div>{% endif %}
   {% if r.customer and r.raw_dest == 'project' %}<div><b>المشروع</b>{{ r.customer }}</div>
-  {% elif r.customer %}<div><b>العميل</b>{{ r.customer }}</div><div><b>قيمة البيع</b>{{ fmt(r.sale_total) }}</div>
-  {% elif r.type == 'raw' and r.sale_total %}<div><b>قيمة البيع للعملاء</b>{{ fmt(r.sale_total) }}</div>{% endif %}
+  {% elif r.customer %}<div><b>العميل</b>{{ r.customer }}</div>{% if SALE_PRICE_ON %}<div><b>قيمة البيع</b>{{ fmt(r.sale_total) }}</div>{% endif %}
+  {% elif r.type == 'raw' and r.sale_total and SALE_PRICE_ON %}<div><b>قيمة البيع للعملاء</b>{{ fmt(r.sale_total) }}</div>{% endif %}
   {% if r.type == 'raw' and r.asphalt_tons %}
   <div><b>الأسفلت المنتج</b>{{ fmt(r.asphalt_tons) }} طن</div>
   <div><b>الديزل لكل طن</b>{{ '%.2f'|format(r.liters_per_ton) }} لتر/طن</div>

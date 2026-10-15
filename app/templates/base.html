@@ -37,7 +37,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {% macro nl(href, label, ic, on, badge=0) %}<a href="{{ href }}" class="{{ 'on' if on }}" title="{{ label }}">{{ icon(ic, 19) }}<span>{{ label }}</span>{% if badge %}<span class="badge-n">{{ badge }}</span>{% endif %}</a>{% endmacro %}
     <div class="sg">الرئيسية</div>
     {{ nl('/', 'لوحة المتابعة', 'home', path == '/') }}
-    {{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}
+    {% if is_approver %}{{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}{% endif %}
     {{ nl('/requests', 'الطلبات', 'file', path == '/requests' or (path.startswith('/requests/') and not path.startswith('/requests/new'))) }}
     {% if user.has('engineer', 'manager', 'final', 'admin') %}{{ nl('/reports', 'التقارير', 'chart', path.startswith('/reports')) }}{% endif %}
     {% if bi_links %}{% for name, url in bi_links %}<a href="{{ url }}" target="_blank" rel="noopener" title="{{ name }}">{{ icon('chart', 19) }}<span>{{ name }} ↗</span></a>{% endfor %}{% endif %}
@@ -68,6 +68,8 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 {% elif approver %}{% include "_link_head.html" %}
 {% endif %}
 <main>
+{% if user or approver %}<div class="print-head">{{ APP_NAME }} — طُبع في <span id="print-date"></span></div>
+<button type="button" class="print-fab noprint" onclick="printPage()" title="طباعة الصفحة" aria-label="طباعة الصفحة"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>طباعة</span></button>{% endif %}
 {% for k, m in flashes %}<div class="flash {{ k }}">{{ m }}</div>{% endfor %}
 {% if backup_due is not none and not path.startswith('/admin/backup') %}<div class="flash warn noprint">🗂 {% if backup_due < 0 %}لم تُحمَّل أي نسخة احتياطية بعد{% else %}مرّ {{ backup_due }} يوم على آخر نسخة احتياطية{% endif %} — <a href="/admin/backup">حمّل النسخة الأسبوعية الآن (الجهاز + OneDrive)</a></div>{% endif %}
 {% block body %}{% endblock %}
@@ -75,10 +77,13 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
 {% block scripts %}{% endblock %}
 <script src="/static/charts.js?v={{ ASSET_V }}"></script>
 <script src="/static/picker.js?v={{ ASSET_V }}"></script>
+<script src="/static/tables.js?v={{ ASSET_V }}"></script>
 <script src="/static/vendor/gsap.min.js"></script>
 <script src="/static/vendor/ScrollTrigger.min.js"></script>
 <script src="/static/anim.js?v={{ ASSET_V }}"></script>
 <script>
+var pd = document.getElementById('print-date');
+if (pd) pd.textContent = new Date().toLocaleString('ar-EG', {day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'});
 var hd = document.getElementById('hero-date');
 if (hd) hd.textContent = new Date().toLocaleDateString('ar-EG', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 // زرار الحفظ بيلف لحد ما الصفحة اللي بعدها تفتح (ويمنع الضغط مرتين)

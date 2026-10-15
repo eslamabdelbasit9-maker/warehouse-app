@@ -32,13 +32,13 @@
   {% elif dest == 'sale' %}
   <h2 style="margin-top:16px">المواد المباعة</h2>
   <div class="tw"><table class="t lines" id="lines">
-    <tr><th style="width:220px">المادة</th><th style="width:140px">الكمية (طن)</th><th style="width:140px">سعر البيع</th><th class="n">القيمة</th><th></th></tr>
+    <tr><th style="width:220px">المادة</th><th style="width:140px">الكمية (طن)</th>{% if SALE_PRICE_ON %}<th style="width:140px">سعر البيع</th><th class="n">القيمة</th>{% endif %}<th></th></tr>
   </table></div>
-  <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button> <span class="muted" style="margin-right:12px">إجمالي البيع: <b id="sale-total">0</b></span></p>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button> {% if SALE_PRICE_ON %}<span class="muted" style="margin-right:12px">إجمالي البيع: <b id="sale-total">0</b></span>{% endif %}</p>
   {% else %}
   <h2 style="margin-top:16px">المواد حسب الجهة</h2>
   <div class="tw"><table class="t lines" id="lines">
-    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th><th style="width:140px">سعر البيع (للعميل)</th><th></th></tr>
+    <tr><th style="width:120px">نوع الجهة</th><th>اسم الجهة</th><th style="width:200px">المادة</th><th style="width:130px">الكمية (طن)</th>{% if SALE_PRICE_ON %}<th style="width:140px">سعر البيع (للعميل)</th>{% endif %}<th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
   {% endif %}
@@ -70,8 +70,8 @@
 <template id="tpl"><tr>
   <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
   <td><input name="qty" type="number" step="any" min="0" class="q"></td>
-  <td><input name="sale_price" type="number" step="any" min="0" class="p"></td>
-  <td class="n v">0</td>
+  {% if SALE_PRICE_ON %}<td><input name="sale_price" type="number" step="any" min="0" class="p"></td>
+  <td class="n v">0</td>{% endif %}
   <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove(); calc()">حذف</button></td>
 </tr></template>
 {% else %}
@@ -80,7 +80,7 @@
   <td><input name="entity_name" class="en"></td>
   <td><select name="item_id">{% for i in items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}</select></td>
   <td><input name="qty" type="number" step="any" min="0"></td>
-  <td><input name="sale_price" type="number" step="any" min="0" placeholder="اختياري"></td>
+  {% if SALE_PRICE_ON %}<td><input name="sale_price" type="number" step="any" min="0" placeholder="اختياري"></td>{% endif %}
   <td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove()">حذف</button></td>
 </tr></template>
 {% endif %}
@@ -91,7 +91,7 @@ var fmtN = function (n) { return n.toLocaleString('en-US', { maximumFractionDigi
 function calc() {   // البيع: قيمة كل سطر والإجمالي
   var tot = 0;
   document.querySelectorAll('#lines tr').forEach(function (tr) {
-    var q = tr.querySelector('.q'), p = tr.querySelector('.p'); if (!q) return;
+    var q = tr.querySelector('.q'), p = tr.querySelector('.p'); if (!q || !p) return;
     var v = (parseFloat(q.value) || 0) * (parseFloat(p.value) || 0); tot += v; tr.querySelector('.v').textContent = fmtN(v);
   });
   var t = document.getElementById('sale-total'); if (t) t.textContent = fmtN(tot);

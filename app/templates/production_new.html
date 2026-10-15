@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>تسجيل إنتاج كسارة</h1>
-<form method="post" class="card">
+<form method="post" class="card" enctype="multipart/form-data">
   <div class="meta">
     <div class="f"><label>الموقع</label>
       <select name="site_id" onchange="location='?site='+this.value">
@@ -20,6 +20,7 @@
     <tr class="total"><td>الإجمالي</td><td class="n" id="tq">0</td><td></td><td class="n" id="tv">0</td></tr>
   </table></div>
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="notes"></textarea></div>
+  <div class="f" style="margin-top:10px"><label>المرفق (تقرير الإنتاج / الميزان — PDF أو صورة أو Excel)</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.doc,.docx"></div>
   <button class="btn" style="margin-top:10px" {{ 'disabled' if not price }}>حفظ الإنتاج</button>
 </form>
 {% endblock %}

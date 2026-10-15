@@ -3,7 +3,7 @@
 <h1>أصول الموظف: {{ emp_name }} ({{ emp_no }})</h1>
 <div class="card noprint" style="display:flex;gap:8px">
   {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&emp={{ emp_no }}">+ تسليم لهذا الموظف</a>{% endif %}
-  <button class="btn sec" onclick="print()">طباعة</button>
+ 
 </div>
 <div class="card"><div class="tw"><table class="t">
 <tr><th>الموقع</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>سلّمها</th><th>مرفق</th><th>الإرجاع</th></tr>

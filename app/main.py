@@ -22,7 +22,7 @@ from .db import Base, engine, get_db, SessionLocal
 from .models import (CUSTODY_CATEGORIES, CUSTODY_OLD_NAMES, DIESEL_PURPOSES, ENTITY_TYPES, LINE_STATUS, REQ_STATUS, REQ_TYPES, ROLES,
                      RAW_DESTS, ITEM_CATS, CUSTODY_ITEM_CAT, CrusherProduction, CrusherProductionLine,
                      STAGES, UNIT_KINDS, ApprovalRoute, Attachment, CustodyRecord, Item, LineDecision, MailLog, OpeningBalance,
-                     Receipt, ReceiptLine, Request as Req, RequestLine, Site, Unit, User,
+                     Receipt, ReceiptLine, Request as Req, RequestLine, Site, Supplier, Unit, User,
                      TRANSFER_STATUS, VAT_RATE, Transfer, TransferLine)
 
 APP_DIR = Path(__file__).parent
@@ -73,7 +73,9 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, max_age=60
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 app.include_router(auth_router)
 T = Jinja2Templates(directory=APP_DIR / "templates")
-T.env.globals.update(fmt=S.fmt, ITEM_CATS=ITEM_CATS, RAW_DESTS=RAW_DESTS, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
+# سعر البيع للعميل في صرف المواد الخام موقوف لحين قرار الإدارة — الصرف يُحسب بسعر المستودع (المتوسط/سعر الكسارة)
+SALE_PRICE_ON = False
+T.env.globals.update(SALE_PRICE_ON=SALE_PRICE_ON, fmt=S.fmt, ITEM_CATS=ITEM_CATS, RAW_DESTS=RAW_DESTS, MONTHS_AR=S.MONTHS_AR, REQ_STATUS=REQ_STATUS, REQ_TYPES=REQ_TYPES, LINE_STATUS=LINE_STATUS, STAGES=STAGES,
                      UNIT_KINDS=UNIT_KINDS, ROLES=ROLES, APP_NAME=settings.APP_NAME, DEV_AUTH=settings.DEV_AUTH,
                      ENTITY_TYPES=ENTITY_TYPES, DIESEL_PURPOSES=DIESEL_PURPOSES, CUSTODY_CATEGORIES=CUSTODY_CATEGORIES,
                      TRANSFER_STATUS=TRANSFER_STATUS)
@@ -128,7 +130,7 @@ NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "aspha
                ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
                ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT"),
                ("custody_records", "item_id", "INTEGER"), ("receipts", "no_vat", "BOOLEAN DEFAULT FALSE"),
-               ("opening_balances", "as_of", "DATE")]
+               ("opening_balances", "as_of", "DATE"), ("crusher_production", "attachment", "VARCHAR(300)")]
 DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
 CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
@@ -173,6 +175,7 @@ def init_db():
             db.query(CustodyRecord).filter(CustodyRecord.category == old_name).update({"category": new_name})
         if not db.query(Item).filter(Item.code == DIESEL_CODE).first():
             db.add(Item(code=DIESEL_CODE, name="ديزل", uom="لتر", category="raw"))
+        sync_suppliers(db)
         # أسعار إنتاج الكسارات المبدئية (لو لسه ما اتحددتش) — بعد كده مدير النظام بس اللي يعدّلها
         from .models import AppSetting
         for s in db.query(Site):
@@ -184,6 +187,34 @@ def init_db():
         db.commit()
     finally:
         db.close()
+
+
+def sync_suppliers(db):
+    """أي مورد مكتوب في فواتير قديمة ومش في قائمة الموردين بيتضاف لها (مرة لكل مورد — بدون تكرار نفس المورد بصيغ مختلفة)."""
+    keys = {S.supplier_parts(n)[0] for (n,) in db.query(Supplier.name)}
+    for (name,) in db.query(Receipt.supplier).filter(Receipt.supplier.isnot(None)).distinct().order_by(Receipt.supplier):
+        name = " ".join(name.split())
+        k = S.supplier_parts(name)[0]
+        if not name or name.startswith("تحويل") or not k or k in keys:
+            continue
+        keys.add(k)
+        db.add(Supplier(name=name[:200]))
+
+
+def supplier_names(db):
+    return [n for (n,) in db.query(Supplier.name).order_by(Supplier.name)]
+
+
+def check_supplier(db, name, current=None):
+    """المورد لازم يكون من القائمة (أو نفس المسجَّل على الفاتورة عند التعديل)."""
+    name = " ".join((name or "").split())
+    if not name:
+        raise S.BusinessError("اختر المورد من القائمة أو أضف موردًا جديدًا")
+    if current and name == current:
+        return name
+    if not db.query(Supplier).filter(Supplier.name == name).first():
+        raise S.BusinessError(f"المورد «{name}» غير موجود في قائمة الموردين — اختره من القائمة أو أضفه موردًا جديدًا")
+    return name
 
 
 # ---------------- أدوات ----------------
@@ -208,6 +239,7 @@ def flash(request: Request, msg: str, kind="ok"):
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
     pending_n = transfer_n = 0
+    is_approver = False   # الاعتمادات تظهر بس للي عليه دور في مسار الاعتماد
     backup_due = None   # لمدير النظام: عدد الأيام من آخر نسخة يدوية لو عدّى أسبوع
     own = getattr(request.state, "db", None)  # نفس اتصال الطلب — من غير ما نفتح اتصال تاني
     db = own or SessionLocal()
@@ -215,6 +247,7 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
         if user is not None:
             u = db.get(User, user.id)
             pending_n = len(S.pending_for(db, u))
+            is_approver = db.query(ApprovalRoute.id).filter(ApprovalRoute.user_id == u.id).first() is not None
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
@@ -229,7 +262,7 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
         if own is None:
             db.close()
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "backup_due": backup_due, "path": request.url.path,
-                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme,
+                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, "is_approver": is_approver,
                                               "bi_links": bi_links, **ctx})
 
 
@@ -839,23 +872,25 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
                     raise S.BusinessError("اختر المادة من القائمة")
                 lines.append(dict(item=item, qty=parse_float(qty), entity_type="مشروع", entity_name=customer))
         elif dest == "sale":
-            for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("sale_price")):
+            sps = form.getlist("sale_price")
+            for n, (iid, qty) in enumerate(zip(form.getlist("item_id"), form.getlist("qty"))):
+                price = sps[n] if n < len(sps) else None
                 if not qty and not price:
                     continue
                 item = db.get(Item, int(iid)) if str(iid).isdigit() else None
                 if not item or item.category != "raw" or item.code == DIESEL_CODE:
                     raise S.BusinessError("اختر المادة من القائمة")
-                p = parse_float(price)
-                if not p or p <= 0:
+                p = parse_float(price) if SALE_PRICE_ON else None
+                if SALE_PRICE_ON and (not p or p <= 0):
                     raise S.BusinessError(f"أدخل سعر البيع للمادة «{item.name}»")
-                lines.append(dict(item=item, qty=parse_float(qty), sale_price=p))
+                lines.append(dict(item=item, qty=parse_float(qty), sale_price=p, entity_type="عميل", entity_name=customer))
         else:
             prices = form.getlist("sale_price")
             for n, (et, en, iid, qty) in enumerate(zip(form.getlist("entity_type"), form.getlist("entity_name"),
                                                        form.getlist("item_id"), form.getlist("qty"))):
                 if not (en or "").strip() and not qty:
                     continue
-                sp = parse_float(prices[n]) if n < len(prices) else None   # سعر البيع (اختياري — للعميل)
+                sp = parse_float(prices[n]) if SALE_PRICE_ON and n < len(prices) else None   # سعر البيع (اختياري — للعميل)
                 item = db.get(Item, int(iid)) if str(iid).isdigit() else None
                 if not item or item.category != "raw" or item.code == DIESEL_CODE:
                     raise S.BusinessError("اختر المادة من القائمة")
@@ -951,6 +986,7 @@ async def production_new_post(request: Request, db: Session = Depends(get_db), u
             rec.lines.append(CrusherProductionLine(item_id=item.id, qty=q, unit_price=price))
         if not rec.lines:
             raise S.BusinessError("أدخل كمية مادة واحدة على الأقل")
+        rec.attachment = save_upload(db, form.get("attachment"))
         db.add(rec)
         db.commit()
     except S.BusinessError as e:
@@ -959,6 +995,25 @@ async def production_new_post(request: Request, db: Session = Depends(get_db), u
         return back(f"/production/new?site={sel.id}")
     flash(request, f"تم تسجيل إنتاج {S.fmt(rec.total_qty)} طن")
     return back(f"/production?site={sel.id}")
+
+
+@app.post("/production/{pid}/attach")
+async def production_attach(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    """إرفاق تقرير الإنتاج لسجل مسجَّل (أو استبداله)."""
+    rec = db.get(CrusherProduction, pid)
+    if not rec or rec.site_id not in user.site_ids(db):
+        raise Forbidden()
+    form = await request.form()
+    try:
+        key = save_upload(db, form.get("file"))
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/production?site={rec.site_id}")
+    if key:
+        rec.attachment = key
+        db.commit()
+        flash(request, "تم رفع المرفق")
+    return back(f"/production?site={rec.site_id}")
 
 
 @app.post("/production/{pid}/delete")
@@ -1213,6 +1268,8 @@ def _spare_ctx(db, req):
 
 @app.get("/approvals", response_class=HTMLResponse)
 def approvals(request: Request, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if not db.query(ApprovalRoute.id).filter(ApprovalRoute.user_id == user.id).first():
+        return back("/")   # غير المعتمدين ليس لهم صفحة اعتمادات
     rows = S.pending_for(db, user)
     done = (db.query(Req).join(LineDecision).filter(LineDecision.user_id == user.id)
             .distinct().order_by(Req.id.desc()).limit(30).all())
@@ -1573,6 +1630,14 @@ async def receipt_edit(rid: int, request: Request, db: Session = Depends(get_db)
     if d and d != rec.date:
         changes.append(f"التاريخ: {rec.date} ← {d}")
         rec.date = d
+    sv = " ".join((form.get("supplier") or "").split())
+    if sv != " ".join((rec.supplier or "").split()):
+        try:
+            check_supplier(db, sv)
+        except S.BusinessError as e:
+            db.rollback()
+            flash(request, str(e), "err")
+            return back(f"/receipts/{rid}")
     for f, label in (("invoice_no", "رقم الفاتورة"), ("supplier", "المورد")):
         v = (form.get(f) or "").strip() or None
         if v != getattr(rec, f):
@@ -1628,7 +1693,8 @@ def receipt_new(request: Request, site: str | None = None, kind: str = "spare", 
     sites, sel = pick_site(db, user, site)
     kind = kind if kind in ITEM_CATS else "spare"   # نوع الفاتورة: قطع غيار / مواد خام / أصول / أدوات سلامة
     items = db.query(Item).filter(Item.category == kind, Item.active.is_(True)).order_by(Item.code).all()
-    return render(request, "receipt_new.html", user, sites=sites, sel=sel, items=items, today=date.today(), kind=kind)
+    return render(request, "receipt_new.html", user, sites=sites, sel=sel, items=items, today=date.today(), kind=kind,
+                  supplier_list=supplier_names(db))
 
 
 @app.post("/receipts/new")
@@ -1638,7 +1704,7 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     try:
         rec = Receipt(site_id=sel.id, date=parse_date(form.get("date"), date.today()),
                       invoice_no=(form.get("invoice_no") or "").strip() or None,
-                      supplier=(form.get("supplier") or "").strip() or None, created_by_id=user.id,
+                      supplier=check_supplier(db, form.get("supplier")), created_by_id=user.id,
                       no_vat=bool(form.get("no_vat")))
         for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("unit_price")):
             if not iid and not qty:
@@ -1671,7 +1737,7 @@ def receipt_detail(rid: int, request: Request, db: Session = Depends(get_db), us
     rec = db.get(Receipt, rid)
     if not rec or rec.site_id not in user.site_ids(db):
         raise Forbidden()
-    return render(request, "receipt_detail.html", user, r=rec)
+    return render(request, "receipt_detail.html", user, r=rec, supplier_list=supplier_names(db) if user.has("admin") else [])
 
 
 # ---------------- التحويل بين المواقع ----------------
@@ -1909,6 +1975,28 @@ def _sup_key(name):
     return ("" if key in ("المورد", "-", "—") else key), region, clean_name
 
 
+@app.post("/suppliers/add")
+async def supplier_add(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper", "admin"))):
+    """إضافة مورد جديد للقائمة (من شاشة الوارد أو صفحة الموردين). لو نفس المورد موجود بصيغة تانية بيرجّع الموجود."""
+    form = await request.form()
+    name = " ".join((form.get("name") or "").split())[:200]
+    wants_json = "json" in (request.headers.get("accept") or "")
+    if len(name) < 2:
+        if wants_json:
+            return JSONResponse({"error": "اكتب اسم المورد"}, status_code=400)
+        flash(request, "اكتب اسم المورد", "err")
+        return back("/suppliers")
+    k = S.supplier_parts(name)[0]
+    existing = next((n for n in supplier_names(db) if S.supplier_parts(n)[0] == k), None)
+    if not existing:
+        db.add(Supplier(name=name, created_by_id=user.id))
+        db.commit()
+    if wants_json:
+        return JSONResponse({"name": existing or name, "existed": bool(existing)})
+    flash(request, f"المورد «{existing}» موجود بالفعل" if existing else f"تمت إضافة المورد «{name}»", "warn" if existing else "ok")
+    return back("/suppliers")
+
+
 @app.get("/suppliers", response_class=HTMLResponse)
 def suppliers(request: Request, site: str | None = None, d_from: str | None = Query(None, alias="from"),
               d_to: str | None = Query(None, alias="to"), db: Session = Depends(get_db),
@@ -1933,7 +2021,15 @@ def suppliers(request: Request, site: str | None = None, d_from: str | None = Qu
     rows = sorted(groups.values(), key=lambda g: (g["key"] == "", -g["gross"]))
     for g in rows:
         g["name"] = max(g["names"].items(), key=lambda x: (x[1], len(x[0])))[0] if g["key"] else "مورد غير محدد"
-    return render(request, "suppliers.html", user, sites=sites, sel=sel, rows=rows, d_from=f, d_to=t,
+    if not (sel or f or t):   # الموردين المضافين للقائمة ولسه مالهمش فواتير
+        have = {g["key"] for g in rows}
+        for n in supplier_names(db):
+            k = _sup_key(n)[0]
+            if k and k not in have:
+                have.add(k)
+                rows.append({"key": k, "name": n, "names": {n: 1}, "regions": set(), "sites": set(), "n": 0,
+                             "net": 0.0, "vat": 0.0, "gross": 0.0, "last": None, "no_att": 0})
+    return render(request, "suppliers.html", user, sites=sites, sel=sel, rows=rows, d_from=f, d_to=t, n_master=db.query(Supplier).count(),
                   total={k: sum(g[k] for g in rows) for k in ("n", "net", "vat", "gross")})
 
 
