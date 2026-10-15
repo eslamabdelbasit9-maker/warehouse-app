@@ -1258,7 +1258,10 @@ def test_asset_invoice_and_custody_stock(env):
     db = SessionLocal()
     assert S.custody_stock(db, env["site"])[lid]["avail"] == 3
     db.close()
-    assert "رصيد الأصول وأدوات السلامة" in c.get(f"/custody/stock?site={env['site']}").text
+    page = c.get(f"/custody/stock?site={env['site']}").text
+    assert "رصيد الأصول وأدوات السلامة" in page and "قيمة الفواتير" in page and "7,500" in page
+    page = c.get(f"/custody?site={env['site']}&state=all").text
+    assert "قيمة فواتير الأصول وأدوات السلامة" in page and "قيمة العهد لدى الموظفين" in page
 
 
 def test_backup_download_and_restore(env):

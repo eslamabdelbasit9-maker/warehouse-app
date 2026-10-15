@@ -224,6 +224,7 @@ def custody_stock(db: Session, site_id: int):
         x["avail"] = x["in_qty"] - x["out_qty"] + x["back_qty"]          # المتاح في المخزن
         x["avg"] = x["in_val"] / x["in_qty"] if x["in_qty"] else 0.0
         x["value"] = x["avail"] * x["avg"]
+        x["held_val"] = x["held"] * x["avg"]                              # قيمة العهد لدى الموظفين
     return t
 
 

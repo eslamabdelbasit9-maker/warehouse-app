@@ -2114,8 +2114,12 @@ def custody(request: Request, site: str | None = None, q: str = "", state: str =
         qry = qry.filter(or_(CustodyRecord.employee_no.like(like), CustodyRecord.employee_name.like(like),
                              CustodyRecord.item_name.like(like), CustodyRecord.serial_no.like(like)))
     rows = qry.order_by(CustodyRecord.issued_at.desc(), CustodyRecord.id.desc()).limit(500).all()
+    st = S.custody_stock(db, sel.id)   # قيمة كل عهدة = الكمية × متوسط سعر الصنف من فواتير الأصول
+    vals = {c.id: (c.qty or 0) * st[c.item_id]["avg"] for c in rows if c.item_id and c.item_id in st}
+    tot = dict(purchases=sum(x["in_val"] for x in st.values()), held=sum(x["held_val"] for x in st.values()),
+               avail=sum(x["value"] for x in st.values()))
     return render(request, "custody.html", user, sites=sites, sel=sel, rows=rows, q=q, state=state, cat=cat,
-                  counts=counts)
+                  counts=counts, vals=vals, tot=tot)
 
 
 @app.get("/custody/new", response_class=HTMLResponse)
@@ -2188,7 +2192,7 @@ def custody_stock_page(request: Request, site: str | None = None, db: Session = 
     st = S.custody_stock(db, sel.id)
     groups = []
     for c, k in CUSTODY_ITEM_CAT.items():
-        rows = [(it, st.get(it.id, dict(in_qty=0, out_qty=0, back_qty=0, lost_qty=0, avail=0, avg=0, value=0)))
+        rows = [(it, st.get(it.id, dict(in_qty=0, in_val=0, out_qty=0, back_qty=0, lost_qty=0, held=0, held_val=0, avail=0, avg=0, value=0)))
                 for it in db.query(Item).filter(Item.category == k).order_by(Item.code) if it.active or it.id in st]
         groups.append((c, k, rows))
     return render(request, "custody_stock.html", user, sites=sites, sel=sel, groups=groups)

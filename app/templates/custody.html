@@ -15,12 +15,18 @@
   <a class="btn sec" href="/export/custody.xlsx?site={{ sel.id }}">تصدير Excel</a>
   {% if user.has('storekeeper') %}<a class="btn green" href="/custody/new?site={{ sel.id }}&cat={{ cat|urlencode }}">+ تسليم {{ cat or 'أصول' }}</a>{% endif %}
 </form>
+<div class="grid g4 kpis">
+  <div class="card kpi"><div class="v">{{ fmt(tot.purchases) }}</div><div class="l">قيمة فواتير الأصول وأدوات السلامة</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(tot.held) }}</div><div class="l">قيمة العهد لدى الموظفين</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(tot.avail) }}</div><div class="l">قيمة المتاح في المخزن</div></div>
+</div>
 <div class="card"><div class="tw"><table class="t">
-<tr><th>الرقم الوظيفي</th><th>الموظف</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>الإرجاع</th><th>مرفق</th></tr>
+<tr><th>الرقم الوظيفي</th><th>الموظف</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th class="n">القيمة</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>الإرجاع</th><th>مرفق</th></tr>
 {% for c in rows %}<tr><td><a href="/custody/employee/{{ c.employee_no }}?site={{ sel.id }}">{{ c.employee_no }}</a></td><td>{{ c.employee_name }}</td>
-<td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}{% if c.photo.startswith('http') %}<a href="{{ c.photo }}" target="_blank">📷 الصورة</a>{% else %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
+<td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}{% if c.photo.startswith('http') %}<a href="{{ c.photo }}" target="_blank">📷 الصورة</a>{% else %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td class="n">{{ fmt(vals[c.id]) if c.id in vals else '' }}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
 <td>{% if c.returned_at %}<span class="st st-approved">{{ c.returned_at }}</span>{% else %}<span class="st st-pending">لدى الموظف</span>{% endif %}</td>
 <td>{% if c.attachment %}<a href="{{ att_url(c.attachment) }}" target="_blank">عرض</a>{% endif %}</td></tr>
-{% else %}<tr><td colspan="10" class="muted">لا يوجد</td></tr>{% endfor %}
+{% else %}<tr><td colspan="11" class="muted">لا يوجد</td></tr>{% endfor %}
+{% if vals %}<tr class="total"><td colspan="6"><b>إجمالي قيمة العهد المعروضة</b></td><td class="n"><b>{{ fmt(vals.values()|sum) }}</b></td><td colspan="4"></td></tr>{% endif %}
 </table></div></div>
 {% endblock %}
