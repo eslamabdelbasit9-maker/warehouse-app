@@ -55,7 +55,7 @@
     var o=only.value, n=0, v=0;
     tbl.querySelectorAll('tbody tr[data-cur]').forEach(function(tr){
       var c=tr.children, cur=+tr.dataset.cur;
-      var ok=fs.every(function(f){return norm(c[f[0]].textContent).indexOf(f[1])>=0;})
+      var ok=fs.every(function(f){return window.erpMatch ? erpMatch(c[f[0]].textContent, f[1]) : norm(c[f[0]].textContent).indexOf(f[1])>=0;})
         && !(o==='has' && cur<=0) && !(o==='zero' && cur>0);
       tr.hidden=!ok; if(ok){n++; v+=+tr.dataset.val;}
     });

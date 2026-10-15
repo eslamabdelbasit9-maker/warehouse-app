@@ -1,4 +1,4 @@
-// فلاتر على رأس كل جدول: خانة تصفية لكل عمود (نص أو أرقام: ‎>100 ، ‎<50 ، ‎=0)
+// فلاتر على رأس كل جدول: خانة تصفية لكل عمود بأسلوب الـ ERP (* ? ! , .. > <)
 (function () {
   var norm = function (x) {
     return (x || '').toLowerCase().replace(/[‎‏‪-‮]/g, '').replace(/[أإآ]/g, 'ا')
@@ -8,14 +8,41 @@
   var span = function (c) { return +c.getAttribute('colspan') || 1; };
   var width = function (tr) { var w = 0; [].forEach.call(tr.children, function (c) { w += span(c); }); return w; };
 
-  function match(text, q) {
-    var m = /^([<>=]=?)\s*(-?[\d.,]+)$/.exec(q);
-    if (m) {
-      var v = num(text), x = num(m[2]); if (v === null) return false;
+  // تصفية بأسلوب الـ ERP:
+  //   بحص        يحتوي على «بحص»
+  //   بحص*       يبدأ بـ «بحص»        *بوصه   ينتهي بـ «بوصه»      ب*3/4   يبدأ بـ «ب» وينتهي بـ «3/4»
+  //   ?          حرف واحد أيًّا كان     RM-G?   ← RM-G1 ، RM-G3 ...
+  //   !بحص       لا يحتوي (نفي)        أ,ب     أ أو ب
+  //   >100  <=50  =0   مقارنة أرقام      10..50  من 10 إلى 50 (أو من تاريخ إلى تاريخ)
+  function one(t, q) {
+    var v, x, m;
+    if ((m = /^(.*?)\.\.(.*)$/.exec(q))) {            // مدى
+      var a = m[1].trim(), b = m[2].trim(), na = num(a), nb = num(b);
+      if ((a === '' || na !== null) && (b === '' || nb !== null) && !/^\d{4}-/.test(a + b)) {
+        v = num(t); if (v === null) return false;
+        return (a === '' || v >= na) && (b === '' || v <= nb);
+      }
+      return (a === '' || t >= a) && (b === '' || t <= b);   // نص/تاريخ (YYYY-MM-DD)
+    }
+    if ((m = /^([<>]=?|=)\s*(-?[\d.,]+)$/.exec(q))) {    // مقارنة
+      v = num(t); x = num(m[2]); if (v === null) return false;
       return m[1] === '>' ? v > x : m[1] === '>=' ? v >= x : m[1] === '<' ? v < x : m[1] === '<=' ? v <= x : v === x;
     }
-    return norm(text).indexOf(q) >= 0;
+    if (/[*?]/.test(q)) {                                  // نجمة وعلامة استفهام
+      var re = q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+      return new RegExp('^' + re + '$').test(t);
+    }
+    return t.indexOf(q) >= 0;
   }
+  function match(text, q) {
+    var t = norm(text);
+    return q.split(/\s*,\s*(?!\d{3}(?!\d))/).filter(function (p) { return p !== ''; }).some(function (p) {
+      var neg = p.charAt(0) === '!'; if (neg) p = p.slice(1).trim();
+      var r = p === '' ? t === '' : one(t, p);
+      return neg ? !r : r;
+    });
+  }
+  window.erpMatch = function (text, q) { q = norm(q); return !q || match(text, q); };
 
   function setup(tbl) {
     var all = [].slice.call(tbl.querySelectorAll(':scope > thead > tr, :scope > tbody > tr, :scope > tr'));
@@ -48,7 +75,7 @@
     for (var c = 0; c < ncols; c++) {
       var th = document.createElement('th'), inp = document.createElement('input');
       var name = leaf[c] ? leaf[c].textContent.trim() : '';
-      inp.type = 'search'; inp.placeholder = name ? 'تصفية' : ''; inp.title = name ? 'تصفية: ' + name : '';
+      inp.type = 'search'; inp.placeholder = name ? 'تصفية' : ''; inp.title = name ? 'تصفية: ' + name + '\n* أي حروف   ? حرف واحد   ! نفي   , أو   .. من إلى   > < مقارنة' : '';
       inp.dataset.col = c; inputs.push(inp); th.appendChild(inp); fr.appendChild(th);
     }
     var last = head[head.length - 1];
