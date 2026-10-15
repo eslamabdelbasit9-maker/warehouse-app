@@ -1522,6 +1522,10 @@ def test_supplier_must_be_from_list(env):
     db = SessionLocal()
     assert not db.query(Receipt).filter_by(invoice_no="INV-X").first()
     db.close()
+    r = c.post("/suppliers/add", data={"name": "شركة النجم الذهبي"}, headers={"Accept": "application/json"}, follow_redirects=False)
+    assert r.status_code != 200   # إضافة الموردين للإدارة فقط
+    assert "onclick=\"addSupplier()\"" not in c.get(f"/receipts/new?site={env['site']}").text
+    login(c, env, "admin@example.com")
     r = c.post("/suppliers/add", data={"name": "شركة النجم الذهبي"}, headers={"Accept": "application/json"})
     assert r.json() == {"name": "شركة النجم الذهبي", "existed": False}
     r = c.post("/suppliers/add", data={"name": "النجم الذهبي التجارية"}, headers={"Accept": "application/json"})
@@ -1552,7 +1556,10 @@ def test_production_attachment_print_and_filters(env):
     pid = p.id
     db.close()
     page = c.get(f"/production?site={env['site']}").text
-    assert f"/files/" in page and f"/production/{pid}/attach" in page
+    assert "/files/" in page and f"/production/{pid}/attach" not in page   # الاستبدال للإدارة فقط
+    assert c.get("/admin/items", follow_redirects=False).status_code != 200
+    login(c, env, "admin@example.com")
+    assert f"/production/{pid}/attach" in c.get(f"/production?site={env['site']}").text
     page = c.get(f"/raw-stock?site={env['site']}").text
     assert "print-fab" in page and "tables.js" in page and 'class="n curb' in page
 

@@ -8,7 +8,7 @@
 <div class="card"><div class="tw"><table class="t">
 <tr><th>الموقع</th><th>النوع</th><th>البند</th><th>الصورة</th><th class="n">الكمية</th><th>التسلسلي</th><th>تاريخ التسليم</th><th>سلّمها</th><th>مرفق</th><th>الإرجاع</th></tr>
 {% for c in rows %}<tr><td>{{ c.site.name }}</td><td>{{ c.category }}</td><td>{{ c.item_name }}</td><td>{% if c.photo %}{% if c.photo.startswith('http') %}<a href="{{ c.photo }}" target="_blank">📷 الصورة</a>{% else %}<a href="/files/{{ c.photo }}" target="_blank"><img class="thumb" src="/files/{{ c.photo }}" alt="" loading="lazy"></a>{% endif %}{% endif %}
-  {% if user.has('storekeeper') %}<form method="post" action="/custody/{{ c.id }}/photo" enctype="multipart/form-data" class="noprint" style="display:inline">
+  {% if user.has('admin') or (user.has('storekeeper') and not c.photo) %}<form method="post" action="/custody/{{ c.id }}/photo" enctype="multipart/form-data" class="noprint" style="display:inline">
     <label class="btn sec sm photo-btn">📷 {{ 'تغيير' if c.photo else 'رفع صورة' }}<input type="file" name="photo" accept="image/*" data-shrink data-autosubmit hidden></label></form>{% endif %}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td>
 <td>{{ c.issued_at }}</td><td>{{ c.issued_by.name if c.issued_by else '' }}</td>
 <td>{% if c.attachment %}<a href="{{ att_url(c.attachment) }}" target="_blank">عرض</a>{% endif %}</td>

@@ -9,7 +9,7 @@
   <div class="f"><label>بحث</label><input data-live="#stbl"></div>
   <button class="btn">عرض</button><span class="right"></span>
  </form>
-{% if user.has('storekeeper', 'admin') %}
+{% if user.has('admin') %}
 <form class="card noprint" method="post" action="/suppliers/add" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
   <div class="f" style="flex:1;min-width:220px"><label>إضافة مورد جديد</label><input name="name" required placeholder="اسم المورد كما في الفاتورة"></div>
   <button class="btn green">+ إضافة مورد</button>

@@ -1003,6 +1003,9 @@ async def production_attach(pid: int, request: Request, db: Session = Depends(ge
     rec = db.get(CrusherProduction, pid)
     if not rec or rec.site_id not in user.site_ids(db):
         raise Forbidden()
+    if rec.attachment and not user.has("admin"):
+        flash(request, "استبدال المرفق من صلاحية الإدارة فقط", "err")
+        return back(f"/production?site={rec.site_id}")
     form = await request.form()
     try:
         key = save_upload(db, form.get("file"))
@@ -1603,6 +1606,9 @@ async def receipt_attach(rid: int, request: Request, db: Session = Depends(get_d
     rec = db.get(Receipt, rid)
     if not rec or rec.site_id not in user.site_ids(db):
         raise Forbidden()
+    if rec.attachment and not user.has("admin"):
+        flash(request, "استبدال مرفق الفاتورة من صلاحية الإدارة فقط", "err")
+        return back(f"/receipts/{rid}")
     form = await request.form()
     try:
         key = save_upload(db, form.get("file"))
@@ -1976,7 +1982,7 @@ def _sup_key(name):
 
 
 @app.post("/suppliers/add")
-async def supplier_add(request: Request, db: Session = Depends(get_db), user: User = Depends(require("storekeeper", "admin"))):
+async def supplier_add(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
     """إضافة مورد جديد للقائمة (من شاشة الوارد أو صفحة الموردين). لو نفس المورد موجود بصيغة تانية بيرجّع الموجود."""
     form = await request.form()
     name = " ".join((form.get("name") or "").split())[:200]
@@ -2171,6 +2177,9 @@ async def custody_photo(cid: int, request: Request, db: Session = Depends(get_db
     rec = db.get(CustodyRecord, cid)
     if not rec or rec.site_id not in user.site_ids(db):
         raise Forbidden()
+    if rec.photo and not user.has("admin"):
+        flash(request, "استبدال الصورة من صلاحية الإدارة فقط", "err")
+        return back(f"/custody/employee/{rec.employee_no}?site={rec.site_id}")
     form = await request.form()
     try:
         key = save_upload(db, form.get("photo"), images_only=True)
@@ -2307,7 +2316,7 @@ async def admin_routes_post(request: Request, db: Session = Depends(get_db), use
 
 @app.get("/admin/items", response_class=HTMLResponse)
 def admin_items(request: Request, q: str = "", edit: int | None = None, db: Session = Depends(get_db),
-                user: User = Depends(require("admin", "storekeeper"))):
+                user: User = Depends(require("admin"))):
     qry = db.query(Item)
     if q:
         qry = qry.filter(or_(Item.code.like(f"%{q}%"), Item.name.like(f"%{q}%")))
@@ -2317,7 +2326,7 @@ def admin_items(request: Request, q: str = "", edit: int | None = None, db: Sess
 
 @app.post("/admin/items")
 async def admin_items_post(request: Request, db: Session = Depends(get_db),
-                           user: User = Depends(require("admin", "storekeeper"))):
+                           user: User = Depends(require("admin"))):
     form = await request.form()
     iid = form.get("id")
     it = db.get(Item, int(iid)) if iid else Item()
@@ -2460,7 +2469,9 @@ async def admin_invoices_post(request: Request, db: Session = Depends(get_db),
     site = next((s for s in sites if s.id == sid), None)
     if not site:
         raise Forbidden()
-    recs = [r for r in db.query(Receipt).filter(Receipt.site_id == site.id).all() if r.invoice_no]
+    # غير الإدارة: إرفاق للفواتير اللي من غير مرفق بس (الاستبدال للإدارة)
+    recs = [r for r in db.query(Receipt).filter(Receipt.site_id == site.id).all()
+            if r.invoice_no and (user.has("admin") or not r.attachment)]
     by_inv = {}
     for r in recs:
         by_inv.setdefault(_inv_norm(r.invoice_no), []).append(r)

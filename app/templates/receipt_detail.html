@@ -16,7 +16,7 @@
     <tr><td colspan="5"><b>الإجمالي شامل الضريبة</b></td><td class="n"><b>{{ fmt(r.gross) }}</b></td></tr>
   </table></div>
 </div>
-{% if user.has('storekeeper') %}
+{% if user.has('admin') or (user.has('storekeeper') and not r.attachment) %}
 <form class="card noprint" method="post" action="/receipts/{{ r.id }}/attach" enctype="multipart/form-data">
   <div class="meta"><div class="f"><label>{{ 'استبدال الفاتورة' if r.attachment else 'رفع الفاتورة' }} (PDF أو صورة — حتى 10 ميجا)</label>
   <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required></div></div>

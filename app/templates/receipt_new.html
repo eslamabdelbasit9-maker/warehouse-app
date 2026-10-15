@@ -11,9 +11,9 @@
     <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
     <div class="f"><label>رقم الفاتورة</label><input name="invoice_no"></div>
     <div class="f"><label>المورد *</label><input name="supplier" list="sup-list" required autocomplete="off" placeholder="ابحث واختر من القائمة">
-      <button type="button" class="btn sec sm" style="margin-top:4px;align-self:flex-start" onclick="document.getElementById('sup-new').style.display='flex';document.getElementById('sup-name').focus()">+ مورد جديد</button>
+      {% if user.has('admin') %}<button type="button" class="btn sec sm" style="margin-top:4px;align-self:flex-start" onclick="document.getElementById('sup-new').style.display='flex';document.getElementById('sup-name').focus()">+ مورد جديد</button>
       <div id="sup-new" style="margin-top:6px;display:none;gap:6px"><input id="sup-name" placeholder="اسم المورد الجديد"><button type="button" class="btn sm" onclick="addSupplier()">إضافة</button></div>
-      <span id="sup-msg" class="muted" style="font-size:12px"></span></div>
+      <span id="sup-msg" class="muted" style="font-size:12px"></span>{% else %}<span class="muted" style="font-size:12px">لإضافة مورد غير موجود في القائمة تواصل مع الإدارة.</span>{% endif %}</div>
     <datalist id="sup-list">{% for n in supplier_list %}<option value="{{ n }}">{% endfor %}</datalist>
     <label class="f" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="no_vat" value="1"> بدون ضريبة (مثل الوارد من شركة المسار)</label>
     <div class="f"><label>مرفق الفاتورة</label><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.docx,.doc"></div>
@@ -71,7 +71,7 @@ function addSupplier() {
 }
 document.getElementById('frm').addEventListener('submit', e => {
   const sp = document.querySelector('[name=supplier]');
-  if (!SUPS.has(sp.value.trim())) { e.preventDefault(); alert('اختر المورد من القائمة أو أضفه بزر «+ مورد جديد»'); sp.focus(); return; }
+  if (!SUPS.has(sp.value.trim())) { e.preventDefault(); alert({{ ('اختر المورد من القائمة أو أضفه بزر «+ مورد جديد»' if user.has('admin') else 'اختر المورد من القائمة — لإضافة مورد جديد تواصل مع الإدارة')|tojson }}); sp.focus(); return; }
   for (const tr of document.querySelectorAll('#lines tr')) { const t = tr.querySelector('.it'); if (!t) continue;
     if (t.value && !tr.querySelector('[name=item_id]').value) { e.preventDefault(); alert('اختر الصنف من القائمة: ' + t.value); return; } }
 });

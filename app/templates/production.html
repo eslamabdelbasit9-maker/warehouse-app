@@ -31,7 +31,7 @@
     <td class="n"><b>{{ fmt(p.total_qty) }}</b></td><td class="n">{{ fmt(p.lines[0].unit_price) if p.lines else '' }}</td><td class="n"><b>{{ fmt(p.total_value) }}</b></td>
     <td>{{ p.user.name if p.user else '' }}</td>
     <td>{% if p.attachment %}<a href="/files/{{ p.attachment }}" target="_blank">عرض</a>{% endif %}
-      {% if user.has('storekeeper') %}<form method="post" action="/production/{{ p.id }}/attach" enctype="multipart/form-data" class="noprint" style="display:inline">
+      {% if user.has('admin') or (user.has('storekeeper') and not p.attachment) %}<form method="post" action="/production/{{ p.id }}/attach" enctype="multipart/form-data" class="noprint" style="display:inline">
         <label class="btn sec sm" style="cursor:pointer">{{ 'استبدال' if p.attachment else 'إرفاق' }}<input type="file" name="file" hidden onchange="this.form.submit()" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.doc,.docx"></label></form>{% endif %}</td>
     {% if user.has('admin') %}<td class="noprint"><form method="post" action="/production/{{ p.id }}/delete" onsubmit="return confirm('حذف سجل الإنتاج؟')"><button class="btn sec sm">حذف</button></form></td>{% endif %}</tr>
   {% else %}<tr><td colspan="{{ 8 + mats|length }}" class="muted">لا يوجد إنتاج مسجل في هذه الفترة</td></tr>{% endfor %}

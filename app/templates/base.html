@@ -56,7 +56,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {% if user.has('storekeeper', 'transfer') %}{{ nl('/transfers', 'التحويلات', 'truck', path.startswith('/transfers'), transfer_n) }}{% endif %}
     {{ nl('/custody', 'الأصول', 'star', path.startswith('/custody')) }}
     {% if user.has('admin') %}<div class="sg">النظام</div>{{ nl('/admin/users', 'الإدارة', 'users', path.startswith('/admin')) }}
-    {% elif user.has('storekeeper') %}{{ nl('/admin/items', 'الأصناف', 'list', path.startswith('/admin/items')) }}{% endif %}
+    {% endif %}
   </nav>
   <div class="side-foot">
     <div class="who-n">{{ user.name }}</div>
