@@ -1571,3 +1571,22 @@ def test_approvals_link_only_for_approvers(env):
     assert c.get("/approvals", follow_redirects=False).status_code == 303
     login(c, env, "final@example.com")
     assert 'href="/approvals"' in c.get("/").text
+
+
+def test_delete_empty_site_only(env):
+    """الموقع المكرر الفاضي يتحذف، والموقع اللي عليه حركات لا؛ والموقوف ما يظهرش في صلاحيات المستخدمين."""
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    c.post("/admin/sites", data={"act": "site", "code": "DUP", "name": "موقع مكرر"})
+    db = SessionLocal()
+    dup = db.query(Site).filter_by(code="DUP").one().id
+    db.close()
+    c.post("/admin/sites", data={"act": "unit", "site_id": dup, "name": "خلاطة", "kind": "asphalt"})
+    c.post("/admin/sites", data={"act": "toggle_site", "id": dup})
+    assert "موقع مكرر" not in c.get("/admin/users").text
+    assert "حذف الموقع (فارغ)" in c.get("/admin/sites").text
+    c.post("/admin/sites", data={"act": "delete_site", "id": env["site"]})
+    c.post("/admin/sites", data={"act": "delete_site", "id": dup})
+    db = SessionLocal()
+    assert db.get(Site, env["site"]) is not None and db.get(Site, dup) is None
+    db.close()

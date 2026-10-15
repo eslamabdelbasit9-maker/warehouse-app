@@ -14,7 +14,8 @@
 </div>
 {% for s in sites %}<div class="card">
   <h2>{{ s.name }} <span class="muted">({{ s.code }})</span> {% if not s.active %}<span class="st st-rejected">موقوف</span>{% endif %}
-    <form method="post" style="display:inline"><input type="hidden" name="act" value="toggle_site"><input type="hidden" name="id" value="{{ s.id }}"><button class="btn sec sm">{{ 'إيقاف' if s.active else 'تفعيل' }}</button></form></h2>
+    <form method="post" style="display:inline"><input type="hidden" name="act" value="toggle_site"><input type="hidden" name="id" value="{{ s.id }}"><button class="btn sec sm">{{ 'إيقاف' if s.active else 'تفعيل' }}</button></form>
+    {% if s.id in empty_ids %}<form method="post" style="display:inline" onsubmit="return confirm('حذف الموقع {{ s.name }} ({{ s.code }}) نهائيًا؟ لا توجد عليه أي حركة.')"><input type="hidden" name="act" value="delete_site"><input type="hidden" name="id" value="{{ s.id }}"><button class="btn red sm">حذف الموقع (فارغ)</button></form>{% endif %}</h2>
   <table class="t"><tr><th>الوحدة</th><th>النوع</th><th>الحالة</th><th></th></tr>
   {% for u in s.units %}<tr><td>{{ u.name }}</td><td><form method="post" style="margin:0"><input type="hidden" name="act" value="unit_kind"><input type="hidden" name="id" value="{{ u.id }}">
     <select name="kind" onchange="this.form.submit()">{% for k, v in UNIT_KINDS.items() %}<option value="{{ k }}" {{ 'selected' if u.kind == k }}>{{ v }}</option>{% endfor %}</select></form></td><td>{{ 'نشطة' if u.active else 'موقوفة' }}</td>

@@ -2213,7 +2213,7 @@ async def custody_return(cid: int, request: Request, db: Session = Depends(get_d
 @app.get("/admin/users", response_class=HTMLResponse)
 def admin_users(request: Request, edit: int | None = None, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
     users = db.query(User).order_by(User.active.desc(), User.name).all()
-    return render(request, "admin_users.html", user, users=users, sites=db.query(Site).order_by(Site.name).all(),
+    return render(request, "admin_users.html", user, users=users, sites=db.query(Site).filter(Site.active.is_(True)).order_by(Site.name).all(),
                   e=db.get(User, edit) if edit else None)
 
 
@@ -2250,7 +2250,23 @@ async def admin_users_post(request: Request, db: Session = Depends(get_db), user
 
 @app.get("/admin/sites", response_class=HTMLResponse)
 def admin_sites(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
-    return render(request, "admin_sites.html", user, sites=db.query(Site).order_by(Site.name).all())
+    sites = db.query(Site).order_by(Site.name).all()
+    return render(request, "admin_sites.html", user, sites=sites, empty_ids={s.id for s in sites if not site_data_count(db, s.id)})
+
+
+SITE_LINK_TABLES = ("units", "user_sites", "approval_routes")   # روابط إعداد بتتحذف مع الموقع الفاضي
+
+
+def site_data_count(db, sid):
+    """عدد الحركات المسجلة على الموقع في كل الجداول (طلبات، وارد، أرصدة، إنتاج، عهد، تحويلات...)."""
+    insp, n = inspect(engine), 0
+    for t in insp.get_table_names():
+        if t in SITE_LINK_TABLES or t == "sites":
+            continue
+        for col in ("site_id", "from_site_id", "to_site_id"):
+            if col in {c["name"] for c in insp.get_columns(t)}:
+                n += db.execute(text(f"SELECT COUNT(*) FROM {t} WHERE {col} = :s"), {"s": sid}).scalar() or 0
+    return n
 
 
 @app.post("/admin/sites")
@@ -2281,6 +2297,19 @@ async def admin_sites_post(request: Request, db: Session = Depends(get_db), user
         s = db.get(Site, int(form.get("id")))
         if s:
             s.active = not s.active
+    elif act == "delete_site":   # حذف موقع مكرر/فاضي بس — لو عليه أي حركة الحذف مرفوض
+        s = db.get(Site, int(form.get("id")))
+        if s:
+            n = site_data_count(db, s.id)
+            if n:
+                flash(request, f"لا يمكن حذف «{s.name}» لأن عليه {n} حركة مسجلة — يمكن إيقافه فقط", "err")
+            else:
+                for t in SITE_LINK_TABLES:
+                    db.execute(text(f"DELETE FROM {t} WHERE site_id = :s"), {"s": s.id})
+                db.execute(text("DELETE FROM app_settings WHERE key = :k"), {"k": f"crusher_price:{s.id}"})
+                name = f"{s.name} ({s.code})"
+                db.delete(s)
+                flash(request, f"تم حذف الموقع {name}")
     db.commit()
     return back("/admin/sites")
 
