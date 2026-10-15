@@ -1536,6 +1536,8 @@ def test_supplier_must_be_from_list(env):
     assert r.json() == {"name": "شركة النجم الذهبي", "existed": False}
     r = c.post("/suppliers/add", data={"name": "النجم الذهبي التجارية"}, headers={"Accept": "application/json"})
     assert r.json()["existed"] and r.json()["name"] == "شركة النجم الذهبي"
+    r = c.post("/suppliers/add", data={"name": "شركة النجم الذهبي (صبيا)"}, headers={"Accept": "application/json"})
+    assert r.json() == {"name": "شركة النجم الذهبي (صبيا)", "existed": False}   # فرع مختلف = مورد مستقل
     assert 'list="sup-list"' in c.get(f"/receipts/new?site={env['site']}").text
     data["supplier"] = "شركة النجم الذهبي"
     assert c.post("/receipts/new", data=data, follow_redirects=False).status_code == 303
