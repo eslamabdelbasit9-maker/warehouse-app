@@ -348,29 +348,35 @@ def parse_date(v, default=None):
         return default
 
 
-def engineer_kinds(db, user):
-    """المهندس المعتمد (من غير صلاحيات أوسع) يشوف طلبات وحداته بس: أنواع الوحدات المسندة له في المرحلة 1.
-    يرجّع None لو مفيش تقييد."""
-    if not user.has("engineer") or user.has("manager", "final", "storekeeper", "requester", "transfer"):
+def engineer_routes(db, user):
+    """المهندس المعتمد (من غير مدير إنتاج/اعتماد نهائي/إدارة) يشوف طلباته بس: اللي في مساره في المرحلة 1
+    (نوع الوحدة + الموقع)، واللي عملها أو اعتمدها. يرجّع None لو مفيش تقييد."""
+    if not user.has("engineer") or user.has("manager", "final"):
         return None
-    kinds = {k for (k,) in db.query(ApprovalRoute.unit_kind).filter(ApprovalRoute.user_id == user.id, ApprovalRoute.stage == 1)}
-    return None if (not kinds or None in kinds) else kinds
+    return [(r.site_id, r.unit_kind) for r in
+            db.query(ApprovalRoute).filter(ApprovalRoute.user_id == user.id, ApprovalRoute.stage == 1)]
 
 
 def engineer_filter(db, user):
-    """شرط SQLAlchemy لطلبات المهندس (طلباته + اللي اعتمدها + وحداته)، أو None."""
-    kinds = engineer_kinds(db, user)
-    if kinds is None:
+    """شرط SQLAlchemy لطلبات المهندس، أو None."""
+    routes = engineer_routes(db, user)
+    if routes is None:
         return None
-    return or_(Req.requester_id == user.id, Req.decisions.any(LineDecision.user_id == user.id),
-               Req.unit.has(Unit.kind.in_(kinds)))
+    conds = [Req.requester_id == user.id, Req.decisions.any(LineDecision.user_id == user.id)]
+    for sid, kind in routes:
+        c = [Req.site_id == sid] if sid else []
+        if kind:
+            c.append(Req.unit.has(Unit.kind == kind))
+        conds.append(and_(*c) if c else Req.id.isnot(None))
+    return or_(*conds)
 
 
 def can_view_request(db, user, req):
-    kinds = engineer_kinds(db, user)
-    if kinds is not None:
+    routes = engineer_routes(db, user)
+    if routes is not None:
+        kind = req.unit.kind if req.unit else None
         return (req.requester_id == user.id or any(d.user_id == user.id for d in req.decisions)
-                or (req.unit is not None and req.unit.kind in kinds))
+                or any((not sid or sid == req.site_id) and (not k or k == kind) for sid, k in routes))
     if req.site_id in user.site_ids(db) or (req.requester_id == user.id):
         return True
     return any(d.user_id == user.id for d in req.decisions) or S.can_approve(db, user, req)
