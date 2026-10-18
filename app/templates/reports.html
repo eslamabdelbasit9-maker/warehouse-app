@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-{% macro chart_grid(cs) %}<div class="rp-charts">{% for c in cs %}<div class="card rp-chart{{ ' wide' if c.span == 2 }}"><h3>{{ c.title }}</h3><div class="rp-cv{{ ' tall' if c.type == 'doughnut' }}"><canvas id="{{ c.id }}"></canvas></div></div>{% endfor %}</div>{% endmacro %}
+{% macro chart_grid(cs) %}<div class="rp-charts">{% for c in cs %}<div class="card rp-chart{{ ' wide' if c.span == 2 }}"><h3>{{ c.title }}</h3>{% if c.note %}<p class="muted rp-note">{{ c.note }}</p>{% endif %}<div class="rp-cv{{ ' tall' if c.type == 'doughnut' }}"><canvas id="{{ c.id }}"></canvas></div></div>{% endfor %}</div>{% endmacro %}
 {% macro delta(cur, prev, good_up=true) %}{% if prev %}{% set ch = 100 * (cur - prev) / prev %}
   <div class="s {{ 'up' if (ch >= 0) == good_up else 'down' }}">{{ '▲' if ch >= 0 else '▼' }} {{ fmt(ch|abs, 1) }}% عن الفترة السابقة</div>{% endif %}{% endmacro %}
 
@@ -125,7 +125,7 @@
 .rp-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .kpi .s{font-size:12px;margin-top:4px}.kpi .s.up{color:var(--ok)}.kpi .s.down{color:var(--err)}
 .rp-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
-.rp-chart.wide{grid-column:1/-1}.rp-chart h3{margin:0 0 10px;font-size:15px}
+.rp-chart.wide{grid-column:1/-1}.rp-chart h3{margin:0 0 10px;font-size:15px}.rp-note{margin:-4px 0 10px;font-size:12.5px;line-height:1.7}
 .rp-cv{position:relative;height:300px}.rp-empty{display:flex;align-items:center;justify-content:center;height:100%}.rp-cv.tall{height:300px}.rp-chart.wide .rp-cv{height:340px}
 @media (max-width:900px){.rp-charts{grid-template-columns:minmax(0,1fr)}.rp-cv,.rp-chart.wide .rp-cv{height:260px}}
 @media print{.rp-cv{height:260px}}
@@ -157,14 +157,20 @@
     } else if (!donut) {            // الأشهر من اليمين لليسار
       scales = {x: {reverse: true, stacked: !!c.stacked, grid: {display: false}},
                 y: {position: 'right', stacked: !!c.stacked, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}}};
-      if (c.dual) scales.y1 = {position: 'left', beginAtZero: true, grid: {drawOnChartArea: false}, ticks: {callback: fmtTick}};
+      if (c.dual) {   // مقياس تاني على اليسار للخط (بلونه وعنوانه) — والأعمدة على اليمين
+        const ln = c.datasets.find((ds) => ds.type === 'line'), lc = ln ? recolor(ln.borderColor) : txt;
+        scales.y1 = {position: 'left', beginAtZero: true, grid: {drawOnChartArea: false},
+                     ticks: {callback: fmtTick, color: lc}, title: {display: !!c.y1_title, text: c.y1_title, color: lc, font: {weight: 'bold'}}};
+        scales.y.title = {display: !!c.y_title, text: c.y_title, color: txt, font: {weight: 'bold'}};
+      }
     }
     c.datasets.forEach((ds) => {
       ds.backgroundColor = recolor(ds.backgroundColor); ds.borderColor = recolor(ds.borderColor);
       if ((ds.type || c.type) === 'bar') { ds.maxBarThickness = c.horizontal ? 34 : 46;
         if (!c.stacked) { ds.borderRadius = 999; ds.borderSkipped = c.horizontal ? 'start' : 'start'; } }   // أعمدة كبسولة
       if (donut) { ds.borderColor = card; ds.borderWidth = 3; }
-      if ((ds.type || c.type) === 'line') { ds.pointBackgroundColor = ds.borderColor; ds.pointBorderColor = card; ds.pointBorderWidth = 2; }
+      if ((ds.type || c.type) === 'line') { ds.pointBackgroundColor = ds.borderColor; ds.pointBorderColor = card; ds.pointBorderWidth = 2;
+        ds.order = 0; ds.borderWidth = 3; ds.pointRadius = 5; } else ds.order = 1;   // الخط فوق الأعمدة مش وراها
     });
     const total = donut ? c.datasets[0].data.reduce((a, b) => a + b, 0) : 0;
     new Chart(el, {

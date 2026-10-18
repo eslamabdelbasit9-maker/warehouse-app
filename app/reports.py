@@ -310,6 +310,8 @@ def charts(tab, d, months, site_name):
     if tab == "asphalt":
         return [
             dict(id="c1", type="bar", title="الأسفلت المنتج وتكلفة الطن شهريًا", unit="", span=2, labels=labels, dual=True,
+                 y_title="الأطنان", y1_title="تكلفة الطن (ريال)",
+                 note="الأعمدة = الأطنان المنتجة (المقياس يمين الرسم). الخط = تكلفة الطن = تكلفة المواد والديزل ÷ الأطنان في نفس الشهر (المقياس يسار الرسم).",
                  datasets=[dict(type="bar", label="الأطنان", data=_ser(d["per_m"], months, "tons"), backgroundColor=PAL[2],
                                 borderRadius=6, yAxisID="y"),
                            dict(type="line", label="تكلفة الطن (ريال)", data=_ratio(d["per_m"], months, "cost", "tons"),
@@ -320,6 +322,8 @@ def charts(tab, d, months, site_name):
     if tab == "diesel":
         return [
             dict(id="c1", type="bar", title="الوارد والمنصرف ولتر/طن شهريًا", unit="", span=2, labels=labels, dual=True,
+                 y_title="لتر (الوارد والمنصرف)", y1_title="لتر لكل طن أسفلت",
+                 note="الأعمدة = لترات الديزل الواردة والمنصرفة (المقياس يمين الرسم). الخط = لتر/طن = الديزل المنصرف ÷ أطنان الأسفلت المنتجة في نفس الشهر (المقياس يسار الرسم): ارتفاعه يعني استهلاكاً أعلى لكل طن.",
                  datasets=[dict(type="bar", label="الوارد (لتر)", data=_ser(d["per_m"], months, "in_l"), backgroundColor=PAL[5], borderRadius=6, yAxisID="y"),
                            dict(type="bar", label="المنصرف (لتر)", data=_ser(d["per_m"], months, "out_l"), backgroundColor=PAL[3], borderRadius=6, yAxisID="y"),
                            dict(type="line", label="لتر / طن", data=_ratio(d["per_m"], months, "out_l", "tons"), borderColor=PAL[4],
