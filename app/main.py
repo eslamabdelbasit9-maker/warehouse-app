@@ -185,6 +185,9 @@ def init_db():
                 if price:
                     S.set_crusher_price(db, s.id, price)
         db.commit()
+        from .accounting import seed_chart, mark_dirty
+        seed_chart(db)   # شجرة الحسابات القياسية (الناقص بس)
+        mark_dirty()
     finally:
         db.close()
 
@@ -230,6 +233,17 @@ def _forbidden(request: Request, exc: Forbidden):
     return HTMLResponse("<meta name=viewport content='width=device-width, initial-scale=1'>"
                         "<div dir=rtl style='font-family:Tahoma;padding:40px'>ليس لديك صلاحية لهذه الصفحة. "
                         "<a href='/'>الرئيسية</a></div>", status_code=403)
+
+
+def audit_now(user, action, entity=None, entity_id=None, details=None, request=None):
+    """سجل نشاط بجلسة مستقلة (للعمليات اللي ما بتستخدمش جلسة الطلب، زي الاستيراد)."""
+    from .accounting import audit
+    db = SessionLocal()
+    try:
+        audit(db, user, action, entity, entity_id, details, request)
+        db.commit()
+    finally:
+        db.close()
 
 
 def flash(request: Request, msg: str, kind="ok"):
@@ -455,6 +469,8 @@ async def signin(request: Request, db: Session = Depends(get_db)):
         return back("/signin")
     u = db.query(User).filter(User.email == email, User.active.is_(True)).first()
     if not u or not check_password(form.get("password") or "", u.password_hash):
+        AC.audit(db, None, "login_failed", "user", email[:40], None, request)
+        db.commit()
         _FAILS[ip] = fails + [time.time()]
         if email:
             _FAILS["e:" + email] = efails + [time.time()]
@@ -463,6 +479,8 @@ async def signin(request: Request, db: Session = Depends(get_db)):
     _FAILS.pop(ip, None)
     _FAILS.pop("e:" + email, None)
     nxt = request.session.get("next", "/")
+    AC.audit(db, u, "login", "user", u.email[:40], None, request)
+    db.commit()
     request.session.clear()
     request.session["uid"] = u.id
     request.session["seen"] = int(time.time())
@@ -827,6 +845,7 @@ async def new_spare_post(request: Request, db: Session = Depends(get_db),
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("site_id"))
     try:
+        AC.check_lock(db, parse_date(form.get("work_date"), date.today()), "تسجيل طلب")
         unit = db.get(Unit, int(form.get("unit_id") or 0))
         if unit and unit.site_id != sel.id:
             unit = None
@@ -879,6 +898,7 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
     sites, sel = pick_site(db, user, form.get("site_id"))
     dest = form.get("dest") if form.get("dest") in RAW_DESTS else "asphalt"
     try:
+        AC.check_lock(db, parse_date(form.get("work_date"), date.today()), "تسجيل طلب")
         unit, tons, customer = None, None, None
         if dest in ("crusher", "asphalt", "concrete"):
             unit = db.get(Unit, int(form.get("unit_id") or 0))
@@ -1008,6 +1028,7 @@ async def production_new_post(request: Request, db: Session = Depends(get_db), u
         price = S.crusher_price(db, sel.id)
         if price <= 0:
             raise S.BusinessError("لم يُحدَّد سعر إنتاج الكسارة لهذا الموقع — راجع مدير النظام")
+        AC.check_lock(db, parse_date(form.get("date"), date.today()), "تسجيل إنتاج")
         rec = CrusherProduction(site_id=sel.id, unit_id=unit.id, date=parse_date(form.get("date"), date.today()),
                                 notes=(form.get("notes") or "").strip() or None, created_by=user.id)
         for iid, qty in zip(form.getlist("item_id"), form.getlist("qty")):
@@ -1060,6 +1081,13 @@ def production_delete(pid: int, request: Request, db: Session = Depends(get_db),
     rec = db.get(CrusherProduction, pid)
     if rec:
         sid = rec.site_id
+        try:
+            AC.check_lock(db, rec.date, "حذف إنتاج")
+        except S.BusinessError as e:
+            flash(request, str(e), "err")
+            return back(f"/production?site={sid}")
+        AC.audit(db, user, "delete", "production", rec.id, {"التاريخ": rec.date, "الموقع": sid, "الكمية": rec.total_qty,
+                                                          "القيمة": rec.total_value}, request)
         db.delete(rec)
         db.commit()
         flash(request, "تم حذف سجل الإنتاج")
@@ -1117,7 +1145,9 @@ def _backup_response(kind):
 
 
 @app.get("/admin/backup/download")
-def admin_backup_download(user: User = Depends(require("admin"))):
+def admin_backup_download(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    AC.audit(db, user, "backup", "backup", "manual", None, request)
+    db.commit()
     return _backup_response("manual")
 
 
@@ -1152,6 +1182,13 @@ async def admin_backup_restore(request: Request, user: User = Depends(require("a
     finally:
         tmp.close()
     _STAGNANT_CACHE.clear()
+    AC.mark_dirty()
+    db2 = SessionLocal()
+    try:   # بعد الاسترجاع (جدول السجل نفسه اتبدّل) — نسجّل العملية في السجل الجديد
+        AC.audit(db2, user, "restore", "backup", getattr(up, "filename", "")[:40], {"السجلات": n}, request)
+        db2.commit()
+    finally:
+        db2.close()
     flash(request, f"تم استرجاع النسخة الاحتياطية ({n} سجل)")
     return back("/admin/backup")
 
@@ -1224,6 +1261,7 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
         raise Forbidden()
     form = await request.form()
     changes = []
+    orig_date = req.work_date
     uid = form.get("unit_id")
     if uid and str(uid).isdigit() and int(uid) != req.unit_id:
         unit = db.get(Unit, int(uid))
@@ -1261,6 +1299,14 @@ async def request_edit(rid: int, request: Request, db: Session = Depends(get_db)
     if not changes:
         flash(request, "لم يتم إجراء أي تعديل")
         return back(f"/requests/{rid}")
+    try:
+        AC.check_lock(db, orig_date, "تعديل طلب")
+        AC.check_lock(db, req.work_date, "تعديل طلب")
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/requests/{rid}")
+    AC.audit(db, user, "edit", "request", req.req_no, changes, request)
     if req.type == "raw":
         db.flush()
         S.revalue_raw(db, req.site_id)
@@ -1276,6 +1322,13 @@ def request_delete(rid: int, request: Request, db: Session = Depends(get_db), us
     if not req:
         raise Forbidden()
     no, site_id, raw = req.req_no, req.site_id, req.type == "raw"
+    try:
+        AC.check_lock(db, req.work_date, "حذف طلب")
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/requests/{rid}")
+    AC.audit(db, user, "delete", "request", no, {"التاريخ": req.work_date, "الموقع": site_id, "الحالة": req.status,
+                                                "القيمة": req.total_value, "الأصناف": [(l.item.code, l.qty, l.status) for l in req.lines]}, request)
     db.delete(req)
     db.flush()
     if raw:
@@ -1668,6 +1721,7 @@ async def receipt_edit(rid: int, request: Request, db: Session = Depends(get_db)
         raise Forbidden()
     form = await request.form()
     changes = []
+    orig_date = rec.date
     d = parse_date(form.get("date"))
     if d and d != rec.date:
         changes.append(f"التاريخ: {rec.date} ← {d}")
@@ -1708,6 +1762,14 @@ async def receipt_edit(rid: int, request: Request, db: Session = Depends(get_db)
         flash(request, "لا يمكن ترك الفاتورة بدون أصناف؛ استخدم حذف الفاتورة", "err")
         db.rollback()
         return back(f"/receipts/{rid}")
+    try:
+        AC.check_lock(db, orig_date, "تعديل فاتورة")
+        AC.check_lock(db, rec.date, "تعديل فاتورة")
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/receipts/{rid}")
+    AC.audit(db, user, "edit", "receipt", rec.invoice_no or rec.id, changes, request)
     db.flush()
     S.revalue_raw(db, rec.site_id)
     db.commit()
@@ -1721,6 +1783,14 @@ def receipt_delete(rid: int, request: Request, db: Session = Depends(get_db), us
     if not rec:
         raise Forbidden()
     site_id, label = rec.site_id, rec.invoice_no or rec.date
+    try:
+        AC.check_lock(db, rec.date, "حذف فاتورة")
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/receipts/{rid}")
+    AC.audit(db, user, "delete", "receipt", label, {"التاريخ": rec.date, "المورد": rec.supplier, "الموقع": rec.site_id,
+                                                    "بدون ضريبة": rec.net, "الأصناف": [(l.item.code, l.qty, l.unit_price) for l in rec.lines]}, request)
     db.delete(rec)
     db.flush()
     S.revalue_raw(db, site_id)
@@ -1744,6 +1814,7 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("site_id"))
     try:
+        AC.check_lock(db, parse_date(form.get("date"), date.today()), "تسجيل فاتورة")
         rec = Receipt(site_id=sel.id, date=parse_date(form.get("date"), date.today()),
                       invoice_no=(form.get("invoice_no") or "").strip() or None,
                       supplier=check_supplier(db, form.get("supplier")), created_by_id=user.id,
@@ -2333,6 +2404,10 @@ async def admin_users_post(request: Request, db: Session = Depends(get_db), user
             return back("/admin/users")
         u.password_hash = hash_password(pw)
     db.add(u)
+    db.flush()
+    AC.audit(db, user, "users", "user", u.email, {"الاسم": u.name, "الصلاحيات": u.roles, "كل المواقع": u.all_sites,
+                                               "فعّال": u.active, "المواقع": [x.id for x in u.sites],
+                                               "تغيير كلمة المرور": bool(pw)}, request)
     db.commit()
     flash(request, "تم الحفظ")
     return back("/admin/users")
@@ -2491,6 +2566,7 @@ async def admin_opening_post(request: Request, db: Session = Depends(get_db), us
     ob.qty, ob.value = qty, val
     ob.location = (form.get("location") or "").strip() or ob.location
     db.add(ob)
+    AC.audit(db, user, "edit", "opening", sel.id, dict(form), request)
     db.commit()
     flash(request, "تم الحفظ")
     return back(f"/admin/opening?site={sel.id}")
@@ -2515,6 +2591,7 @@ async def admin_import_post(request: Request, user: User = Depends(require("admi
     except Exception as e:  # noqa: BLE001
         flash(request, f"فشل الاستيراد: {e}", "err")
         return back("/admin/import")
+    audit_now(user, "import", "excel", code, {"الملف": f.filename, "استبدال": form.get("replace") == "1", "النتيجة": msg}, request)
     flash(request, msg)
     return back("/admin/import")
 
@@ -2528,7 +2605,9 @@ async def admin_import_raw(request: Request, user: User = Depends(require("admin
         flash(request, "اختر الملف وأدخل كود الموقع", "err")
         return back("/admin/import")
     try:
-        flash(request, run_raw(io.BytesIO(f.file.read()), code))
+        msg = run_raw(io.BytesIO(f.file.read()), code)
+        audit_now(user, "import", "raw", code, {"الملف": f.filename, "النتيجة": msg}, request)
+        flash(request, msg)
     except Exception as e:  # noqa: BLE001
         flash(request, f"تعذّر الاستيراد: {e}", "err")
     return back("/admin/import")
@@ -2548,6 +2627,7 @@ async def admin_import_custody(request: Request, user: User = Depends(require("a
             msgs.append(f"{f.filename}: " + run_custody(io.BytesIO(f.file.read()), user.id))
         except Exception as e:  # noqa: BLE001
             msgs.append(f"{f.filename}: تعذّر الاستيراد — {e}")
+    audit_now(user, "import", "custody", None, msgs, request)
     flash(request, " | ".join(msgs))
     return back("/admin/import")
 
@@ -2856,6 +2936,7 @@ async def sales_import(request: Request, db: Session = Depends(get_db), user: Us
         return back("/sales")
     try:
         n, k = SL.import_xlsx(db, await up.read(), source_default=up.filename)
+        AC.audit(db, user, "import", "sales", up.filename[:40], {"السطور": n, "المستخلصات": k}, request)
         db.commit()
         flash(request, f"تم استيراد {n} سطر مبيعات ({k} مستخلص شهري لوحدة)")
     except Exception as e:  # noqa: BLE001
@@ -2888,3 +2969,228 @@ def export_sales(frm: str = "", to: str = "", db: Session = Depends(get_db), use
              x.price, x.amount, x.vat, x.total, x.notes or "", x.source or ""]
             for x in qy.order_by(SalesLine.period, SalesLine.unit, SalesLine.customer)]
     return _send_xlsx(_xlsx(SL.HEAD, rows, "المبيعات"), "المبيعات.xlsx")
+
+
+# ================= الحسابات العامة =================
+from . import accounting as AC  # noqa: E402
+from .models import ACCOUNT_TYPES, JOURNAL_SOURCES, Account, AuditLog, JournalEntry, JournalLine  # noqa: E402
+
+T.env.globals.update(ACCOUNT_TYPES=ACCOUNT_TYPES, JOURNAL_SOURCES=JOURNAL_SOURCES, AUDIT_ACTIONS=AC.AUDIT_ACTIONS)
+
+
+def _acc_ctx(request, db, d_from, d_to, site):
+    """الفلاتر المشتركة لصفحات الحسابات (بعد مزامنة القيود التلقائية)."""
+    AC.sync(db)
+    today = date.today()
+    f = parse_date(d_from, AC.start_date(db))
+    t = parse_date(d_to, today)
+    if t < f:
+        f, t = t, f
+    sites = db.query(Site).order_by(Site.id).all()
+    sel = next((s for s in sites if str(s.id) == str(site)), None)
+    return f, t, sites, sel
+
+
+def _postable(db):
+    return db.query(Account).filter(Account.is_group.is_(False), Account.active.is_(True)).order_by(Account.code).all()
+
+
+@app.get("/accounts", response_class=HTMLResponse)
+def accounts_page(request: Request, date_to: str | None = None, site: str | None = None, db: Session = Depends(get_db),
+                  user: User = Depends(require(*AC.ACC_VIEW))):
+    f, t, sites, sel = _acc_ctx(request, db, None, date_to, site)
+    rows, _ = AC.tree(db)
+    s = AC.sums(db, None, t, sel.id if sel else None)
+    bal = {aid: (d - c) for aid, (d, c) in s.items()}
+    tot = AC.rollup(db, bal)
+    return render(request, "acc_accounts.html", user, rows=rows, tot=tot, d_to=t, sites=sites, sel=sel,
+                  can_edit=user.has(*AC.ACC_EDIT), groups=[a for a, _ in rows if a.is_group])
+
+
+@app.post("/accounts")
+async def accounts_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_EDIT))):
+    form = await request.form()
+    aid = form.get("id")
+    code, name = (form.get("code") or "").strip(), (form.get("name") or "").strip()
+    try:
+        if not name:
+            raise AC.AccountingError("أدخل اسم الحساب")
+        if aid:   # تعديل الاسم / الإيقاف
+            a = db.get(Account, int(aid))
+            if not a:
+                raise AC.AccountingError("الحساب غير موجود")
+            old = (a.name, a.active)
+            a.name, a.active = name, form.get("active") == "1"
+            AC.audit(db, user, "edit", "account", a.code, {"قبل": old, "بعد": (a.name, a.active)}, request)
+        else:
+            parent = db.get(Account, int(form.get("parent_id") or 0))
+            if not parent or not parent.is_group:
+                raise AC.AccountingError("اختر الحساب الرئيسي")
+            if not code or db.query(Account).filter(Account.code == code).first():
+                raise AC.AccountingError("كود الحساب فارغ أو مستخدم")
+            a = Account(code=code, name=name, type=parent.type, parent_id=parent.id, is_group=form.get("is_group") == "1")
+            db.add(a)
+            AC.audit(db, user, "create", "account", code, name, request)
+        db.commit()
+        flash(request, "تم حفظ الحساب")
+    except (AC.AccountingError, ValueError) as e:
+        db.rollback()
+        flash(request, str(e), "err")
+    return back("/accounts")
+
+
+@app.get("/journal", response_class=HTMLResponse)
+def journal_page(request: Request, date_from: str | None = None, date_to: str | None = None, site: str | None = None,
+                 source: str = "", q: str = "", page: int = 1, db: Session = Depends(get_db),
+                 user: User = Depends(require(*AC.ACC_VIEW))):
+    f, t, sites, sel = _acc_ctx(request, db, date_from, date_to, site)
+    qry = db.query(JournalEntry).filter(JournalEntry.date.between(f, t))
+    if sel:
+        qry = qry.filter(JournalEntry.site_id == sel.id)
+    if source in JOURNAL_SOURCES:
+        qry = qry.filter(JournalEntry.source == source)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(JournalEntry.memo.ilike(like), JournalEntry.ref.ilike(like),
+                             JournalEntry.lines.any(JournalLine.party.ilike(like))))
+    total = qry.count()
+    per = 50
+    rows = (qry.options(selectinload(JournalEntry.lines).selectinload(JournalLine.account), selectinload(JournalEntry.site))
+            .order_by(JournalEntry.date.desc(), JournalEntry.id.desc()).offset((max(page, 1) - 1) * per).limit(per).all())
+    return render(request, "acc_journal.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
+                  d_from=f, d_to=t, sites=sites, sel=sel, source=source, q=q, doc_link=AC.doc_link,
+                  can_edit=user.has(*AC.ACC_EDIT), lock=AC.lock_date(db))
+
+
+@app.get("/journal/new", response_class=HTMLResponse)
+def journal_new(request: Request, eid: int | None = None, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_EDIT))):
+    e = db.get(JournalEntry, eid) if eid else None
+    if e is not None and e.source != "manual":
+        raise Forbidden()
+    init_rows = [dict(acc=l.account_id, dr=l.debit or "", cr=l.credit or "", site=l.site_id or "", party=l.party or "",
+                      note=l.note or "") for l in e.lines] if e else []
+    return render(request, "acc_entry_form.html", user, e=e, accounts=_postable(db), sites=db.query(Site).order_by(Site.id).all(),
+                  today=date.today(), lock=AC.lock_date(db), init_rows=init_rows)
+
+
+@app.post("/journal/new")
+async def journal_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_EDIT))):
+    form = await request.form()
+    eid = form.get("eid")
+    e = db.get(JournalEntry, int(eid)) if eid else None
+    if e is not None and e.source != "manual":
+        raise Forbidden()
+    rows = []
+    for acc, dr, cr, site, party, note in zip(form.getlist("acc"), form.getlist("dr"), form.getlist("cr"), form.getlist("site"),
+                                              form.getlist("party"), form.getlist("note")):
+        if not str(acc).isdigit():
+            if parse_float(dr) or parse_float(cr):
+                flash(request, "اختر الحساب في كل سطر فيه مبلغ", "err")
+                return back(f"/journal/new{'?eid=' + eid if eid else ''}")
+            continue
+        rows.append((int(acc), parse_float(dr) or 0, parse_float(cr) or 0, int(site) if str(site).isdigit() else None,
+                     party.strip(), note.strip()))
+    d = parse_date(form.get("date"), date.today())
+    try:
+        old = None if e is None else [(l.account.code, l.debit, l.credit) for l in e.lines]
+        e = AC.save_manual(db, user, d, (form.get("memo") or "").strip() or None, rows, e)
+        AC.audit(db, user, "edit" if old else "create", "journal", e.source_id,
+                 {"قبل": old, "بعد": [(r[0], r[1], r[2]) for r in rows], "التاريخ": d} if old else {"التاريخ": d, "السطور": len(rows)},
+                 request)
+        db.commit()
+    except AC.AccountingError as ex:
+        db.rollback()
+        flash(request, str(ex), "err")
+        return back(f"/journal/new{'?eid=' + eid if eid else ''}")
+    flash(request, f"تم حفظ القيد {e.source_id}")
+    return back(f"/journal/{e.id}")
+
+
+@app.get("/journal/{eid}", response_class=HTMLResponse)
+def journal_entry(eid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_VIEW))):
+    AC.sync(db)
+    e = db.get(JournalEntry, eid)
+    if not e:
+        return back("/journal")
+    return render(request, "acc_entry.html", user, e=e, doc=AC.doc_link(e), can_edit=user.has(*AC.ACC_EDIT) and e.source == "manual",
+                  lock=AC.lock_date(db))
+
+
+@app.post("/journal/{eid}/delete")
+def journal_delete(eid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_EDIT))):
+    e = db.get(JournalEntry, eid)
+    if not e or e.source != "manual":
+        raise Forbidden()
+    try:
+        AC.check_lock(db, e.date, "حذف قيد")
+    except AC.AccountingError as ex:
+        flash(request, str(ex), "err")
+        return back(f"/journal/{eid}")
+    AC.audit(db, user, "delete", "journal", e.source_id,
+             {"التاريخ": e.date, "البيان": e.memo, "السطور": [(l.account.code, l.debit, l.credit) for l in e.lines]}, request)
+    db.delete(e)
+    db.commit()
+    flash(request, "تم حذف القيد")
+    return back("/journal?source=manual")
+
+
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger_page(request: Request, account: int | None = None, date_from: str | None = None, date_to: str | None = None,
+                site: str | None = None, db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_VIEW))):
+    f, t, sites, sel = _acc_ctx(request, db, date_from, date_to, site)
+    accs = _postable(db)
+    acc, ob, rows = (AC.ledger(db, account, f, t, sel.id if sel else None) if account else (None, 0, []))
+    return render(request, "acc_ledger.html", user, accounts=accs, acc=acc, ob=ob, rows=rows, d_from=f, d_to=t,
+                  sites=sites, sel=sel, doc_link=AC.doc_link)
+
+
+@app.get("/trial-balance", response_class=HTMLResponse)
+def trial_balance_page(request: Request, date_from: str | None = None, date_to: str | None = None, site: str | None = None,
+                       db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_VIEW))):
+    f, t, sites, sel = _acc_ctx(request, db, date_from, date_to, site)
+    vals, tot = AC.trial_balance(db, f, t, sel.id if sel else None)
+    rows, _ = AC.tree(db)
+    leaf = [v for aid, v in vals.items()]
+    grand = tuple(round(sum(v[i] for v in leaf), 2) for i in range(6)) if leaf else (0,) * 6
+    return render(request, "acc_trial.html", user, rows=[(a, d) for a, d in rows if tot[a.id] is not None], tot=tot,
+                  grand=grand, d_from=f, d_to=t, sites=sites, sel=sel)
+
+
+@app.get("/statements", response_class=HTMLResponse)
+def statements_page(request: Request, date_from: str | None = None, date_to: str | None = None, site: str | None = None,
+                    db: Session = Depends(get_db), user: User = Depends(require(*AC.ACC_VIEW))):
+    f, t, sites, sel = _acc_ctx(request, db, date_from, date_to, site)
+    sid = sel.id if sel else None
+    _, itot, rev, exp = AC.income_statement(db, f, t, sid)
+    _, btot, sides, profit = AC.balance_sheet(db, t, sid)
+    rows, _ = AC.tree(db)
+    return render(request, "acc_statements.html", user, rows=rows, itot=itot, rev=rev, exp=exp, btot=btot, sides=sides,
+                  profit=profit, d_from=f, d_to=t, sites=sites, sel=sel)
+
+
+@app.post("/accounts/lock")
+async def accounts_lock(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    form = await request.form()
+    d = parse_date(form.get("lock_date"))
+    old = AC.lock_date(db)
+    AC.set_lock_date(db, d)
+    AC.audit(db, user, "lock", "settings", "lock_date", {"قبل": old, "بعد": d}, request)
+    db.commit()
+    flash(request, f"تم قفل الفترات حتى {d}" if d else "تم إلغاء قفل الفترات")
+    return back("/journal")
+
+
+@app.get("/admin/audit", response_class=HTMLResponse)
+def admin_audit(request: Request, action: str = "", q: str = "", page: int = 1, db: Session = Depends(get_db),
+                user: User = Depends(require("admin"))):
+    qry = db.query(AuditLog)
+    if action in AC.AUDIT_ACTIONS:
+        qry = qry.filter(AuditLog.action == action)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(AuditLog.user_name.ilike(like), AuditLog.details.ilike(like), AuditLog.entity_id.ilike(like)))
+    total = qry.count()
+    per = 100
+    rows = qry.order_by(AuditLog.id.desc()).offset((max(page, 1) - 1) * per).limit(per).all()
+    return render(request, "admin_audit.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
+                  action=action, q=q)

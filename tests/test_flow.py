@@ -1733,3 +1733,133 @@ def test_sales_import_dashboard(env):
 
 
 from datetime import date  # noqa: E402
+
+
+def _acc_user(env):
+    from app.auth import hash_password
+    db = SessionLocal()
+    u = db.query(User).filter_by(email="acc@example.com").first()
+    if not u:
+        u = User(email="acc@example.com", name="محاسب", roles="accountant", all_sites=True, password_hash=hash_password("x" * 8))
+        db.add(u)
+        db.commit()
+    env["acc@example.com"] = u.id
+    db.close()
+
+
+def test_accounting_auto_entries_balanced(env):
+    """شجرة الحسابات + القيود التلقائية من كل مستندات الاختبار: كل قيد متوازن والميزان متوازن."""
+    from app import accounting as AC
+    from app.models import Account, JournalEntry, OpeningBalance, Receipt
+    _acc_user(env)
+    db = SessionLocal()
+    AC._set(db, "acct_start", "2020-01-01")
+    db.commit()
+    AC.sync(db, force=True)
+    keys = AC.acc_by_key(db)
+    assert {"inv_spare", "ap", "vat_in", "transferred_co", "exp_spare_crusher"} <= set(keys)
+    entries = db.query(JournalEntry).all()
+    assert entries and all(abs(sum(l.debit for l in e.lines) - sum(l.credit for l in e.lines)) < 0.01 for e in entries)
+    srcs = {e.source for e in entries}
+    assert {"opening", "receipt", "issue"} <= srcs
+    # الأرصدة المنقولة: المخزون مدين ← جاري الشركة المنقول منها الأرصدة دائن بنفس قيمة الأرصدة
+    ob_total = sum(o.value for o in db.query(OpeningBalance))
+    tco = sum(l.credit - l.debit for e in entries if e.source == "opening" for l in e.lines if l.account_id == keys["transferred_co"])
+    assert round(tco, 2) == round(ob_total, 2)
+    # فاتورة INV-1: مخزون 600 + ضريبة 90 ← المورد 690
+    rec = db.query(Receipt).filter_by(invoice_no="INV-1").first()
+    je = db.query(JournalEntry).filter_by(source="receipt", source_id=str(rec.id)).one()
+    got = {(l.account_id, l.debit, l.credit) for l in je.lines}
+    assert got == {(keys["inv_spare"], 600, 0), (keys["vat_in"], 90, 0), (keys["ap"], 0, 690)}
+    rows, _ = AC.tree(db)
+    assert db.query(Account).count() == len(rows)
+    db.close()
+    c = TestClient(app)
+    login(c, env, "acc@example.com")
+    for url in ("/accounts", "/journal", f"/journal/{je.id}", f"/ledger?account={keys['ap']}&date_from=2020-01-01",
+                "/trial-balance?date_from=2020-01-01", "/statements?date_from=2020-01-01", "/journal/new"):
+        assert c.get(url).status_code == 200, url
+    page = c.get("/trial-balance?date_from=2020-01-01").text
+    assert "الميزان متوازن" in page
+    assert "الميزانية متوازنة" in c.get("/statements?date_from=2020-01-01").text
+    # الصلاحيات: أمين المستودع لا يرى الحسابات، ومدير الإنتاج يرى ولا يسجّل قيوداً
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/journal", follow_redirects=False).status_code == 403
+    login(c, env, "prod.manager@example.com")
+    assert c.get("/journal").status_code == 200
+    assert c.get("/journal/new", follow_redirects=False).status_code == 403
+
+
+def test_accounting_doc_changes_follow_and_manual_entry(env):
+    from app import accounting as AC
+    from app.models import AuditLog, JournalEntry, Receipt
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    c.post("/receipts/new", data={"site_id": env["site"], "date": "2026-10-05", "invoice_no": "INV-ACC", "supplier": "مورد",
+                                  "item_id": [env["b"]], "qty": ["2"], "unit_price": ["50"]})
+    db = SessionLocal()
+    rec = db.query(Receipt).filter_by(invoice_no="INV-ACC").one()
+    rid = rec.id
+    lid = rec.lines[0].id
+    db.close()
+    login(c, env, "acc@example.com")
+    c.get("/journal")   # مزامنة
+    db = SessionLocal()
+    je = db.query(JournalEntry).filter_by(source="receipt", source_id=str(rid)).one()
+    assert je.total == 115   # 100 + ضريبة 15
+    db.close()
+    # تعديل الفاتورة بيحدّث القيد، وحذفها بيحذفه — ومتسجّلين في سجل النشاط
+    login(c, env, "admin")
+    c.post(f"/receipts/{rid}/edit", data={"date": "2026-10-05", "invoice_no": "INV-ACC", "supplier": "مورد",
+                                          f"qty_{lid}": "4", f"price_{lid}": "50"})
+    login(c, env, "acc@example.com")
+    c.get("/journal")
+    db = SessionLocal()
+    assert db.query(JournalEntry).filter_by(source="receipt", source_id=str(rid)).one().total == 230
+    db.close()
+    login(c, env, "admin")
+    c.post(f"/receipts/{rid}/delete")
+    login(c, env, "acc@example.com")
+    c.get("/journal")
+    db = SessionLocal()
+    assert db.query(JournalEntry).filter_by(source="receipt", source_id=str(rid)).first() is None
+    acts = {(a.action, a.entity) for a in db.query(AuditLog)}
+    assert ("edit", "receipt") in acts and ("delete", "receipt") in acts
+    keys = AC.acc_by_key(db)
+    db.close()
+    # قيد يدوي: غير المتوازن مرفوض، والمتوازن بيتحفظ ويظهر في دفتر الأستاذ
+    bad = c.post("/journal/new", data={"date": "2026-10-06", "memo": "سداد", "acc": [keys["ap"], keys["bank"]], "dr": ["100", ""],
+                                       "cr": ["", "90"], "site": ["", ""], "party": ["مورد", ""], "note": ["", ""]},
+                 follow_redirects=True)
+    assert "غير متوازن" in bad.text
+    ok = c.post("/journal/new", data={"date": "2026-10-06", "memo": "سداد دفعة للمورد", "acc": [keys["ap"], keys["bank"]],
+                                      "dr": ["100", ""], "cr": ["", "100"], "site": ["", ""], "party": ["مورد", ""], "note": ["", ""]},
+                follow_redirects=True)
+    assert "تم حفظ القيد" in ok.text
+    assert "سداد دفعة للمورد" in c.get(f"/ledger?account={keys['bank']}&date_from=2020-01-01").text
+    db = SessionLocal()
+    m = db.query(JournalEntry).filter_by(source="manual").one()
+    mid = m.id
+    db.close()
+    # قفل الفترات: يمنع الفواتير والقيود بتاريخ داخل الفترة المقفولة (للأدمن فقط)
+    assert c.post("/accounts/lock", data={"lock_date": "2026-10-10"}, follow_redirects=False).status_code == 403
+    login(c, env, "admin")
+    c.post("/accounts/lock", data={"lock_date": "2026-10-10"})
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/receipts/new", data={"site_id": env["site"], "date": "2026-10-08", "invoice_no": "INV-LOCK", "supplier": "مورد",
+                                      "item_id": [env["b"]], "qty": ["1"], "unit_price": ["10"]}, follow_redirects=True)
+    assert "مقفولة" in r.text
+    login(c, env, "acc@example.com")
+    assert "مقفولة" in c.post(f"/journal/{mid}/delete", follow_redirects=True).text
+    login(c, env, "admin")
+    c.post("/accounts/lock", data={"lock_date": ""})
+    login(c, env, "acc@example.com")
+    assert "تم حذف القيد" in c.post(f"/journal/{mid}/delete", follow_redirects=True).text
+    db = SessionLocal()
+    assert db.query(Receipt).filter_by(invoice_no="INV-LOCK").first() is None
+    acts = {a.action for a in db.query(AuditLog)}
+    assert {"lock", "create", "delete"} <= acts
+    db.close()
+    login(c, env, "admin")
+    page = c.get("/admin/audit").text
+    assert "سجل النشاط" in page and "قفل الفترات" in page

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block body %}
+{% import "_acc_nav.html" as nav with context %}
+<h1>ميزان المراجعة</h1>
+{% include "_acc_nav.html" %}
+{{ nav.filters() }}
+<div class="card">
+  {% set ok = (grand[0] - grand[1] + grand[2] - grand[3] - grand[4] + grand[5])|abs < 0.05 and (grand[2] - grand[3])|abs < 0.05 %}
+  <p style="margin-top:0">{% if ok %}<span class="st st-approved">✓ الميزان متوازن</span>{% else %}<span class="st st-rejected">✗ الميزان غير متوازن — راجع القيود</span>{% endif %}
+    <span class="muted">من {{ d_from }} إلى {{ d_to }}{{ ' — ' ~ sel.name if sel }}</span></p>
+  <div class="tw"><table class="t">
+  <tr><th rowspan="2">الكود</th><th rowspan="2">الحساب</th><th colspan="2" class="n" style="text-align:center">رصيد أول الفترة</th><th colspan="2" class="n" style="text-align:center">حركة الفترة</th><th colspan="2" class="n" style="text-align:center">رصيد آخر الفترة</th></tr>
+  <tr><th class="n">مدين</th><th class="n">دائن</th><th class="n">مدين</th><th class="n">دائن</th><th class="n">مدين</th><th class="n">دائن</th></tr>
+  {% for a, depth in rows %}{% set v = tot[a.id] %}
+  {% set ob = v[0] - v[1] %}{% set cb = v[4] - v[5] %}
+  <tr><td dir="ltr" style="text-align:right">{{ a.code }}</td>
+    <td style="padding-right:{{ 12 + depth * 22 }}px">{% if a.is_group %}<b>{{ a.name }}</b>{% else %}<a href="/ledger?account={{ a.id }}&date_from={{ d_from }}&date_to={{ d_to }}{% if sel %}&site={{ sel.id }}{% endif %}">{{ a.name }}</a>{% endif %}</td>
+    {% for x in [ob if ob > 0 else 0, -ob if ob < 0 else 0, v[2], v[3], cb if cb > 0 else 0, -cb if cb < 0 else 0] %}
+    <td class="n">{% if x|abs >= 0.005 %}{% if a.is_group %}<b>{{ fmt(x) }}</b>{% else %}{{ fmt(x) }}{% endif %}{% else %}-{% endif %}</td>{% endfor %}</tr>
+  {% else %}<tr><td colspan="8" class="muted">لا توجد قيود</td></tr>{% endfor %}
+  <tr class="total"><td colspan="2">الإجمالي</td>{% for x in grand %}<td class="n">{{ fmt(x) }}</td>{% endfor %}</tr>
+  </table></div>
+</div>
+{% endblock %}

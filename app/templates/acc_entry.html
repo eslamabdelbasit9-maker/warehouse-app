@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>قيد يومية {{ e.source_id if e.source == 'manual' else ('JV-' ~ e.id) }}</h1>
+{% include "_acc_nav.html" %}
+<div class="card">
+  <div class="meta">
+    <div><span class="muted">التاريخ</span> <b>{{ e.date }}</b></div>
+    <div><span class="muted">المصدر</span> <b>{{ JOURNAL_SOURCES.get(e.source, e.source) }}</b>{% if doc %} — <a href="{{ doc }}">فتح المستند {{ e.ref or '' }}</a>{% endif %}</div>
+    <div><span class="muted">الموقع</span> <b>{{ e.site.name if e.site else '-' }}</b></div>
+    {% if e.created_by %}<div><span class="muted">سجّله</span> <b>{{ e.created_by.name }}</b> <span class="muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>{% endif %}
+  </div>
+  {% if e.memo %}<p><b>البيان:</b> {{ e.memo }}</p>{% endif %}
+  <div class="tw"><table class="t">
+  <tr><th>الكود</th><th>الحساب</th><th>الموقع</th><th>الجهة</th><th>ملاحظة</th><th class="n">مدين</th><th class="n">دائن</th></tr>
+  {% for l in e.lines %}<tr><td dir="ltr" style="text-align:right">{{ l.account.code }}</td><td><a href="/ledger?account={{ l.account_id }}">{{ l.account.name }}</a></td>
+    <td>{{ l.site.name if l.site else '' }}</td><td>{{ l.party or '' }}</td><td>{{ l.note or '' }}</td>
+    <td class="n">{{ fmt(l.debit) if l.debit else '' }}</td><td class="n">{{ fmt(l.credit) if l.credit else '' }}</td></tr>{% endfor %}
+  <tr class="total"><td colspan="5">الإجمالي</td><td class="n">{{ fmt(e.lines|sum(attribute='debit')) }}</td><td class="n">{{ fmt(e.lines|sum(attribute='credit')) }}</td></tr>
+  </table></div>
+  {% if e.source != 'manual' %}<p class="muted" style="margin-bottom:0">قيد تلقائي: يتحدّث وحده عند تعديل المستند، ويُحذف عند حذفه.</p>{% endif %}
+  {% if can_edit %}<div class="noprint" style="display:flex;gap:8px;margin-top:12px">
+    <a class="btn sec" href="/journal/new?eid={{ e.id }}">تعديل</a>
+    <form method="post" action="/journal/{{ e.id }}/delete" onsubmit="return confirm('حذف القيد نهائياً؟ (يُسجَّل في سجل النشاط)')"><button class="btn red">حذف</button></form>
+    <button class="btn sec" onclick="print()">طباعة</button></div>{% endif %}
+</div>
+{% endblock %}

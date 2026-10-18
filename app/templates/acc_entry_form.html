@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ 'تعديل القيد ' ~ e.source_id if e else 'قيد يومية يدوي' }}</h1>
+{% include "_acc_nav.html" %}
+<datalist id="accs">{% for a in accounts %}<option value="{{ a.code }} — {{ a.name }}" data-id="{{ a.id }}"></option>{% endfor %}</datalist>
+<form method="post" action="/journal/new" class="card" id="jform">
+  {% if e %}<input type="hidden" name="eid" value="{{ e.id }}">{% endif %}
+  <div class="meta">
+    <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ e.date if e else today }}" required></div>
+    <div class="f" style="flex:1;min-width:260px"><label>البيان</label><input name="memo" value="{{ e.memo if e and e.memo else '' }}" placeholder="مثل: سداد دفعة للمورد ..."></div>
+  </div>
+  {% if lock %}<p class="muted">الفترات مقفولة حتى {{ lock }} — لا يمكن تسجيل قيد بتاريخ قبله.</p>{% endif %}
+  <div class="tw" style="margin-top:12px"><table class="t lines" id="jl">
+    <tr><th>الحساب</th><th class="n">مدين</th><th class="n">دائن</th><th>الموقع</th><th>الجهة (مورد / عميل)</th><th>ملاحظة</th><th></th></tr>
+  </table></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+    <button type="button" class="btn sec" id="addl">+ سطر</button>
+    <span>المدين: <b class="num" id="tdr">0.00</b> — الدائن: <b class="num" id="tcr">0.00</b> — الفرق: <b class="num" id="tdf">0.00</b></span>
+    <span class="right"></span><button class="btn green" id="save">حفظ القيد</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var tb = document.getElementById('jl'), ids = {};
+  document.querySelectorAll('#accs option').forEach(function(o){ ids[o.value] = o.dataset.id; });
+  var names = {}; Object.keys(ids).forEach(function(k){ names[ids[k]] = k; });
+  var sites = {{ sites|map(attribute='id')|list|tojson }}, snames = {{ sites|map(attribute='name')|list|tojson }};
+  function row(v){
+    v = v || {};
+    var tr = document.createElement('tr'), so = '<option value="">-</option>' + sites.map(function(s, i){ return '<option value="' + s + '"' + (String(v.site) === String(s) ? ' selected' : '') + '>' + snames[i].replace(/</g,'&lt;') + '</option>'; }).join('');
+    tr.innerHTML = '<td><input list="accs" class="acc" autocomplete="off" style="min-width:240px"><input type="hidden" name="acc"></td>' +
+      '<td><input name="dr" type="number" step="0.01" min="0" class="dr" style="width:120px"></td><td><input name="cr" type="number" step="0.01" min="0" class="cr" style="width:120px"></td>' +
+      '<td><select name="site">' + so + '</select></td><td><input name="party"></td><td><input name="note"></td>' +
+      '<td><button type="button" class="btn sec sm del">✕</button></td>';
+    tb.appendChild(tr);
+    var a = tr.querySelector('.acc'), h = tr.querySelector('[name=acc]');
+    if (v.acc) { a.value = names[v.acc] || ''; h.value = v.acc; }
+    tr.querySelector('.dr').value = v.dr || ''; tr.querySelector('.cr').value = v.cr || '';
+    tr.querySelector('[name=party]').value = v.party || ''; tr.querySelector('[name=note]').value = v.note || '';
+    a.addEventListener('input', function(){ h.value = ids[a.value] || ''; a.setCustomValidity(a.value && !h.value ? 'اختر الحساب من القائمة' : ''); });
+    tr.querySelector('.del').addEventListener('click', function(){ tr.remove(); calc(); });
+    tr.querySelector('.dr').addEventListener('input', function(){ if (this.value) tr.querySelector('.cr').value = ''; calc(); });
+    tr.querySelector('.cr').addEventListener('input', function(){ if (this.value) tr.querySelector('.dr').value = ''; calc(); });
+  }
+  function calc(){
+    var d = 0, c = 0;
+    tb.querySelectorAll('.dr').forEach(function(i){ d += +i.value || 0; });
+    tb.querySelectorAll('.cr').forEach(function(i){ c += +i.value || 0; });
+    var f = function(x){ return x.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+    document.getElementById('tdr').textContent = f(d); document.getElementById('tcr').textContent = f(c);
+    var df = document.getElementById('tdf'); df.textContent = f(Math.abs(d - c)); df.style.color = Math.abs(d - c) >= .01 ? 'var(--err)' : 'var(--ok)';
+  }
+  var init = {{ init_rows|tojson }};
+  (init.length ? init : [{}, {}]).forEach(row); calc();
+  document.getElementById('addl').addEventListener('click', function(){ row(); });
+})();
+</script>
+{% endblock %}

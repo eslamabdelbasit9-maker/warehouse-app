@@ -15,6 +15,7 @@ ROLES = {
     "engineer": "مهندس معتمد",
     "manager": "مدير الإنتاج",
     "final": "الاعتماد النهائي",
+    "accountant": "محاسب",
 }
 UNIT_KINDS = {
     "asphalt": "خلاطة اسفلت",
@@ -457,3 +458,76 @@ class SalesLine(Base):
     source: Mapped[str | None] = mapped_column(String(300))           # موضوع الإيميل وتاريخه
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     site: Mapped[Site | None] = relationship()
+
+
+# ================= الحسابات العامة =================
+ACCOUNT_TYPES = {"asset": "أصول", "liability": "خصوم", "equity": "حقوق ملكية", "revenue": "إيرادات", "expense": "مصروفات"}
+JOURNAL_SOURCES = {"manual": "قيد يدوي", "opening": "أرصدة منقولة", "receipt": "فاتورة وارد", "issue": "صرف معتمد",
+                   "production": "إنتاج الكسارات", "transfer": "تحويل بين الفروع", "sale": "مستخلص مبيعات"}
+
+
+class Account(Base):
+    """شجرة الحسابات. الحساب «الأب» (is_group) لا يُقيَّد عليه مباشرة. system_key للحسابات اللي القيود التلقائية بتستخدمها."""
+    __tablename__ = "accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str] = mapped_column(String(10))                       # asset | liability | equity | revenue | expense
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    is_group: Mapped[bool] = mapped_column(Boolean, default=False)
+    system_key: Mapped[str | None] = mapped_column(String(40), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    parent: Mapped["Account | None"] = relationship(remote_side="Account.id")
+
+
+class JournalEntry(Base):
+    """قيد يومية. القيود التلقائية ليها source + source_id (المستند) وبتتحدّث لوحدها مع المستند."""
+    __tablename__ = "journal_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    memo: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(15), default="manual", index=True)
+    source_id: Mapped[str | None] = mapped_column(String(40))
+    ref: Mapped[str | None] = mapped_column(String(100))                # رقم المستند (فاتورة / طلب / تحويل ...)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    fingerprint: Mapped[str | None] = mapped_column(String(64))         # بصمة السطور (للقيود التلقائية)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site | None] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    lines: Mapped[list["JournalLine"]] = relationship(back_populates="entry", cascade="all, delete-orphan",
+                                                      order_by="JournalLine.id")
+    __table_args__ = (UniqueConstraint("source", "source_id"),)
+
+    @property
+    def total(self):
+        return round(sum(l.debit or 0 for l in self.lines), 2)
+
+
+class JournalLine(Base):
+    __tablename__ = "journal_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entry_id: Mapped[int] = mapped_column(ForeignKey("journal_entries.id"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    debit: Mapped[float] = mapped_column(Float, default=0)
+    credit: Mapped[float] = mapped_column(Float, default=0)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    party: Mapped[str | None] = mapped_column(String(200))              # المورد / العميل / الوحدة
+    note: Mapped[str | None] = mapped_column(String(300))
+    entry: Mapped[JournalEntry] = relationship(back_populates="lines")
+    account: Mapped[Account] = relationship()
+    site: Mapped[Site | None] = relationship()
+
+
+class AuditLog(Base):
+    """سجل النشاط: مين عمل إيه وإمتى (تعديل / حذف / دخول / إعدادات) — للقراءة فقط."""
+    __tablename__ = "audit_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    user_name: Mapped[str | None] = mapped_column(String(150))
+    action: Mapped[str] = mapped_column(String(30))
+    entity: Mapped[str | None] = mapped_column(String(40))
+    entity_id: Mapped[str | None] = mapped_column(String(40))
+    details: Mapped[str | None] = mapped_column(Text)
+    ip: Mapped[str | None] = mapped_column(String(60))

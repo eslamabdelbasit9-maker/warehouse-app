@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block body %}
+{% import "_acc_nav.html" as nav with context %}
+<h1>شجرة الحسابات</h1>
+{% include "_acc_nav.html" %}
+{{ nav.filters(false) }}
+<div class="card"><div class="tw"><table class="t" id="acct">
+<tr><th>الكود</th><th>الحساب</th><th>النوع</th><th class="n">الرصيد في {{ d_to }}</th>{% if can_edit %}<th class="noprint"></th>{% endif %}</tr>
+{% for a, depth in rows %}{% set b = tot[a.id] %}
+<tr{% if not a.active %} style="opacity:.5"{% endif %}>
+  <td dir="ltr" style="text-align:right">{{ a.code }}</td>
+  <td style="padding-right:{{ 12 + depth * 22 }}px">{% if a.is_group %}<b>{{ a.name }}</b>{% else %}<a href="/ledger?account={{ a.id }}">{{ a.name }}</a>{% endif %}
+    {% if not a.active %}<span class="muted">(موقوف)</span>{% endif %}</td>
+  <td class="muted">{{ ACCOUNT_TYPES.get(a.type, a.type) }}</td>
+  <td class="n">{% if b %}{% set v = b if a.type in ('asset','expense') else -b %}{% if a.is_group %}<b>{{ fmt(v) }}</b>{% else %}{{ fmt(v) }}{% endif %}{% else %}-{% endif %}</td>
+  {% if can_edit %}<td class="noprint"><details><summary class="muted" style="cursor:pointer;font-size:12px">تعديل</summary>
+    <form method="post" action="/accounts" style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="hidden" name="id" value="{{ a.id }}">
+      <input name="name" value="{{ a.name }}" required style="min-width:180px">
+      <label style="display:inline;font-size:12px"><input type="checkbox" name="active" value="1" {{ 'checked' if a.active }}> فعّال</label>
+      <button class="btn sm">حفظ</button></form></details></td>{% endif %}
+</tr>{% endfor %}
+</table></div>
+<p class="muted" style="margin-bottom:0">الرصيد بطبيعته: الأصول والمصروفات مدين، والخصوم وحقوق الملكية والإيرادات دائن. اضغط على أي حساب لفتح دفتر الأستاذ.</p></div>
+
+{% if can_edit %}
+<form class="card noprint" method="post" action="/accounts" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <h2 style="width:100%;margin:0 0 4px">إضافة حساب</h2>
+  <div class="f"><label>تحت الحساب الرئيسي</label><select name="parent_id" required><option value="">اختر</option>
+    {% for g in groups %}<option value="{{ g.id }}">{{ g.code }} — {{ g.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الكود</label><input name="code" required dir="ltr" style="max-width:120px"></div>
+  <div class="f" style="flex:1;min-width:200px"><label>اسم الحساب</label><input name="name" required></div>
+  <label style="align-self:center"><input type="checkbox" name="is_group" value="1"> حساب رئيسي (له حسابات فرعية)</label>
+  <button class="btn green">+ إضافة</button>
+</form>{% endif %}
+{% endblock %}

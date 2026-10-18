@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+{% import "_acc_nav.html" as nav with context %}
+<h1>القوائم المالية</h1>
+{% include "_acc_nav.html" %}
+{{ nav.filters() }}
+{% macro section(types, totals, sign_fn) %}
+  {% for a, depth in rows if a.type in types and totals[a.id] is not none and totals[a.id]|abs >= 0.005 %}
+  <tr><td style="padding-right:{{ 12 + depth * 22 }}px">{% if a.is_group %}<b>{{ a.name }}</b>{% else %}<a href="/ledger?account={{ a.id }}&date_from={{ d_from }}&date_to={{ d_to }}">{{ a.name }}</a>{% endif %}</td>
+    <td class="n">{% if a.is_group %}<b>{{ fmt(totals[a.id]) }}</b>{% else %}{{ fmt(totals[a.id]) }}{% endif %}</td></tr>
+  {% endfor %}
+{% endmacro %}
+<div class="grid g2">
+  <div class="card"><h2 style="margin-top:0">قائمة الدخل (الأرباح والخسائر)</h2>
+    <p class="muted" style="margin-top:0">من {{ d_from }} إلى {{ d_to }}{{ ' — ' ~ sel.name if sel }}</p>
+    <div class="tw"><table class="t">
+      <tr><th>البند</th><th class="n">المبلغ</th></tr>
+      {{ section(['revenue'], itot, none) }}
+      <tr class="total"><td>إجمالي الإيرادات</td><td class="n">{{ fmt(rev) }}</td></tr>
+      {{ section(['expense'], itot, none) }}
+      <tr class="total"><td>إجمالي المصروفات والتكاليف</td><td class="n">{{ fmt(exp) }}</td></tr>
+      <tr class="total"><td>{{ 'صافي الربح' if rev - exp >= 0 else 'صافي الخسارة' }}</td><td class="n {{ 'low' if rev - exp < 0 }}">{{ fmt((rev - exp)|abs) }}</td></tr>
+    </table></div>
+    <p class="muted" style="margin-bottom:0">الإيرادات من مستخلصات المبيعات، والمصروفات من الصرف المعتمد بعد خصم إنتاج الكسارات المحمّل على المخزون.</p></div>
+
+  <div class="card"><h2 style="margin-top:0">قائمة المركز المالي (الميزانية)</h2>
+    <p class="muted" style="margin-top:0">في {{ d_to }}{{ ' — ' ~ sel.name if sel }}</p>
+    <div class="tw"><table class="t">
+      <tr><th>البند</th><th class="n">المبلغ</th></tr>
+      {{ section(['asset'], btot, none) }}
+      <tr class="total"><td>إجمالي الأصول</td><td class="n">{{ fmt(sides.asset) }}</td></tr>
+      {{ section(['liability'], btot, none) }}
+      <tr class="total"><td>إجمالي الخصوم</td><td class="n">{{ fmt(sides.liability) }}</td></tr>
+      {{ section(['equity'], btot, none) }}
+      <tr><td style="padding-right:34px">صافي ربح (خسارة) الفترة حتى التاريخ</td><td class="n">{{ fmt(profit) }}</td></tr>
+      <tr class="total"><td>إجمالي حقوق الملكية</td><td class="n">{{ fmt(sides.equity + profit) }}</td></tr>
+      {% set diff = sides.asset - sides.liability - sides.equity - profit %}
+      <tr class="total"><td>إجمالي الخصوم وحقوق الملكية</td><td class="n">{{ fmt(sides.liability + sides.equity + profit) }}</td></tr>
+    </table></div>
+    <p style="margin-bottom:0">{% if diff|abs < 0.05 %}<span class="st st-approved">✓ الميزانية متوازنة</span>{% else %}<span class="st st-rejected">✗ فرق {{ fmt(diff) }}</span>{% endif %}</p></div>
+</div>
+{% endblock %}

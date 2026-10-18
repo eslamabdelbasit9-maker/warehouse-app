@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>سجل النشاط</h1>
+{% include "_admin_nav.html" %}
+<form class="filters card noprint" method="get">
+  <div class="f"><label>العملية</label><select name="action"><option value="">الكل</option>{% for k, v in AUDIT_ACTIONS.items() %}<option value="{{ k }}" {{ 'selected' if action == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>بحث (المستخدم / التفاصيل / الرقم)</label><input name="q" value="{{ q }}"></div>
+  <button class="btn">عرض</button>
+</form>
+<div class="card">
+  <p class="muted" style="margin-top:0">{{ total }} عملية. السجل للقراءة فقط ولا يمكن تعديله أو حذفه من البرنامج.</p>
+  <div class="tw"><table class="t">
+  <tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>على</th><th>التفاصيل</th><th>IP</th></tr>
+  {% for r in rows %}<tr><td style="white-space:nowrap">{{ r.at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ r.user_name or '-' }}</td>
+    <td><span class="st {{ 'st-rejected' if r.action in ('delete','restore','login_failed') else 'st-approved' if r.action == 'login' else 'st-partial' }}">{{ AUDIT_ACTIONS.get(r.action, r.action) }}</span></td>
+    <td>{{ r.entity or '' }} {{ r.entity_id or '' }}</td><td style="font-size:12px;max-width:520px;overflow-wrap:anywhere">{{ r.details or '' }}</td><td dir="ltr">{{ r.ip or '' }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">لا توجد عمليات</td></tr>{% endfor %}
+  </table></div>
+  {% if pages > 1 %}<div class="pager">{% for p in range(1, pages+1) %}{% if p == page %}<b>{{ p }}</b>{% else %}<a href="?action={{ action }}&q={{ q|urlencode }}&page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}</div>{% endif %}
+</div>
+{% endblock %}

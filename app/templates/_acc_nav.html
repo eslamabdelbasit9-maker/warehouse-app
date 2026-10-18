@@ -1,0 +1,15 @@
+{# تبويبات الحسابات + فلتر الفترة والموقع (show_from=false في الصفحات اللي بتاخد تاريخ واحد) #}
+<div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+  {% for href, label in [('/accounts','شجرة الحسابات'),('/journal','القيود اليومية'),('/ledger','دفتر الأستاذ'),('/trial-balance','ميزان المراجعة'),('/statements','القوائم المالية')] %}
+  <a class="btn {{ '' if path==href else 'sec' }} sm" href="{{ href }}">{{ label }}</a>{% endfor %}
+  {% if user.has('accountant') %}<span class="right"></span><a class="btn green sm" href="/journal/new">+ قيد يدوي</a>{% endif %}
+</div>
+{% macro filters(show_from=true, extra='') %}
+<form class="filters card noprint" method="get">{{ extra }}
+  <div class="f"><label>الموقع</label><select name="site"><option value="">كل المواقع</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}</select></div>
+  {% if show_from %}<div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from }}"></div>{% endif %}
+  <div class="f"><label>{{ 'إلى تاريخ' if show_from else 'حتى تاريخ' }}</label><input type="date" name="date_to" value="{{ d_to }}"></div>
+  {{ caller() if caller is defined }}
+  <button class="btn">عرض</button>
+</form>
+{% endmacro %}

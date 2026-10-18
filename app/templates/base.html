@@ -51,6 +51,12 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/raw-stock', 'مواد خام', 'layers', path.startswith('/raw-stock')) }}
     {{ nl('/production', 'إنتاج الكسارات', 'chart', path.startswith('/production')) }}
     {{ nl('/unit-statement', 'كشف حساب الوحدة', 'file', path.startswith('/unit-statement')) }}
+    {% if user.has('accountant', 'manager', 'final') %}<div class="sg">الحسابات</div>
+    {{ nl('/accounts', 'شجرة الحسابات', 'list', path.startswith('/accounts')) }}
+    {{ nl('/journal', 'القيود اليومية', 'file', path.startswith('/journal')) }}
+    {{ nl('/ledger', 'دفتر الأستاذ', 'layers', path.startswith('/ledger')) }}
+    {{ nl('/trial-balance', 'ميزان المراجعة', 'steps', path.startswith('/trial-balance')) }}
+    {{ nl('/statements', 'القوائم المالية', 'chart', path.startswith('/statements')) }}{% endif %}
     <div class="sg">المستودع</div>
     {% if user.has('engineer', 'manager', 'final', 'storekeeper') %}{{ nl('/stagnant', 'الأصناف الراكدة', 'archive', path.startswith('/stagnant')) }}{% endif %}
     {{ nl('/receipts', 'الوارد', 'cart', path.startswith('/receipts')) }}

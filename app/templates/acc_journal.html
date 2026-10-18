@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+{% import "_acc_nav.html" as nav with context %}
+<h1>القيود اليومية</h1>
+{% include "_acc_nav.html" %}
+{% call nav.filters() %}
+  <div class="f"><label>المصدر</label><select name="source"><option value="">الكل</option>{% for k, v in JOURNAL_SOURCES.items() %}<option value="{{ k }}" {{ 'selected' if source == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>بحث (بيان / مستند / جهة)</label><input name="q" value="{{ q }}"></div>
+{% endcall %}
+{% if user.has('admin') %}<form class="card noprint" method="post" action="/accounts/lock" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <div class="f"><label>قفل الفترات حتى تاريخ</label><input type="date" name="lock_date" value="{{ lock or '' }}"></div>
+  <button class="btn sec" onclick="return confirm('بعد القفل لا يمكن تسجيل أو تعديل أو حذف فواتير أو طلبات أو قيود بتاريخ داخل الفترة المقفولة. متابعة؟')">حفظ</button>
+  <span class="muted" style="font-size:12px">{{ ('الفترات مقفولة حتى ' ~ lock ~ '. اترك التاريخ فارغاً لإلغاء القفل.') if lock else 'لا توجد فترات مقفولة.' }}</span>
+</form>{% endif %}
+<div class="card">
+  <p class="muted" style="margin-top:0">{{ total }} قيد من {{ d_from }} إلى {{ d_to }}. القيود التلقائية تُنشأ وتتحدّث من المستندات نفسها (الفواتير، الصرف المعتمد، الإنتاج، التحويلات، المستخلصات)، ولا تُعدَّل إلا من مستندها.</p>
+  <div class="tw"><table class="t">
+  <tr><th>التاريخ</th><th>رقم القيد</th><th>المصدر</th><th>البيان</th><th>الموقع</th><th>الحسابات</th><th class="n">المبلغ</th></tr>
+  {% for e in rows %}<tr>
+    <td>{{ e.date }}</td><td><a href="/journal/{{ e.id }}">{{ e.source_id if e.source == 'manual' else ('JV-' ~ e.id) }}</a></td>
+    <td><span class="st {{ 'st-approved' if e.source == 'manual' else 'st-partial' }}">{{ JOURNAL_SOURCES.get(e.source, e.source) }}</span></td>
+    <td>{{ e.memo or '' }}{% if e.ref %} <span class="muted">— {% set dl = doc_link(e) %}{% if dl %}<a href="{{ dl }}">{{ e.ref }}</a>{% else %}{{ e.ref }}{% endif %}</span>{% endif %}</td>
+    <td>{{ e.site.name if e.site else '' }}</td>
+    <td style="font-size:12.5px">{% for l in e.lines %}<div>{{ 'من ح/' if l.debit else 'إلى ح/' }} {{ l.account.name }}{% if l.party %} <span class="muted">({{ l.party }})</span>{% endif %}</div>{% endfor %}</td>
+    <td class="n"><b>{{ fmt(e.total) }}</b></td></tr>
+  {% else %}<tr><td colspan="7" class="muted">لا توجد قيود في الفترة</td></tr>{% endfor %}
+  </table></div>
+  {% if pages > 1 %}<div class="pager">{% for p in range(1, pages+1) %}{% if p == page %}<b>{{ p }}</b>{% else %}<a href="?date_from={{ d_from }}&date_to={{ d_to }}&site={{ sel.id if sel else '' }}&source={{ source }}&q={{ q|urlencode }}&page={{ p }}">{{ p }}</a>{% endif %}{% endfor %}</div>{% endif %}
+</div>
+{% endblock %}

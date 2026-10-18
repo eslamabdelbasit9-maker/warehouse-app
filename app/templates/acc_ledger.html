@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+{% import "_acc_nav.html" as nav with context %}
+<h1>دفتر الأستاذ{% if acc %} — {{ acc.code }} {{ acc.name }}{% endif %}</h1>
+{% include "_acc_nav.html" %}
+{% call nav.filters() %}
+  <div class="f" style="min-width:260px"><label>الحساب</label><select name="account" required><option value="">اختر الحساب</option>
+    {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if acc and acc.id == a.id }}>{{ a.code }} — {{ a.name }}</option>{% endfor %}</select></div>
+{% endcall %}
+{% if acc %}
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>القيد</th><th>البيان</th><th>الجهة</th><th>الموقع</th><th class="n">مدين</th><th class="n">دائن</th><th class="n">الرصيد</th></tr>
+<tr class="total"><td colspan="7">رصيد أول الفترة ({{ d_from }})</td><td class="n">{{ fmt(ob) }}</td></tr>
+{% for l, bal in rows %}{% set e = l.entry %}<tr>
+  <td>{{ e.date }}</td><td><a href="/journal/{{ e.id }}">{{ e.source_id if e.source == 'manual' else ('JV-' ~ e.id) }}</a></td>
+  <td>{{ e.memo or '' }}{% if e.ref %} <span class="muted">— {% set dl = doc_link(e) %}{% if dl %}<a href="{{ dl }}">{{ e.ref }}</a>{% else %}{{ e.ref }}{% endif %}</span>{% endif %}{% if l.note %} <span class="muted">({{ l.note }})</span>{% endif %}</td>
+  <td>{{ l.party or '' }}</td><td>{{ l.site.name if l.site else '' }}</td>
+  <td class="n">{{ fmt(l.debit) if l.debit else '' }}</td><td class="n">{{ fmt(l.credit) if l.credit else '' }}</td><td class="n"><b>{{ fmt(bal) }}</b></td></tr>
+{% else %}<tr><td colspan="8" class="muted">لا توجد حركات في الفترة</td></tr>{% endfor %}
+<tr class="total"><td colspan="5">الإجمالي ورصيد آخر الفترة ({{ d_to }})</td>
+  <td class="n">{{ fmt(rows|map(attribute=0)|sum(attribute='debit')) }}</td><td class="n">{{ fmt(rows|map(attribute=0)|sum(attribute='credit')) }}</td>
+  <td class="n">{{ fmt(rows[-1][1] if rows else ob) }}</td></tr>
+</table></div>
+<p class="muted" style="margin-bottom:0">الرصيد بطبيعة الحساب ({{ 'مدين' if acc.type in ('asset','expense') else 'دائن' }}).</p></div>
+{% else %}<div class="card"><p class="muted" style="margin:0">اختر حساباً لعرض حركاته.</p></div>{% endif %}
+{% endblock %}
