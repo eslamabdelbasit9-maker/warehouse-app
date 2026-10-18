@@ -537,23 +537,23 @@ table.t tr.colf input[type=search]{min-width:60px}
 }
 
 /* ================= لوحة المتابعة: لوحة داكنة بلون أخضر (شكل التقارير الحديثة) ================= */
-.dboard{--dk-bg:#0C1210;--dk-card:#131B18;--dk-card2:#18221E;--dk-line:#22302A;--dk-text:#E8F0EC;--dk-muted:#8BA096;
-  --dk-acc:#3DDC84;--dk-acc2:#B8F26B;--line:var(--dk-line);--muted:var(--dk-muted);
-  background:radial-gradient(900px 420px at 90% -15%,rgba(61,220,132,.13),transparent 60%),
-             radial-gradient(700px 380px at 0% 110%,rgba(184,242,107,.06),transparent 60%),var(--dk-bg);
-  color:var(--dk-text);border:1px solid #1B2622;border-radius:24px;padding:20px;margin-bottom:18px;
+.dboard{--dk-bg:var(--t-bg,var(--dk-bg));--dk-card:var(--t-card,#131B18);--dk-card2:var(--t-card2,#18221E);--dk-line:var(--t-line,var(--dk-line));--dk-text:#E9EDF1;--dk-muted:#97A2AD;
+  --dk-acc:var(--t-acc,#3DDC84);--dk-acc-d:var(--t-acc-d,#178049);--dk-acc-dd:var(--t-acc-dd,#0F5F36);--dk-rgb:var(--t-acc-rgb,61,220,132);--dk-acc2:#B8F26B;--line:var(--dk-line);--muted:var(--dk-muted);
+  background:radial-gradient(900px 420px at 90% -15%,rgba(var(--dk-rgb),.13),transparent 60%),
+             radial-gradient(700px 380px at 0% 110%,rgba(var(--dk-rgb),.05),transparent 60%),var(--dk-bg);
+  color:var(--dk-text);border:1px solid var(--dk-line);border-radius:24px;padding:20px;margin-bottom:18px;
   box-shadow:0 24px 60px -30px rgba(0,0,0,.7);color-scheme:dark}
 .dboard .card{background:var(--dk-card);border:1px solid var(--dk-line);box-shadow:none;color:var(--dk-text);border-radius:18px}
-main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rgba(0,0,0,.8);border-color:#2C3D36}
+main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rgba(0,0,0,.8);border-color:color-mix(in srgb,var(--dk-line) 70%,#fff 10%)}
 .dboard h2,.dboard .card-h h2{color:var(--dk-text)}
 .dboard .muted,.dboard .card-h .muted{color:var(--dk-muted)}
-.dboard a{color:#7BE3A8}
-.dboard .ic-chip{background:rgba(61,220,132,.12);color:var(--dk-acc);border-radius:12px}
+.dboard a{color:color-mix(in srgb,var(--dk-acc) 75%,#fff)}
+.dboard .ic-chip{background:rgba(var(--dk-rgb),.12);color:var(--dk-acc);border-radius:12px}
 /* الفلاتر */
 .dboard .filters{background:var(--dk-card2)}
 .dboard .filters label{color:var(--dk-muted)}
-.dboard .filters input,.dboard .filters select{background:#0E1513;border:1px solid var(--dk-line);color:var(--dk-text);border-radius:10px}
-.dboard .filters .btn{background:var(--dk-acc);color:#062314;border-radius:999px;padding-inline:22px}
+.dboard .filters input,.dboard .filters select{background:var(--dk-bg);border:1px solid var(--dk-line);color:var(--dk-text);border-radius:10px}
+.dboard .filters .btn{background:var(--dk-acc);color:var(--dk-bg);border-radius:999px;padding-inline:22px}
 /* المؤشرات */
 .dboard .kpis{gap:14px;margin-bottom:14px}
 .dboard .kpi{background:var(--dk-card);min-height:150px;padding:20px;gap:6px}
@@ -562,56 +562,63 @@ main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rg
 .dboard .kpi .l{color:var(--dk-muted)}
 .dboard .kpi .s{align-self:flex-start;background:rgba(255,255,255,.06);color:var(--dk-muted);border-radius:999px;padding:3px 10px;opacity:1;margin-top:auto}
 .dboard .kpi-ic{background:rgba(255,255,255,.06);color:var(--dk-acc)}
-.dboard .kpi.feat{background:linear-gradient(150deg,#27B46A 0%,#178049 55%,#0F5F36 100%);border-color:#33C878;
-  box-shadow:0 18px 40px -18px rgba(39,180,106,.55)}
+.dboard .kpi.feat{background:linear-gradient(150deg,var(--dk-acc) -20%,var(--dk-acc-d) 50%,var(--dk-acc-dd) 100%);border-color:color-mix(in srgb,var(--dk-acc) 60%,transparent);
+  box-shadow:0 18px 40px -18px rgba(var(--dk-rgb),.45)}
 .dboard .kpi.feat .l,.dboard .kpi.feat .s{color:rgba(255,255,255,.88)}
 .dboard .kpi.feat .s{background:rgba(255,255,255,.16)}
 .dboard .kpi.feat .kpi-ic{background:rgba(255,255,255,.18);color:#fff}
-.dboard .kpi::after{background:linear-gradient(150deg,#27B46A,#0F5F36) !important}
+.dboard .kpi::after{background:linear-gradient(150deg,var(--dk-acc-d),var(--dk-acc-dd)) !important}
 /* الرسوم */
 .dboard details.mcard{background:var(--dk-card)}
 .dboard details.mcard>summary:hover{background:rgba(255,255,255,.025)}
 .dboard details.mcard .mc-tot b{color:#fff;font-size:26px}
-.dboard details.mcard .mc-chev{background:rgba(61,220,132,.12)}
+.dboard details.mcard .mc-chev{background:rgba(var(--dk-rgb),.12)}
 .dboard details.mcard .mc-chev::before{border-color:var(--dk-acc)}
 .dboard details.mcard[open]>summary{border-bottom-color:var(--dk-line)}
-.dboard .chart .grid{stroke:#22302A;stroke-dasharray:3 6}
-.dboard .chart .base{stroke:#2E3E37}
-.dboard .chart .tick,.dboard .chart .ylabel{fill:#6E847A}
-.dboard .chart .mlabel{fill:#B4C6BD;font-weight:600}
-.dboard .chart .val{fill:#E8F0EC}
+.dboard .chart .grid{stroke:var(--dk-line);stroke-dasharray:3 6}
+.dboard .chart .base{stroke:var(--dk-line)}
+.dboard .chart .tick,.dboard .chart .ylabel{fill:#75818D}
+.dboard .chart .mlabel{fill:#BCC5CE;font-weight:600}
+.dboard .chart .val{fill:#E9EDF1}
 .dboard .chart .outlab{fill:var(--dk-muted)}
 .dboard .chart .bar path{fill:var(--dk-acc)}
 .dboard .chart .bar:hover path{filter:brightness(1.15)}
 .dboard .chart .bar .hit{fill:transparent}
 .dboard .chart .bar:hover .hit{fill:rgba(255,255,255,.03)}
-.dboard .chart .tip{background:#0A0F0D;border:1px solid var(--dk-line);box-shadow:0 12px 30px rgba(0,0,0,.6)}
+.dboard .chart .tip{background:var(--dk-bg);border:1px solid var(--dk-line);box-shadow:0 12px 30px rgba(0,0,0,.6)}
 .dboard .legend{color:var(--dk-muted)}.dboard .legend b{color:var(--dk-text)}
-.dboard .chart .bar path.s0,.dboard .sw.s0{fill:#3DDC84;background:#3DDC84}
+.dboard .chart .bar path.s0,.dboard .sw.s0{fill:var(--dk-acc);background:var(--dk-acc)}
 .dboard .chart .bar path.s1,.dboard .sw.s1{fill:#B8F26B;background:#B8F26B}
-.dboard .chart .bar path.s2,.dboard .sw.s2{fill:#5AB0FF;background:#5AB0FF}
+.dboard .chart .bar path.s2,.dboard .sw.s2{fill:#D5DCE3;background:#D5DCE3}
 .dboard .chart .bar path.s3,.dboard .sw.s3{fill:#F5B83D;background:#F5B83D}
 .dboard .chart .bar path.s4,.dboard .sw.s4{fill:#F07AA8;background:#F07AA8}
 .dboard .chart .bar path.s5,.dboard .sw.s5{fill:#2BC4B0;background:#2BC4B0}
 .dboard .chart .bar path.s6,.dboard .sw.s6{fill:#A08CFF;background:#A08CFF}
 .dboard .chart .bar path.s7,.dboard .sw.s7{fill:#FF7A6B;background:#FF7A6B}
-.dboard .seg-tg{background:#0E1513;border-color:var(--dk-line);border-radius:999px}
+.dboard .seg-tg{background:var(--dk-bg);border-color:var(--dk-line);border-radius:999px}
 .dboard .seg-tg button{color:var(--dk-muted);border-radius:999px}
-.dboard .seg-tg button.on{background:#22302A;color:#fff;box-shadow:none}
+.dboard .seg-tg button.on{background:var(--dk-line);color:#fff;box-shadow:none}
 .dboard .kind-chart{border-color:var(--dk-line)}
 /* الجداول */
 .dboard .tw{border-color:var(--dk-line);border-radius:14px}
-.dboard table.t th{background:#17201C;color:#9DB2A8;border-bottom:1px solid var(--dk-line)}
+.dboard table.t th{background:var(--dk-card2);color:#A3AEB9;border-bottom:1px solid var(--dk-line)}
 .dboard table.t td{color:var(--dk-text);border-bottom-color:var(--dk-line)}
 .dboard table.t tr:nth-child(even) td{background:rgba(255,255,255,.015)}
-.dboard table.t tr:hover>td{background:rgba(61,220,132,.06)}
-.dboard table.t tr.total td{background:#17201C;color:#fff;border-top-color:#2E3E37}
+.dboard table.t tr:hover>td{background:rgba(var(--dk-rgb),.06)}
+.dboard table.t tr.total td{background:var(--dk-card2);color:#fff;border-top-color:var(--dk-line)}
 .dboard details.tview summary{color:var(--dk-muted)}
-.dboard table.t tr.colf th,.dboard .tw.sticky thead tr.colf th{background:#111916 !important;border-bottom:1px solid var(--dk-line)}
-.dboard table.t tr.colf input,.dboard table.t tr.colf select{background:#0C1210;border:1px solid var(--dk-line);color:var(--dk-text)}
-.dboard table.t tr.colf input::placeholder{color:#5F7369}
-.dboard .tw.sticky thead th{background:#17201C}
+.dboard table.t tr.colf th,.dboard .tw.sticky thead tr.colf th{background:var(--dk-bg) !important;border-bottom:1px solid var(--dk-line)}
+.dboard table.t tr.colf input,.dboard table.t tr.colf select{background:var(--dk-bg);border:1px solid var(--dk-line);color:var(--dk-text)}
+.dboard table.t tr.colf input::placeholder{color:#66717C}
+.dboard .tw.sticky thead th{background:var(--dk-card2)}
 @media (max-width:700px){.dboard{padding:12px;border-radius:18px}.dboard .kpi{min-height:0}.dboard .kpi .v{font-size:23px}}
 @media print{.dboard{background:#fff !important;color:#000;border:0;box-shadow:none;padding:0}
   .dboard .card,.dboard .kpi.feat{background:#fff !important;color:#000;border:1px solid #ddd}
   .dboard .kpi .v,.dboard h2,.dboard table.t td{color:#000 !important}}
+
+/* شريط الترحيب: غامق بنفس ألوان اللوحة (بيتغير مع لون البرنامج) */
+.hero{background:radial-gradient(700px 300px at 85% -30%,rgba(var(--t-acc-rgb,61,220,132),.22),transparent 65%),
+  linear-gradient(120deg,var(--t-card2,#18221E) 0%,var(--t-bg,#0C1210) 100%) !important;
+  border:1px solid var(--t-line,#22302A);box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
+.hero .hero-art{opacity:.5}
+.hero-hi{color:#fff}.hero-sub{color:#B9C2CB;opacity:1}

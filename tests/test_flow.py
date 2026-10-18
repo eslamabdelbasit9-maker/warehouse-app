@@ -1677,3 +1677,14 @@ def test_raw_transfer_columns(env):
     login(c, env, "admin@example.com")
     page = c.get(f"/raw-stock?site={env['site']}").text
     assert "تحويل لفرع" in page and "تحويل من فرع" in page
+
+
+def test_dark_board_follows_theme_color(env):
+    """ألوان لوحة المتابعة الداكنة وشريط الترحيب بتتحسب من اللون الأساسي للبرنامج."""
+    b1, b2 = S.dark_board("#0F5E56"), S.dark_board("#7A1F3D")
+    assert b1["dk_acc"] != b2["dk_acc"] and b1["dk_bg"] != b2["dk_bg"]
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    c.post("/account/appearance", data={"primary": "#7A1F3D", "bg": "gray", "font": "Cairo"})
+    assert f"--t-acc:{b2['dk_acc']}" in c.get("/").text
+    c.post("/account/appearance", data={"reset": "1"})

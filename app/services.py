@@ -73,6 +73,23 @@ def _shade(hex_color, dl, ds=0.0):
     return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
 
 
+def _tone(hex_color, l, s_min=0.0, s_max=1.0):
+    """نفس درجة اللون (hue) بإضاءة l وتشبع محصور بين s_min و s_max — لألوان لوحة المتابعة الداكنة."""
+    import colorsys
+    r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    h, _, sat = colorsys.rgb_to_hls(r, g, b)
+    r, g, b = colorsys.hls_to_rgb(h, l, min(s_max, max(s_min, sat)))
+    return "#%02X%02X%02X" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def dark_board(p):
+    """ألوان اللوحة الداكنة (الداش بورد وشريط الترحيب) من اللون الأساسي للبرنامج."""
+    acc = _tone(p, 0.58, 0.62)
+    return dict(dk_bg=_tone(p, 0.055, 0, 0.35), dk_card=_tone(p, 0.09, 0, 0.25), dk_card2=_tone(p, 0.11, 0, 0.25),
+                dk_line=_tone(p, 0.17, 0, 0.2), dk_acc=acc, dk_acc_d=_tone(p, 0.36, 0.55), dk_acc_dd=_tone(p, 0.22, 0.5),
+                dk_acc_rgb=",".join(str(int(acc[i:i + 2], 16)) for i in (1, 3, 5)))
+
+
 def _theme_keys(user_id=None):
     pre = f"u{user_id}:" if user_id else ""
     return {k: pre + k for k in ("primary", "bg", "font")}
@@ -105,6 +122,7 @@ def get_theme(db: Session, user_id=None):
              font_url="https://fonts.googleapis.com/css2?family=" + t["font"].replace(" ", "+")
                       + ":wght@400;500;600;700&display=swap")
     t["dark"] = _is_dark(t["bg_hex"])
+    t.update(dark_board(p))
     t["custom_bg"] = t["bg"] not in THEME_BGS
     return t
 

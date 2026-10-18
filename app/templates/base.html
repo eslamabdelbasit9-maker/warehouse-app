@@ -9,7 +9,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="{{ theme.font_url if theme else 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap' }}" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css?v={{ ASSET_V }}">
-{% if theme %}<style>:root{--brand:{{ theme.brand }};--brand2:{{ theme.brand2 }};--brand3:{{ theme.brand3 }};--brand-rgb:{{ theme.brand_rgb }};--bg:{{ theme.bg_hex }}}
+{% if theme %}<style>:root{--brand:{{ theme.brand }};--brand2:{{ theme.brand2 }};--brand3:{{ theme.brand3 }};--brand-rgb:{{ theme.brand_rgb }};--bg:{{ theme.bg_hex }};
+--t-bg:{{ theme.dk_bg }};--t-card:{{ theme.dk_card }};--t-card2:{{ theme.dk_card2 }};--t-line:{{ theme.dk_line }};--t-acc:{{ theme.dk_acc }};--t-acc-d:{{ theme.dk_acc_d }};--t-acc-dd:{{ theme.dk_acc_dd }};--t-acc-rgb:{{ theme.dk_acc_rgb }}}
 body{font-family:"{{ theme.font }}",Tahoma,Arial,sans-serif}</style>{% endif %}
 <script>
 // الحركة بـ GSAP: المحتوى بيستخبى لحد ما الحركة تبدأ — ولو حصل أي مشكلة بيظهر بعد ثانية ونص
