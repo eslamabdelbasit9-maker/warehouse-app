@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>أمر شراء {{ po.po_no }}</h1>
+<div class="card">
+  <div class="meta">
+    <div><span class="muted">المورد</span> <b>{{ po.supplier }}</b></div>
+    <div><span class="muted">الموقع</span> <b>{{ po.site.name }}</b></div>
+    <div><span class="muted">التاريخ</span> <b>{{ po.date }}</b></div>
+    {% if po.expected_date %}<div><span class="muted">التوريد المتوقع</span> <b>{{ po.expected_date }}</b></div>{% endif %}
+    <div><span class="muted">النوع</span> <b>{{ ITEM_CATS.get(po.category, po.category) }}</b></div>
+    <div><span class="muted">الحالة</span> <span class="st st-{{ {'pending':'pending','approved':'approved','partial':'partial','received':'approved','rejected':'rejected','cancelled':'cancelled','closed':'cancelled'}[st] }}">{{ PO_STATUS[st] }}</span></div>
+  </div>
+  <p class="muted" style="margin:8px 0 0">سجّله {{ po.created_by.name if po.created_by else '-' }} {{ po.created_at.strftime('%Y-%m-%d %H:%M') }}
+    {% if po.approved_by %} — {{ 'اعتمده' if po.status != 'rejected' else 'رفضه' }} {{ po.approved_by.name }} {{ po.approved_at.strftime('%Y-%m-%d %H:%M') if po.approved_at else '' }}{% endif %}</p>
+  {% if po.decision_note %}<p><b>ملاحظة القرار:</b> {{ po.decision_note }}</p>{% endif %}
+  {% if po.notes %}<p><b>ملاحظات / شروط التوريد:</b> {{ po.notes }}</p>{% endif %}
+  <div class="tw" style="margin-top:10px"><table class="t">
+  <tr><th>الكود</th><th>الصنف</th><th>الوحدة</th><th class="n">الكمية المطلوبة</th><th class="n">سعر الوحدة</th><th class="n">الإجمالي</th>
+    <th class="n noprint">المستلم</th><th class="n noprint">المتبقي</th></tr>
+  {% for l in po.lines %}<tr><td dir="ltr" style="text-align:right">{{ l.item.code }}</td><td>{{ l.item.name }}</td><td>{{ l.item.uom }}</td>
+    <td class="n">{{ fmt(l.qty) }}</td><td class="n">{{ fmt(l.unit_price) }}</td><td class="n">{{ fmt(l.total) }}</td>
+    <td class="n noprint">{{ fmt(l.received) if l.received else '-' }}</td><td class="n noprint {{ 'low' if l.remaining and st in ('partial','closed') }}">{{ fmt(l.remaining) if l.remaining else '-' }}</td></tr>{% endfor %}
+  <tr class="total"><td colspan="5">الإجمالي بدون ضريبة</td><td class="n">{{ fmt(po.net) }}</td><td class="noprint" colspan="2"></td></tr>
+  <tr class="total"><td colspan="5">الضريبة 15%</td><td class="n">{{ fmt(po.vat) }}</td><td class="noprint" colspan="2"></td></tr>
+  <tr class="total"><td colspan="5">الإجمالي شامل الضريبة</td><td class="n">{{ fmt(po.gross) }}</td><td class="noprint" colspan="2"></td></tr>
+  </table></div>
+
+  {% if po.receipts %}<h2 class="noprint">فواتير الاستلام</h2><div class="tw noprint"><table class="t">
+  <tr><th>التاريخ</th><th>رقم الفاتورة</th><th class="n">بدون ضريبة</th><th class="n">شامل الضريبة</th></tr>
+  {% for r in po.receipts %}<tr><td>{{ r.date }}</td><td><a href="/receipts/{{ r.id }}">{{ r.invoice_no or ('#' ~ r.id) }}</a></td><td class="n">{{ fmt(r.net) }}</td><td class="n">{{ fmt(r.gross) }}</td></tr>{% endfor %}
+  </table></div>{% endif %}
+
+  <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+    {% if can_receive %}<a class="btn green" href="/receipts/new?po={{ po.id }}">استلام بفاتورة وارد</a>{% endif %}
+    {% if po.status in ('approved', 'closed') %}<button class="btn sec" onclick="print()">طباعة أمر الشراء</button>{% endif %}
+    {% if can_close %}<form method="post" action="/purchases/{{ po.id }}/status" onsubmit="return confirm('إقفال الأمر؟ الكميات المتبقية لن تُستلم.')"><input type="hidden" name="action" value="close"><button class="btn sec">إقفال (الباقي لن يُورَّد)</button></form>{% endif %}
+    {% if can_cancel %}<form method="post" action="/purchases/{{ po.id }}/status" onsubmit="return confirm('إلغاء أمر الشراء؟')"><input type="hidden" name="action" value="cancel"><button class="btn red">إلغاء الأمر</button></form>{% endif %}
+  </div>
+</div>
+{% if can_approve %}
+<form method="post" action="/purchases/{{ po.id }}/decide" class="card noprint">
+  <h2 style="margin-top:0">القرار</h2>
+  <div class="f"><label>ملاحظة (إجبارية عند الرفض)</label><input name="note" style="width:100%"></div>
+  <div style="display:flex;gap:8px;margin-top:10px">
+    <button class="btn green" name="action" value="approve">اعتماد أمر الشراء</button>
+    <button class="btn red" name="action" value="reject">رفض</button>
+  </div>
+</form>{% endif %}
+{% endblock %}

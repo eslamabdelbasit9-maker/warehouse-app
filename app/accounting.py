@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .models import (Account, AppSetting, AuditLog, CrusherProduction, CrusherProductionLine, Item, JournalEntry,
                      JournalLine, LineDecision, OpeningBalance, Receipt, ReceiptLine, Request, RequestLine, SalesLine,
-                     Transfer, TransferLine, Unit)
+                     SupplierPayment, Transfer, TransferLine, Unit)
 
 ACC_VIEW = ("accountant", "manager", "final")   # + مدير النظام
 ACC_EDIT = ("accountant",)                      # + مدير النظام
@@ -162,7 +162,7 @@ AUDIT_ACTIONS = {"login": "تسجيل دخول", "login_failed": "محاولة �
 # ---------------- المزامنة التلقائية ----------------
 _STATE = {"dirty": True}
 _WATCH = (Receipt, ReceiptLine, Request, RequestLine, LineDecision, OpeningBalance, CrusherProduction,
-          CrusherProductionLine, Transfer, TransferLine, SalesLine, Unit, Item)
+          CrusherProductionLine, Transfer, TransferLine, SalesLine, Unit, Item, SupplierPayment)
 
 
 @event.listens_for(Session, "after_flush")
@@ -312,6 +312,11 @@ def build_auto_entries(db):
             e.dr("ar", s.total, s.site_id, s.customer)
             e.cr(f"rev_{s.kind if s.kind in ('crusher', 'asphalt', 'concrete') else 'other'}", s.amount, s.site_id)
             e.cr("vat_out", s.vat, s.site_id)
+    # 7) سداد الموردين: الموردين مدين ← البنك / الصندوق دائن
+    for pmt in db.query(SupplierPayment).filter(SupplierPayment.date >= start):
+        e = E[("payment", str(pmt.id))] = _E(pmt.date, f"سداد للمورد {pmt.supplier}", pmt.pay_no, pmt.site_id)
+        e.dr("ap", pmt.amount, pmt.site_id, pmt.supplier, pmt.ref)   # رقم التحويل يظهر في كشف حساب المورد
+        e.cr("cash" if pmt.method == "cash" else "bank", pmt.amount, pmt.site_id, pmt.supplier, pmt.ref)
     return E
 
 
@@ -521,4 +526,37 @@ def doc_link(entry):
         return "/sales"
     if entry.source == "opening":
         return "/admin/opening"
+    if entry.source == "payment":
+        return "/payables"
     return None
+
+
+# ---------------- أرصدة الموردين (من حساب الموردين نفسه) ----------------
+def supplier_balances(db, d_to=None):
+    """{المورد: (دائن الفواتير، مدين السداد، الرصيد المستحق)} من سطور حساب الموردين."""
+    ap = acc_by_key(db).get("ap")
+    q = (db.query(JournalLine.party, func.sum(JournalLine.credit), func.sum(JournalLine.debit)).join(JournalEntry)
+         .filter(JournalLine.account_id == ap))
+    if d_to:
+        q = q.filter(JournalEntry.date <= d_to)
+    return {(p or "—"): (c or 0.0, d or 0.0, (c or 0.0) - (d or 0.0)) for p, c, d in q.group_by(JournalLine.party)}
+
+
+def supplier_statement(db, party, d_from=None, d_to=None):
+    """كشف حساب المورد: الرصيد قبل الفترة + الحركات بالرصيد المتراكم (دائن = مستحق للمورد)."""
+    ap = acc_by_key(db).get("ap")
+    base = (db.query(JournalLine).join(JournalEntry).options(selectinload(JournalLine.entry))
+            .filter(JournalLine.account_id == ap, JournalLine.party == party))
+    ob = 0.0
+    if d_from:
+        c, d = (db.query(func.sum(JournalLine.credit), func.sum(JournalLine.debit)).join(JournalEntry)
+                .filter(JournalLine.account_id == ap, JournalLine.party == party, JournalEntry.date < d_from).one())
+        ob = (c or 0) - (d or 0)
+        base = base.filter(JournalEntry.date >= d_from)
+    if d_to:
+        base = base.filter(JournalEntry.date <= d_to)
+    rows, bal = [], ob
+    for l in base.order_by(JournalEntry.date, JournalEntry.id).all():
+        bal += (l.credit or 0) - (l.debit or 0)
+        rows.append((l, bal))
+    return ob, rows

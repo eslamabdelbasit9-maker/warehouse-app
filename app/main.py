@@ -130,7 +130,8 @@ NEW_COLUMNS = [("custody_records", "photo", "VARCHAR(300)"), ("requests", "aspha
                ("items", "crusher", "BOOLEAN DEFAULT FALSE"), ("requests", "raw_dest", "VARCHAR(15)"),
                ("requests", "customer", "VARCHAR(200)"), ("request_lines", "sale_price", "FLOAT"),
                ("custody_records", "item_id", "INTEGER"), ("receipts", "no_vat", "BOOLEAN DEFAULT FALSE"),
-               ("opening_balances", "as_of", "DATE"), ("crusher_production", "attachment", "VARCHAR(300)")]
+               ("opening_balances", "as_of", "DATE"), ("crusher_production", "attachment", "VARCHAR(300)"),
+               ("receipts", "po_id", "INTEGER"), ("receipt_lines", "po_line_id", "INTEGER")]
 DEFAULT_CRUSHER_PRICES = [("نجران", 12.95), ("مكة", 12.07), ("الكدمي", 12.59)]
 CRUSHER_CODES = ("RM-G34", "RM-G38", "RM-G1", "RM-G15", "RM-PWD")   # نواتج الكسارة الافتراضية
 
@@ -252,7 +253,7 @@ def flash(request: Request, msg: str, kind="ok"):
 
 def render(request: Request, name: str, user: User | None = None, **ctx):
     fl = request.session.pop("flash", [])
-    pending_n = transfer_n = 0
+    pending_n = transfer_n = po_pending_n = 0
     is_approver = False   # الاعتمادات تظهر بس للي عليه دور في مسار الاعتماد
     backup_due = None   # لمدير النظام: عدد الأيام من آخر نسخة يدوية لو عدّى أسبوع
     own = getattr(request.state, "db", None)  # نفس اتصال الطلب — من غير ما نفتح اتصال تاني
@@ -265,6 +266,9 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
             if u.has("storekeeper"):  # تحويلات واردة بانتظار تأكيد الاستلام
                 transfer_n = db.query(Transfer).filter(Transfer.status == "in_transit",
                                                        Transfer.to_site_id.in_(u.site_ids(db))).count()
+            if u.has("manager", "final"):   # أوامر شراء بانتظار اعتمادي
+                from .models import PurchaseOrder as _PO
+                po_pending_n = db.query(_PO).filter(_PO.status == "pending", _PO.site_id.in_(u.site_ids(db))).count()
             if u.has("admin"):
                 lb = last_backup(db, "manual")
                 days = (datetime.now() - lb).days if lb else None
@@ -276,7 +280,7 @@ def render(request: Request, name: str, user: User | None = None, **ctx):
         if own is None:
             db.close()
     return T.TemplateResponse(request, name, {"user": user, "flashes": fl, "backup_due": backup_due, "path": request.url.path,
-                                              "pending_n": pending_n, "transfer_n": transfer_n, "theme": theme, "is_approver": is_approver,
+                                              "pending_n": pending_n, "transfer_n": transfer_n, "po_pending_n": po_pending_n, "theme": theme, "is_approver": is_approver,
                                               "bi_links": bi_links, **ctx})
 
 
@@ -1800,13 +1804,22 @@ def receipt_delete(rid: int, request: Request, db: Session = Depends(get_db), us
 
 
 @app.get("/receipts/new", response_class=HTMLResponse)
-def receipt_new(request: Request, site: str | None = None, kind: str = "spare", db: Session = Depends(get_db),
-                user: User = Depends(require("storekeeper"))):
+def receipt_new(request: Request, site: str | None = None, kind: str = "spare", po: int | None = None,
+                db: Session = Depends(get_db), user: User = Depends(require("storekeeper"))):
+    order, prefill = None, []
+    if po:   # استلام أمر شراء: المورد والموقع والنوع من الأمر، والأصناف بالكميات المتبقية
+        order = _po_for(db, user, po)
+        if order.state not in ("approved", "partial"):
+            flash(request, "أمر الشراء غير معتمد أو مستلم بالكامل", "err")
+            return back(f"/purchases/{po}")
+        site, kind = str(order.site_id), order.category
+        prefill = [dict(label=f"{l.item.code} — {l.item.name}", id=l.item_id, uom=l.item.uom, qty=round(l.remaining, 4),
+                        price=l.unit_price, pol=l.id) for l in order.lines if l.remaining > 1e-9]
     sites, sel = pick_site(db, user, site)
     kind = kind if kind in ITEM_CATS else "spare"   # نوع الفاتورة: قطع غيار / مواد خام / أصول / أدوات سلامة
     items = db.query(Item).filter(Item.category == kind, Item.active.is_(True)).order_by(Item.code).all()
     return render(request, "receipt_new.html", user, sites=sites, sel=sel, items=items, today=date.today(), kind=kind,
-                  supplier_list=supplier_names(db))
+                  supplier_list=supplier_names(db), po=order, prefill=prefill)
 
 
 @app.post("/receipts/new")
@@ -1815,11 +1828,16 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     sites, sel = pick_site(db, user, form.get("site_id"))
     try:
         AC.check_lock(db, parse_date(form.get("date"), date.today()), "تسجيل فاتورة")
+        order = _po_for(db, user, int(form.get("po_id"))) if str(form.get("po_id") or "").isdigit() else None
+        if order is not None and (order.state not in ("approved", "partial") or order.site_id != sel.id):
+            raise S.BusinessError("أمر الشراء غير معتمد أو مستلم بالكامل أو من موقع آخر")
         rec = Receipt(site_id=sel.id, date=parse_date(form.get("date"), date.today()),
                       invoice_no=(form.get("invoice_no") or "").strip() or None,
-                      supplier=check_supplier(db, form.get("supplier")), created_by_id=user.id,
-                      no_vat=bool(form.get("no_vat")))
-        for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("unit_price")):
+                      supplier=order.supplier if order is not None else check_supplier(db, form.get("supplier")),
+                      created_by_id=user.id, no_vat=bool(form.get("no_vat")), po_id=order.id if order is not None else None)
+        po_lines = {l.id: l for l in order.lines} if order is not None else {}
+        pols = form.getlist("po_line") or [""] * len(form.getlist("item_id"))
+        for iid, qty, price, pol in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("unit_price"), pols):
             if not iid and not qty:
                 continue
             item = db.get(Item, int(iid)) if str(iid).isdigit() else None
@@ -1828,7 +1846,13 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
                 raise S.BusinessError("اختر الصنف من القائمة")
             if not q or q <= 0 or p is None or p < 0:
                 raise S.BusinessError(f"الكمية/السعر غير صحيح للصنف «{item.name}»")
-            rec.lines.append(ReceiptLine(item_id=item.id, qty=q, unit_price=p))
+            pl = po_lines.get(int(pol)) if str(pol).isdigit() else None
+            if pl is not None:
+                if pl.item_id != item.id:
+                    raise S.BusinessError("الصنف لا يطابق سطر أمر الشراء")
+                if q > pl.remaining + 1e-9:
+                    raise S.BusinessError(f"الكمية المستلمة من «{item.name}» ({S.fmt(q)}) أكبر من المتبقي في أمر الشراء ({S.fmt(pl.remaining)})")
+            rec.lines.append(ReceiptLine(item_id=item.id, qty=q, unit_price=p, po_line_id=pl.id if pl is not None else None))
         if not rec.lines:
             raise S.BusinessError("أضف صنفاً واحداً على الأقل")
         rec.attachment = save_upload(db, form.get("attachment"))
@@ -1840,8 +1864,10 @@ async def receipt_new_post(request: Request, db: Session = Depends(get_db), user
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
+        if str(form.get("po_id") or "").isdigit():
+            return back(f"/receipts/new?po={form.get('po_id')}")
         return back(f"/receipts/new?site={sel.id}&kind={form.get('kind') or 'spare'}")
-    flash(request, "تم تسجيل الوارد")
+    flash(request, "تم تسجيل الوارد" + (f" على أمر الشراء {order.po_no}" if order is not None else ""))
     return back(f"/receipts/{rec.id}")
 
 
@@ -2972,6 +2998,8 @@ def export_sales(frm: str = "", to: str = "", db: Session = Depends(get_db), use
 
 
 # ================= الحسابات العامة =================
+from urllib.parse import quote_plus  # noqa: E402
+
 from . import accounting as AC  # noqa: E402
 from .models import ACCOUNT_TYPES, JOURNAL_SOURCES, Account, AuditLog, JournalEntry, JournalLine  # noqa: E402
 
@@ -3194,3 +3222,223 @@ def admin_audit(request: Request, action: str = "", q: str = "", page: int = 1, 
     rows = qry.order_by(AuditLog.id.desc()).offset((max(page, 1) - 1) * per).limit(per).all()
     return render(request, "admin_audit.html", user, rows=rows, total=total, page=page, pages=(total + per - 1) // per,
                   action=action, q=q)
+
+
+# ================= المشتريات: أوامر الشراء وسداد الموردين =================
+from .models import PAY_METHODS, PO_STATUS, PurchaseOrder, PurchaseOrderLine, SupplierPayment  # noqa: E402
+
+T.env.globals.update(PO_STATUS=PO_STATUS, PAY_METHODS=PAY_METHODS)
+PO_CREATE = ("storekeeper", "accountant")
+PO_APPROVE = ("manager", "final")
+PO_VIEW = PO_CREATE + PO_APPROVE
+
+
+def next_po_no(db, site, year):
+    prefix = f"PO-{site.code}-{year}-"
+    last = db.scalar(select(func.max(PurchaseOrder.po_no)).where(PurchaseOrder.po_no.like(prefix + "%")))
+    return f"{prefix}{(int(last.rsplit('-', 1)[1]) + 1) if last else 1:04d}"
+
+
+def _po_for(db, user, pid):
+    po = db.get(PurchaseOrder, pid)
+    if not po or po.site_id not in [s.id for s in user_sites(db, user)]:
+        raise Forbidden()
+    return po
+
+
+@app.get("/purchases", response_class=HTMLResponse)
+def purchases(request: Request, site: str | None = None, status: str = "", q: str = "", db: Session = Depends(get_db),
+              user: User = Depends(require(*PO_VIEW))):
+    sites = user_sites(db, user)
+    sel = next((s for s in sites if str(s.id) == str(site)), None)
+    qry = (db.query(PurchaseOrder).options(selectinload(PurchaseOrder.lines).selectinload(PurchaseOrderLine.receipt_lines),
+                                           selectinload(PurchaseOrder.site))
+           .filter(PurchaseOrder.site_id.in_([sel.id] if sel else [s.id for s in sites])))
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(PurchaseOrder.po_no.ilike(like), PurchaseOrder.supplier.ilike(like)))
+    rows = qry.order_by(PurchaseOrder.date.desc(), PurchaseOrder.id.desc()).limit(500).all()
+    if status in PO_STATUS:
+        rows = [p for p in rows if p.state == status]
+    return render(request, "po_list.html", user, rows=rows, sites=sites, sel=sel, status=status, q=q,
+                  can_create=user.has(*PO_CREATE))
+
+
+@app.get("/purchases/new", response_class=HTMLResponse)
+def po_new(request: Request, site: str | None = None, kind: str = "spare", db: Session = Depends(get_db),
+           user: User = Depends(require(*PO_CREATE))):
+    sites, sel = pick_site(db, user, site)
+    kind = kind if kind in ITEM_CATS else "spare"
+    items = db.query(Item).filter(Item.category == kind, Item.active.is_(True)).order_by(Item.code).all()
+    return render(request, "po_new.html", user, sites=sites, sel=sel, items=items, kind=kind, today=date.today(),
+                  supplier_list=supplier_names(db))
+
+
+@app.post("/purchases/new")
+async def po_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*PO_CREATE))):
+    form = await request.form()
+    sites, sel = pick_site(db, user, form.get("site_id"))
+    kind = form.get("kind") if form.get("kind") in ITEM_CATS else "spare"
+    try:
+        d = parse_date(form.get("date"), date.today())
+        po = PurchaseOrder(po_no=next_po_no(db, sel, d.year), site_id=sel.id, supplier=check_supplier(db, form.get("supplier")),
+                           category=kind, date=d, expected_date=parse_date(form.get("expected_date")),
+                           no_vat=bool(form.get("no_vat")), notes=(form.get("notes") or "").strip() or None, created_by_id=user.id)
+        for iid, qty, price in zip(form.getlist("item_id"), form.getlist("qty"), form.getlist("unit_price")):
+            if not iid and not qty:
+                continue
+            item = db.get(Item, int(iid)) if str(iid).isdigit() else None
+            q, p = parse_float(qty), parse_float(price)
+            if not item:
+                raise S.BusinessError("اختر الصنف من القائمة")
+            if not q or q <= 0 or p is None or p < 0:
+                raise S.BusinessError(f"الكمية/السعر غير صحيح للصنف «{item.name}»")
+            po.lines.append(PurchaseOrderLine(item_id=item.id, qty=q, unit_price=p))
+        if not po.lines:
+            raise S.BusinessError("أضف صنفاً واحداً على الأقل")
+        db.add(po)
+        db.flush()
+        AC.audit(db, user, "create", "purchase_order", po.po_no, {"المورد": po.supplier, "الإجمالي": po.gross}, request)
+        db.commit()
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back(f"/purchases/new?site={sel.id}&kind={kind}")
+    flash(request, f"تم تسجيل أمر الشراء {po.po_no} وإرساله للاعتماد")
+    return back(f"/purchases/{po.id}")
+
+
+@app.get("/purchases/{pid}", response_class=HTMLResponse)
+def po_detail(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*PO_VIEW))):
+    po = _po_for(db, user, pid)
+    st = po.state
+    return render(request, "po_detail.html", user, po=po, st=st,
+                  can_approve=po.status == "pending" and user.has(*PO_APPROVE),
+                  can_receive=st in ("approved", "partial") and user.has("storekeeper"),
+                  can_cancel=po.status in ("pending", "approved") and not po.receipts
+                  and (user.has("admin") or po.created_by_id == user.id),
+                  can_close=st == "partial" and user.has(*PO_APPROVE, "accountant"))
+
+
+@app.post("/purchases/{pid}/decide")
+async def po_decide(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*PO_APPROVE))):
+    po = _po_for(db, user, pid)
+    form = await request.form()
+    action, note = form.get("action"), (form.get("note") or "").strip() or None
+    if po.status != "pending" or action not in ("approve", "reject"):
+        flash(request, "تم البت في أمر الشراء من قبل", "err")
+        return back(f"/purchases/{pid}")
+    if action == "reject" and not note:
+        flash(request, "أدخل سبب الرفض", "err")
+        return back(f"/purchases/{pid}")
+    po.status = "approved" if action == "approve" else "rejected"
+    po.decision_note, po.approved_by_id, po.approved_at = note, user.id, datetime.now()
+    AC.audit(db, user, "edit", "purchase_order", po.po_no, {"القرار": PO_STATUS[po.status], "ملاحظة": note}, request)
+    db.commit()
+    flash(request, f"تم {'اعتماد' if action == 'approve' else 'رفض'} أمر الشراء {po.po_no}")
+    return back(f"/purchases/{pid}")
+
+
+@app.post("/purchases/{pid}/status")
+async def po_status(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*PO_VIEW))):
+    """إلغاء أمر لم يُستلم منه شيء (صاحبه أو الأدمن)، أو إقفال أمر مستلم جزئياً (الباقي مش هييجي)."""
+    po = _po_for(db, user, pid)
+    form = await request.form()
+    action = form.get("action")
+    if action == "cancel" and po.status in ("pending", "approved") and not po.receipts \
+            and (user.has("admin") or po.created_by_id == user.id):
+        po.status = "cancelled"
+    elif action == "close" and po.state == "partial" and user.has(*PO_APPROVE, "accountant"):
+        po.status = "closed"
+    else:
+        flash(request, "لا يمكن تنفيذ هذا الإجراء على أمر الشراء", "err")
+        return back(f"/purchases/{pid}")
+    AC.audit(db, user, "edit", "purchase_order", po.po_no, PO_STATUS[po.status], request)
+    db.commit()
+    flash(request, f"أمر الشراء {po.po_no}: {PO_STATUS[po.status]}")
+    return back(f"/purchases/{pid}")
+
+
+PAY_VIEW = ("accountant", "manager", "final")
+
+
+def next_pay_no(db, year):
+    prefix = f"PAY-{year}-"
+    last = db.scalar(select(func.max(SupplierPayment.pay_no)).where(SupplierPayment.pay_no.like(prefix + "%")))
+    return f"{prefix}{(int(last.rsplit('-', 1)[1]) + 1) if last else 1:04d}"
+
+
+@app.get("/payables", response_class=HTMLResponse)
+def payables(request: Request, date_to: str | None = None, q: str = "", only: str = "due", db: Session = Depends(get_db),
+             user: User = Depends(require(*PAY_VIEW))):
+    """أرصدة الموردين من حساب الموردين (فواتير − سداد ± قيود يدوية) + تسجيل سداد."""
+    AC.sync(db)
+    t = parse_date(date_to, date.today())
+    bals = AC.supplier_balances(db, t)
+    rows = sorted(bals.items(), key=lambda x: -x[1][2])
+    if only == "due":
+        rows = [r for r in rows if abs(r[1][2]) >= 0.01]
+    if q.strip():
+        rows = [r for r in rows if q.strip() in r[0]]
+    pays = (db.query(SupplierPayment).options(selectinload(SupplierPayment.created_by))
+            .order_by(SupplierPayment.date.desc(), SupplierPayment.id.desc()).limit(30).all())
+    return render(request, "payables.html", user, rows=rows, d_to=t, q=q, only=only, pays=pays, today=date.today(),
+                  total=sum(r[1][2] for r in rows), supplier_list=supplier_names(db),
+                  sites=user_sites(db, user), can_pay=user.has("accountant"), lock=AC.lock_date(db))
+
+
+@app.post("/payments/new")
+async def payment_new(request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    form = await request.form()
+    try:
+        d = parse_date(form.get("date"), date.today())
+        AC.check_lock(db, d, "تسجيل سداد")
+        amt = parse_float(form.get("amount"))
+        if not amt or amt <= 0:
+            raise S.BusinessError("أدخل مبلغ السداد")
+        method = form.get("method") if form.get("method") in PAY_METHODS else "bank"
+        sid = int(form.get("site_id")) if str(form.get("site_id") or "").isdigit() else None
+        pmt = SupplierPayment(pay_no=next_pay_no(db, d.year), date=d, supplier=check_supplier(db, form.get("supplier")),
+                              amount=round(amt, 2), method=method, ref=(form.get("ref") or "").strip() or None,
+                              site_id=sid, notes=(form.get("notes") or "").strip() or None, created_by_id=user.id)
+        db.add(pmt)
+        db.flush()
+        AC.audit(db, user, "create", "payment", pmt.pay_no, {"المورد": pmt.supplier, "المبلغ": pmt.amount,
+                                                           "الطريقة": PAY_METHODS[method]}, request)
+        db.commit()
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back("/payables")
+    flash(request, f"تم تسجيل السداد {pmt.pay_no} للمورد {pmt.supplier} بمبلغ {S.fmt(pmt.amount)}")
+    return back(f"/payables/statement?party={quote_plus(pmt.supplier)}")
+
+
+@app.post("/payments/{pid}/delete")
+def payment_delete(pid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    pmt = db.get(SupplierPayment, pid)
+    if not pmt:
+        return back("/payables")
+    try:
+        AC.check_lock(db, pmt.date, "حذف سداد")
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back("/payables")
+    AC.audit(db, user, "delete", "payment", pmt.pay_no, {"المورد": pmt.supplier, "المبلغ": pmt.amount, "التاريخ": pmt.date}, request)
+    db.delete(pmt)
+    db.commit()
+    flash(request, f"تم حذف السداد {pmt.pay_no}")
+    return back("/payables")
+
+
+@app.get("/payables/statement", response_class=HTMLResponse)
+def payables_statement(request: Request, party: str = "", date_from: str | None = None, date_to: str | None = None,
+                       db: Session = Depends(get_db), user: User = Depends(require(*PAY_VIEW))):
+    AC.sync(db)
+    f, t = parse_date(date_from), parse_date(date_to, date.today())
+    ob, rows = AC.supplier_statement(db, party, f, t)
+    pos = (db.query(PurchaseOrder).filter(PurchaseOrder.supplier == party, PurchaseOrder.status == "approved")
+           .order_by(PurchaseOrder.date.desc()).all())
+    return render(request, "payables_statement.html", user, party=party, ob=ob, rows=rows, d_from=f, d_to=t,
+                  open_pos=[p for p in pos if p.state in ("approved", "partial")], doc_link=AC.doc_link,
+                  can_pay=user.has("accountant"), today=date.today(), sites=user_sites(db, user))

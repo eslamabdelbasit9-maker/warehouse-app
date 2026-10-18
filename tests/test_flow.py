@@ -1863,3 +1863,87 @@ def test_accounting_doc_changes_follow_and_manual_entry(env):
     login(c, env, "admin")
     page = c.get("/admin/audit").text
     assert "سجل النشاط" in page and "قفل الفترات" in page
+
+
+def test_purchase_order_cycle_and_supplier_payments(env):
+    """أمر شراء ← اعتماد ← استلام جزئي ثم كامل بفواتير مرتبطة ← سداد ← رصيد المورد وكشف حسابه."""
+    import re
+    from app import accounting as AC
+    from app.models import AuditLog, JournalEntry, PurchaseOrder, Receipt, SupplierPayment
+    _acc_user(env)
+    c = TestClient(app)
+    login(c, env, "requester@example.com")
+    assert c.get("/purchases", follow_redirects=False).status_code == 403
+    login(c, env, "storekeeper@example.com")
+    r = c.post("/purchases/new", data={"site_id": env["site"], "kind": "spare", "date": "2026-10-07", "supplier": "مورد",
+                                       "item_id": [env["b"]], "qty": ["10"], "unit_price": ["40"]}, follow_redirects=False)
+    pid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    po = db.get(PurchaseOrder, pid)
+    assert po.status == "pending" and po.gross == 460 and po.po_no.endswith("-0001")
+    pol = po.lines[0].id
+    db.close()
+    # قبل الاعتماد مفيش استلام، وأمين المستودع ما يعتمدش
+    assert "غير معتمد" in c.get(f"/receipts/new?po={pid}", follow_redirects=True).text
+    assert c.post(f"/purchases/{pid}/decide", data={"action": "approve"}, follow_redirects=False).status_code == 403
+    login(c, env, "prod.manager@example.com")
+    assert "أوامر الشراء" in c.get("/").text
+    assert "سبب الرفض" in c.post(f"/purchases/{pid}/decide", data={"action": "reject"}, follow_redirects=True).text
+    c.post(f"/purchases/{pid}/decide", data={"action": "approve"})
+    # استلام جزئي: الكمية المعبأة = المتبقي، والزيادة عن المتبقي مرفوضة
+    login(c, env, "storekeeper@example.com")
+    page = c.get(f"/receipts/new?po={pid}").text
+    assert '"qty": 10' in page and "أمر الشراء" in page
+    base = {"site_id": env["site"], "kind": "spare", "date": "2026-10-08", "po_id": pid, "supplier": "مورد",
+            "item_id": [env["b"]], "unit_price": ["40"], "po_line": [pol]}
+    assert "أكبر من المتبقي" in c.post("/receipts/new", data={**base, "invoice_no": "PO-INV-X", "qty": ["11"]},
+                                       follow_redirects=True).text
+    c.post("/receipts/new", data={**base, "invoice_no": "PO-INV-1", "qty": ["4"]})
+    db = SessionLocal()
+    po = db.get(PurchaseOrder, pid)
+    assert po.state == "partial" and po.lines[0].received == 4 and po.lines[0].remaining == 6
+    assert db.query(Receipt).filter_by(invoice_no="PO-INV-1").one().po_id == pid
+    db.close()
+    assert '"qty": 6' in c.get(f"/receipts/new?po={pid}").text
+    c.post("/receipts/new", data={**base, "invoice_no": "PO-INV-2", "qty": ["6"]})
+    db = SessionLocal()
+    assert db.get(PurchaseOrder, pid).state == "received"
+    db.close()
+    assert "مستلم بالكامل" in c.get(f"/purchases/{pid}").text
+    # رصيد المورد من حساب الموردين، وسداد بقيد تلقائي (الموردين مدين ← البنك دائن)
+    login(c, env, "acc@example.com")
+    c.get("/journal")
+    db = SessionLocal()
+    before = AC.supplier_balances(db)["مورد"][2]
+    keys = AC.acc_by_key(db)
+    db.close()
+    assert before > 0
+    r = c.post("/payments/new", data={"supplier": "مورد", "date": "2026-10-09", "amount": "100", "method": "bank", "ref": "TRX-1"},
+               follow_redirects=True)
+    assert "تم تسجيل السداد" in r.text and "كشف حساب المورد" in r.text and "TRX-1" in r.text
+    db = SessionLocal()
+    pmt = db.query(SupplierPayment).one()
+    je = db.query(JournalEntry).filter_by(source="payment", source_id=str(pmt.id)).one()
+    assert {(l.account_id, l.debit, l.credit) for l in je.lines} == {(keys["ap"], 100, 0), (keys["bank"], 0, 100)}
+    assert round(AC.supplier_balances(db)["مورد"][2], 2) == round(before - 100, 2)
+    db.close()
+    page = c.get("/payables").text
+    assert "مورد" in page and pmt.pay_no in page
+    assert re.search(r"PO-INV-1", c.get("/payables/statement?party=" + "مورد").text)
+    # حذف السداد بيحذف قيده ويتسجّل في السجل؛ وأمين المستودع ما يسجّلش سداد
+    c.post(f"/payments/{pmt.id}/delete")
+    c.get("/journal")
+    db = SessionLocal()
+    assert db.query(JournalEntry).filter_by(source="payment").count() == 0
+    assert db.query(AuditLog).filter_by(action="delete", entity="payment").count() == 1
+    db.close()
+    login(c, env, "storekeeper@example.com")
+    assert c.post("/payments/new", data={"supplier": "مورد", "amount": "5"}, follow_redirects=False).status_code == 403
+    # أمر بانتظار الاعتماد: صاحبه يقدر يلغيه
+    r = c.post("/purchases/new", data={"site_id": env["site"], "kind": "spare", "date": "2026-10-10", "supplier": "مورد",
+                                       "item_id": [env["b"]], "qty": ["1"], "unit_price": ["5"]}, follow_redirects=False)
+    pid2 = int(r.headers["location"].rsplit("/", 1)[1])
+    c.post(f"/purchases/{pid2}/status", data={"action": "cancel"})
+    db = SessionLocal()
+    assert db.get(PurchaseOrder, pid2).status == "cancelled"
+    db.close()

@@ -156,6 +156,7 @@ class Receipt(Base):
     supplier: Mapped[str | None] = mapped_column(String(200))
     attachment: Mapped[str | None] = mapped_column(String(300))
     no_vat: Mapped[bool] = mapped_column(Boolean, default=False)   # وارد بدون ضريبة (زي المحوّل من شركة المسار)
+    po_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_orders.id"))   # أمر الشراء المستلَم بالفاتورة
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     site: Mapped[Site] = relationship()
@@ -187,6 +188,7 @@ class ReceiptLine(Base):
     item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
     qty: Mapped[float] = mapped_column(Float)
     unit_price: Mapped[float] = mapped_column(Float, default=0)
+    po_line_id: Mapped[int | None] = mapped_column(ForeignKey("purchase_order_lines.id"))
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
     item: Mapped[Item] = relationship()
 
@@ -463,7 +465,8 @@ class SalesLine(Base):
 # ================= الحسابات العامة =================
 ACCOUNT_TYPES = {"asset": "أصول", "liability": "خصوم", "equity": "حقوق ملكية", "revenue": "إيرادات", "expense": "مصروفات"}
 JOURNAL_SOURCES = {"manual": "قيد يدوي", "opening": "أرصدة منقولة", "receipt": "فاتورة وارد", "issue": "صرف معتمد",
-                   "production": "إنتاج الكسارات", "transfer": "تحويل بين الفروع", "sale": "مستخلص مبيعات"}
+                   "production": "إنتاج الكسارات", "transfer": "تحويل بين الفروع", "sale": "مستخلص مبيعات",
+                   "payment": "سداد مورد"}
 
 
 class Account(Base):
@@ -531,3 +534,99 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(40))
     details: Mapped[str | None] = mapped_column(Text)
     ip: Mapped[str | None] = mapped_column(String(60))
+
+
+# ================= المشتريات =================
+PO_STATUS = {"pending": "بانتظار الاعتماد", "approved": "معتمد", "partial": "استلام جزئي", "received": "مستلم بالكامل",
+             "rejected": "مرفوض", "cancelled": "ملغي", "closed": "مقفول"}
+PAY_METHODS = {"bank": "تحويل بنكي", "cash": "نقدي", "cheque": "شيك"}
+
+
+class PurchaseOrder(Base):
+    """أمر شراء: يسجّله أمين المستودع ← يعتمده مدير الإنتاج أو الاعتماد النهائي ← يُستلم بفاتورة وارد (أو أكثر)."""
+    __tablename__ = "purchase_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))
+    supplier: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(10), default="spare")       # نوع الأصناف (زي نوع الفاتورة)
+    expected_date: Mapped[date | None] = mapped_column(Date)   # قبل حقل date (اسمه بيغطي على النوع date جوه الكلاس)
+    date: Mapped[date] = mapped_column(Date)
+    no_vat: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="pending")      # pending | approved | rejected | cancelled | closed
+    decision_note: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    site: Mapped[Site] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+    approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
+    lines: Mapped[list["PurchaseOrderLine"]] = relationship(back_populates="po", cascade="all, delete-orphan",
+                                                            order_by="PurchaseOrderLine.id")
+    receipts: Mapped[list[Receipt]] = relationship(foreign_keys="Receipt.po_id", order_by="Receipt.date")
+
+    @property
+    def net(self):
+        return round(sum(l.total for l in self.lines), 2)
+
+    @property
+    def vat(self):
+        return 0.0 if self.no_vat else round(self.net * VAT_RATE, 2)
+
+    @property
+    def gross(self):
+        return round(self.net + self.vat, 2)
+
+    @property
+    def state(self):
+        """الحالة المعروضة: المعتمد بيتحوّل لاستلام جزئي / مستلم بالكامل حسب الفواتير المرتبطة."""
+        if self.status != "approved":
+            return self.status
+        rec = [l.received for l in self.lines]
+        if all(l.received >= l.qty - 1e-9 for l in self.lines):
+            return "received"
+        return "partial" if any(r > 0 for r in rec) else "approved"
+
+
+class PurchaseOrderLine(Base):
+    __tablename__ = "purchase_order_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id"), index=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id"))
+    qty: Mapped[float] = mapped_column(Float)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)
+    po: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+    item: Mapped[Item] = relationship()
+    receipt_lines: Mapped[list[ReceiptLine]] = relationship(foreign_keys="ReceiptLine.po_line_id")
+
+    @property
+    def total(self):
+        return (self.qty or 0) * (self.unit_price or 0)
+
+    @property
+    def received(self):
+        return sum(r.qty or 0 for r in self.receipt_lines)
+
+    @property
+    def remaining(self):
+        return max(0.0, (self.qty or 0) - self.received)
+
+
+class SupplierPayment(Base):
+    """سداد للمورد — قيده التلقائي: الموردين مدين ← البنك / الصندوق دائن."""
+    __tablename__ = "supplier_payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pay_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    supplier: Mapped[str] = mapped_column(String(200), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String(10), default="bank")
+    ref: Mapped[str | None] = mapped_column(String(100))                  # رقم التحويل / الشيك
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site | None] = relationship()
+    created_by: Mapped[User | None] = relationship()

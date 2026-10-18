@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>كشف حساب المورد — {{ party }}</h1>
+<form class="filters card noprint" method="get"><input type="hidden" name="party" value="{{ party }}">
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
+  <button class="btn">عرض</button><span class="right"></span><a class="btn sec" href="/payables">كل الموردين</a>
+  <button type="button" class="btn sec" onclick="print()">طباعة</button>
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>التاريخ</th><th>البيان</th><th>المستند</th><th class="n">مدين (سداد)</th><th class="n">دائن (فواتير)</th><th class="n">الرصيد المستحق</th></tr>
+{% if d_from %}<tr class="total"><td colspan="5">الرصيد قبل {{ d_from }}</td><td class="n">{{ fmt(ob) }}</td></tr>{% endif %}
+{% for l, bal in rows %}{% set e = l.entry %}<tr><td>{{ e.date }}</td><td>{{ e.memo or '' }}{% if l.note %} <span class="muted">({{ l.note }})</span>{% endif %}</td>
+  <td>{% set dl = doc_link(e) %}{% if dl %}<a href="{{ dl }}">{{ e.ref or ('JV-' ~ e.id) }}</a>{% else %}<a href="/journal/{{ e.id }}">{{ e.source_id or ('JV-' ~ e.id) }}</a>{% endif %}</td>
+  <td class="n">{{ fmt(l.debit) if l.debit else '' }}</td><td class="n">{{ fmt(l.credit) if l.credit else '' }}</td><td class="n"><b>{{ fmt(bal) }}</b></td></tr>
+{% else %}<tr><td colspan="6" class="muted">لا توجد حركات</td></tr>{% endfor %}
+<tr class="total"><td colspan="3">الإجمالي والرصيد المستحق في {{ d_to }}</td><td class="n">{{ fmt(rows|map(attribute=0)|sum(attribute='debit')) }}</td>
+  <td class="n">{{ fmt(rows|map(attribute=0)|sum(attribute='credit')) }}</td><td class="n">{{ fmt(rows[-1][1] if rows else ob) }}</td></tr>
+</table></div></div>
+{% if open_pos %}<div class="card noprint"><h2 style="margin-top:0">أوامر شراء مفتوحة لهذا المورد</h2><div class="tw"><table class="t">
+<tr><th>رقم الأمر</th><th>التاريخ</th><th class="n">الإجمالي</th><th>الحالة</th></tr>
+{% for p in open_pos %}<tr><td><a href="/purchases/{{ p.id }}">{{ p.po_no }}</a></td><td>{{ p.date }}</td><td class="n">{{ fmt(p.gross) }}</td><td>{{ PO_STATUS[p.state] }}</td></tr>{% endfor %}
+</table></div></div>{% endif %}
+{% if can_pay %}<form class="card noprint" method="post" action="/payments/new" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <input type="hidden" name="supplier" value="{{ party }}">
+  <h2 style="width:100%;margin:0 0 4px">سداد للمورد</h2>
+  <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+  <div class="f"><label>المبلغ *</label><input name="amount" type="number" step="0.01" min="0.01" required value="{{ '%.2f'|format(rows[-1][1]) if rows and rows[-1][1] > 0 else '' }}"></div>
+  <div class="f"><label>الطريقة</label><select name="method">{% for k, v in PAY_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>رقم التحويل / الشيك</label><input name="ref"></div>
+  <div class="f"><label>الموقع</label><select name="site_id"><option value="">-</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <button class="btn green">حفظ السداد</button>
+</form>{% endif %}
+{% endblock %}

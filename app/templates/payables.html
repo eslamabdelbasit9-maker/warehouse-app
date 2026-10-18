@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>أرصدة الموردين</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>حتى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
+  <div class="f"><label>بحث (المورد)</label><input name="q" value="{{ q }}"></div>
+  <div class="f"><label>عرض</label><select name="only"><option value="due" {{ 'selected' if only == 'due' }}>الموردين اللي ليهم رصيد</option><option value="all" {{ 'selected' if only == 'all' }}>كل الموردين</option></select></div>
+  <button class="btn">عرض</button><span class="right"></span><a class="btn sec" href="/purchases">أوامر الشراء</a>
+</form>
+{% if can_pay %}
+<form class="card noprint" method="post" action="/payments/new" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <h2 style="width:100%;margin:0 0 4px">تسجيل سداد لمورد</h2>
+  <div class="f" style="min-width:220px"><label>المورد *</label><input name="supplier" list="sup-list" required autocomplete="off"></div>
+  <datalist id="sup-list">{% for n in supplier_list %}<option value="{{ n }}">{% endfor %}</datalist>
+  <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+  <div class="f"><label>المبلغ *</label><input name="amount" type="number" step="0.01" min="0.01" required style="max-width:140px"></div>
+  <div class="f"><label>الطريقة</label><select name="method">{% for k, v in PAY_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>رقم التحويل / الشيك</label><input name="ref" style="max-width:150px"></div>
+  <div class="f"><label>الموقع</label><select name="site_id"><option value="">-</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f" style="flex:1;min-width:160px"><label>ملاحظات</label><input name="notes"></div>
+  <button class="btn green">حفظ السداد</button>
+  {% if lock %}<span class="muted" style="font-size:12px;width:100%">الفترات مقفولة حتى {{ lock }}.</span>{% endif %}
+</form>{% endif %}
+<div class="card">
+  <p class="muted" style="margin-top:0">الرصيد = فواتير الوارد شامل الضريبة − السداد ± القيود اليدوية على حساب الموردين، حتى {{ d_to }}. اضغط على المورد لفتح كشف حسابه.</p>
+  <div class="tw"><table class="t" id="ptbl">
+  <tr><th>المورد</th><th class="n">إجمالي الفواتير</th><th class="n">إجمالي السداد</th><th class="n">الرصيد المستحق</th></tr>
+  {% for name, (cr, dr, bal) in rows %}<tr><td><a href="/payables/statement?party={{ name|urlencode }}"><b>{{ name }}</b></a></td>
+    <td class="n">{{ fmt(cr) }}</td><td class="n">{{ fmt(dr) }}</td><td class="n"><b class="{{ 'low' if bal < -0.005 }}">{{ fmt(bal) }}</b></td></tr>
+  {% else %}<tr><td colspan="4" class="muted">لا توجد أرصدة</td></tr>{% endfor %}
+  {% if rows %}<tr class="total"><td>الإجمالي</td><td class="n">{{ fmt(rows|map(attribute=1)|map(attribute=0)|sum) }}</td><td class="n">{{ fmt(rows|map(attribute=1)|map(attribute=1)|sum) }}</td><td class="n">{{ fmt(total) }}</td></tr>{% endif %}
+  </table></div>
+</div>
+<div class="card"><h2 style="margin-top:0">آخر عمليات السداد</h2><div class="tw"><table class="t">
+<tr><th>الرقم</th><th>التاريخ</th><th>المورد</th><th>الطريقة</th><th>المرجع</th><th class="n">المبلغ</th><th>سجّله</th>{% if can_pay %}<th class="noprint"></th>{% endif %}</tr>
+{% for p in pays %}<tr><td>{{ p.pay_no }}</td><td>{{ p.date }}</td><td><a href="/payables/statement?party={{ p.supplier|urlencode }}">{{ p.supplier }}</a></td>
+  <td>{{ PAY_METHODS.get(p.method, p.method) }}</td><td>{{ p.ref or '' }}</td><td class="n"><b>{{ fmt(p.amount) }}</b></td><td>{{ p.created_by.name if p.created_by else '' }}</td>
+  {% if can_pay %}<td class="noprint"><form method="post" action="/payments/{{ p.id }}/delete" onsubmit="return confirm('حذف السداد {{ p.pay_no }}؟ (يُسجَّل في سجل النشاط)')"><button class="btn sec sm">حذف</button></form></td>{% endif %}</tr>
+{% else %}<tr><td colspan="8" class="muted">لا توجد عمليات سداد</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}
