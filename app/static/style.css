@@ -562,11 +562,11 @@ main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rg
 .dboard .kpi .l{color:var(--dk-muted)}
 .dboard .kpi .s{align-self:flex-start;background:rgba(255,255,255,.06);color:var(--dk-muted);border-radius:999px;padding:3px 10px;opacity:1;margin-top:auto}
 .dboard .kpi-ic{background:rgba(255,255,255,.06);color:var(--dk-acc)}
-.dboard .kpi.feat{background:linear-gradient(150deg,var(--dk-acc) -20%,var(--dk-acc-d) 50%,var(--dk-acc-dd) 100%);border-color:color-mix(in srgb,var(--dk-acc) 60%,transparent);
+.dboard .kpi.feat,.dboard.rpt .g4>.kpi:first-child{background:linear-gradient(150deg,var(--dk-acc) -20%,var(--dk-acc-d) 50%,var(--dk-acc-dd) 100%);border-color:color-mix(in srgb,var(--dk-acc) 60%,transparent);
   box-shadow:0 18px 40px -18px rgba(var(--dk-rgb),.45)}
-.dboard .kpi.feat .l,.dboard .kpi.feat .s{color:rgba(255,255,255,.88)}
-.dboard .kpi.feat .s{background:rgba(255,255,255,.16)}
-.dboard .kpi.feat .kpi-ic{background:rgba(255,255,255,.18);color:#fff}
+.dboard .kpi.feat .l,.dboard .kpi.feat .s,.dboard.rpt .g4>.kpi:first-child .l{color:rgba(255,255,255,.88)}
+.dboard .kpi.feat .s,.dboard.rpt .g4>.kpi:first-child .s{background:rgba(255,255,255,.16)}
+.dboard .kpi.feat .kpi-ic,.dboard.rpt .g4>.kpi:first-child .kpi-ic{background:rgba(255,255,255,.18);color:#fff}
 .dboard .kpi::after{background:linear-gradient(150deg,var(--dk-acc-d),var(--dk-acc-dd)) !important}
 /* الرسوم */
 .dboard details.mcard{background:var(--dk-card)}
@@ -613,7 +613,7 @@ main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rg
 .dboard .tw.sticky thead th{background:var(--dk-card2)}
 @media (max-width:700px){.dboard{padding:12px;border-radius:18px}.dboard .kpi{min-height:0}.dboard .kpi .v{font-size:23px}}
 @media print{.dboard{background:#fff !important;color:#000;border:0;box-shadow:none;padding:0}
-  .dboard .card,.dboard .kpi.feat{background:#fff !important;color:#000;border:1px solid #ddd}
+  .dboard .card,.dboard .kpi.feat,.dboard.rpt .g4>.kpi:first-child{background:#fff !important;color:#000;border:1px solid #ddd}
   .dboard .kpi .v,.dboard h2,.dboard table.t td{color:#000 !important}}
 
 /* شريط الترحيب: غامق بنفس ألوان اللوحة (بيتغير مع لون البرنامج) */
@@ -622,3 +622,17 @@ main .dboard .card:not(.kpi):not(.filters):hover{box-shadow:0 18px 34px -18px rg
   border:1px solid var(--t-line,#22302A);box-shadow:0 18px 40px -26px rgba(0,0,0,.7)}
 .hero .hero-art{opacity:.5}
 .hero-hi{color:#fff}.hero-sub{color:#B9C2CB;opacity:1}
+
+/* التقارير بنفس اللوحة الداكنة */
+.dboard.rpt .g4{margin-bottom:14px}
+.dboard.rpt .kpi{min-height:128px;justify-content:center}
+.dboard.rpt .kpi .s{margin-top:6px}
+.dboard.rpt .kpi .s.up{color:#5BE49B;background:rgba(91,228,155,.12)}.dboard.rpt .kpi .s.down{color:#FF8A80;background:rgba(255,138,128,.12)}
+.dboard.rpt .g4>.kpi:first-child .s.up,.dboard.rpt .g4>.kpi:first-child .s.down{color:#fff;background:rgba(255,255,255,.16)}
+.dboard h3{color:var(--dk-text)}
+.dboard .rp-tabs{background:var(--dk-card2);gap:8px}
+.dboard .btn{border-radius:999px}
+.dboard .btn:not(.sec){background:var(--dk-acc);color:var(--dk-bg);border-color:transparent}
+.dboard .btn.sec{background:transparent;color:var(--dk-text);border:1px solid var(--dk-line)}
+.dboard .btn.sec:hover{background:rgba(255,255,255,.05)}
+.dboard td.low,.dboard .low{color:#FF8A80}

@@ -1488,7 +1488,7 @@ def reports_page(request: Request, tab: str = "overview", site: str = "", date_f
     names = {s.id: s.name for s in all_sites}
     return render(request, "reports.html", user, tabs=R.TABS, tab=tab, all_sites=all_sites, sel=sel, sites=sites,
                   site_name=names, d_from=f, d_to=t, d=data, months=months, ITEM_CATS=ITEM_CATS,
-                  charts=R.charts(tab, data, months, names))
+                  charts=R.charts(tab, data, months, names), pal=R.PAL)
 
 
 @app.get("/raw-stock", response_class=HTMLResponse)

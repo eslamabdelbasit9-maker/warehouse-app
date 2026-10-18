@@ -5,6 +5,7 @@
   <div class="s {{ 'up' if (ch >= 0) == good_up else 'down' }}">{{ '▲' if ch >= 0 else '▼' }} {{ fmt(ch|abs, 1) }}% عن الفترة السابقة</div>{% endif %}{% endmacro %}
 
 <h1>التقارير</h1>
+<div class="dboard rpt">
 <div class="card noprint rp-tabs">{% for k, v in tabs %}<a class="btn sm {{ '' if tab == k else 'sec' }}" href="?tab={{ k }}&site={{ sel.id if sel else '' }}&date_from={{ d_from }}&date_to={{ d_to }}">{{ v }}</a>{% endfor %}</div>
 <form class="filters card noprint" method="get"><input type="hidden" name="tab" value="{{ tab }}">
   <div class="f"><label>الموقع</label><select name="site"><option value="">كل المواقع</option>{% for s in all_sites %}<option value="{{ s.id }}" {{ 'selected' if sel and sel.id == s.id }}>{{ s.name }}</option>{% endfor %}</select></div>
@@ -118,6 +119,7 @@
 <div class="card"><h3 style="margin-top:0">أعلى 15 صنفًا قيمةً</h3><div class="tw"><table class="t rp"><tr><th>الموقع</th><th>الكود</th><th>الصنف</th><th class="n">الرصيد</th><th class="n">القيمة</th></tr>
 {% for s, it, q, v in d.top %}<tr><td>{{ s.name }}</td><td dir="ltr">{{ it.code }}</td><td><a href="/stock/{{ it.id }}?site={{ s.id }}">{{ it.name }}</a></td><td class="n">{{ fmt(q) }} {{ it.uom }}</td><td class="n">{{ fmt(v, 0) }}</td></tr>{% endfor %}</table></div></div>
 {% endif %}
+</div>
 
 <style>
 .rp-tabs{display:flex;gap:6px;flex-wrap:wrap}
@@ -132,8 +134,13 @@
 <script>
 (function(){
   const CH = {{ charts|tojson }};
-  const css = getComputedStyle(document.documentElement);
-  const txt = css.getPropertyValue('--muted').trim() || '#6b7280', grid = css.getPropertyValue('--line').trim() || '#e5e7eb';
+  // اللوحة الداكنة: الألوان من لون البرنامج (--dk-acc) والخطوط والنصوص من اللوحة نفسها
+  const board = document.querySelector('.dboard') || document.documentElement, css = getComputedStyle(board);
+  const txt = css.getPropertyValue('--dk-muted').trim() || '#97A2AD', grid = css.getPropertyValue('--dk-line').trim() || '#22302A';
+  const card = css.getPropertyValue('--dk-card').trim() || '#131B18';
+  const PAL = {{ pal|tojson }}, DARK = [css.getPropertyValue('--dk-acc').trim() || '#3DDC84', '#B8F26B', '#F5B83D', '#FF8A5B', '#A08CFF', '#2BC4B0', '#F07AA8', '#7FD3FF', '#8E9AA6'];
+  const recolor = (v) => { if (Array.isArray(v)) return v.map(recolor); if (typeof v !== 'string') return v;
+    const i = PAL.indexOf(v.slice(0, 7)); return i < 0 ? v : DARK[i] + v.slice(7); };
   const nf = new Intl.NumberFormat('en', {maximumFractionDigits: 2});
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
   Chart.defaults.color = txt;
@@ -152,7 +159,13 @@
                 y: {position: 'right', stacked: !!c.stacked, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}}};
       if (c.dual) scales.y1 = {position: 'left', beginAtZero: true, grid: {drawOnChartArea: false}, ticks: {callback: fmtTick}};
     }
-    c.datasets.forEach((ds) => { if ((ds.type || c.type) === 'bar') ds.maxBarThickness = c.horizontal ? 34 : 46; });
+    c.datasets.forEach((ds) => {
+      ds.backgroundColor = recolor(ds.backgroundColor); ds.borderColor = recolor(ds.borderColor);
+      if ((ds.type || c.type) === 'bar') { ds.maxBarThickness = c.horizontal ? 34 : 46;
+        if (!c.stacked) { ds.borderRadius = 999; ds.borderSkipped = c.horizontal ? 'start' : 'start'; } }   // أعمدة كبسولة
+      if (donut) { ds.borderColor = card; ds.borderWidth = 3; }
+      if ((ds.type || c.type) === 'line') { ds.pointBackgroundColor = ds.borderColor; ds.pointBorderColor = card; ds.pointBorderWidth = 2; }
+    });
     const total = donut ? c.datasets[0].data.reduce((a, b) => a + b, 0) : 0;
     new Chart(el, {
       type: c.type, data: {labels: c.labels, datasets: c.datasets},
