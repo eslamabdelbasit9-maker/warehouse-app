@@ -58,6 +58,11 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {{ nl('/sales-invoices', 'فواتير البيع', 'file', path.startswith('/sales-invoices')) }}
     {{ nl('/customers', 'العملاء', 'users', path.startswith('/customers')) }}
     {{ nl('/receivables', 'أرصدة العملاء', 'list', path.startswith('/receivables')) }}{% endif %}
+    {% if user.has('hr', 'accountant', 'manager', 'final') %}<div class="sg">الموارد البشرية</div>
+    {{ nl('/employees', 'الموظفين', 'users', path.startswith('/employees')) }}
+    {{ nl('/attendance', 'الحضور الشهري', 'check', path.startswith('/attendance')) }}
+    {{ nl('/advances', 'السلف', 'list', path.startswith('/advances')) }}
+    {{ nl('/payroll', 'مسيرات الرواتب', 'file', path.startswith('/payroll')) }}{% endif %}
     {% if user.has('accountant', 'manager', 'final') %}<div class="sg">الحسابات</div>
     {{ nl('/accounts', 'شجرة الحسابات', 'list', path.startswith('/accounts')) }}
     {{ nl('/journal', 'القيود اليومية', 'file', path.startswith('/journal')) }}

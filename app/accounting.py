@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .models import (Account, AppSetting, AuditLog, CrusherProduction, CrusherProductionLine, Item, JournalEntry,
                      JournalLine, LineDecision, OpeningBalance, Receipt, ReceiptLine, Request, RequestLine, SalesLine,
-                     SupplierPayment, Transfer, TransferLine, Unit, SalesInvoice, SalesInvoiceLine, CustomerReceipt, Customer)
+                     SupplierPayment, Transfer, TransferLine, Unit, SalesInvoice, SalesInvoiceLine, CustomerReceipt, Customer,
+                     Employee, EmployeeAdvance, PayrollLine, PayrollRun)
 
 ACC_VIEW = ("accountant", "manager", "final")   # + مدير النظام
 ACC_EDIT = ("accountant",)                      # + مدير النظام
@@ -163,7 +164,7 @@ AUDIT_ACTIONS = {"login": "تسجيل دخول", "login_failed": "محاولة �
 _STATE = {"dirty": True}
 _WATCH = (Receipt, ReceiptLine, Request, RequestLine, LineDecision, OpeningBalance, CrusherProduction,
           CrusherProductionLine, Transfer, TransferLine, SalesLine, Unit, Item, SupplierPayment, SalesInvoice,
-          SalesInvoiceLine, CustomerReceipt, Customer)
+          SalesInvoiceLine, CustomerReceipt, Customer, Employee, EmployeeAdvance, PayrollRun, PayrollLine)
 
 
 @event.listens_for(Session, "after_flush")
@@ -332,6 +333,28 @@ def build_auto_entries(db):
         e = E[("payment", str(pmt.id))] = _E(pmt.date, f"سداد للمورد {pmt.supplier}", pmt.pay_no, pmt.site_id)
         e.dr("ap", pmt.amount, pmt.site_id, pmt.supplier, pmt.ref)   # رقم التحويل يظهر في كشف حساب المورد
         e.cr("cash" if pmt.method == "cash" else "bank", pmt.amount, pmt.site_id, pmt.supplier, pmt.ref)
+    # 8) سلف الموظفين: سلف وعهد الموظفين مدين ← البنك / الصندوق دائن
+    for a in db.query(EmployeeAdvance).options(selectinload(EmployeeAdvance.employee)).filter(EmployeeAdvance.date >= start):
+        site = a.employee.site_id
+        e = E[("advance", str(a.id))] = _E(a.date, f"سلفة للموظف {a.employee.name}", a.adv_no, site)
+        e.dr("emp_adv", a.amount, site, a.employee.name)
+        e.cr("cash" if a.method == "cash" else "bank", a.amount, site, a.employee.name)
+    # 9) مسير الرواتب المرحّل: الرواتب مدين ← رواتب مستحقة + أقساط السلف دائن؛ والصرف: رواتب مستحقة مدين ← البنك دائن
+    for run in (db.query(PayrollRun).options(selectinload(PayrollRun.lines).selectinload(PayrollLine.employee))
+                .filter(PayrollRun.status.in_(("posted", "paid")))):
+        d = run.post_date or run.period
+        if d < start:
+            continue
+        e = E[("payroll", str(run.id))] = _E(d, f"مسير رواتب شهر {run.period:%Y-%m}", f"PR-{run.period:%Y-%m}")
+        for l in run.lines:
+            e.dr("salaries", l.expense, l.site_id)
+            e.cr("emp_adv", l.advance_ded, l.site_id, l.employee.name)
+            e.cr("salaries_payable", l.net, l.site_id)
+        if run.status == "paid" and run.paid_date:
+            p = E[("payroll_pay", str(run.id))] = _E(run.paid_date, f"صرف رواتب شهر {run.period:%Y-%m}", f"PR-{run.period:%Y-%m}")
+            for l in run.lines:
+                p.dr("salaries_payable", l.net, l.site_id)
+                p.cr("cash" if run.paid_method == "cash" else "bank", l.net, l.site_id, None, run.paid_ref)
     return E
 
 
@@ -547,6 +570,10 @@ def doc_link(entry):
         return f"/sales-invoices/{sid}"
     if entry.source == "collection":
         return "/receivables"
+    if entry.source == "advance":
+        return "/advances"
+    if entry.source in ("payroll", "payroll_pay"):
+        return f"/payroll/{sid}"
     return None
 
 

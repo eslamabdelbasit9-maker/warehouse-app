@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الموظفين</h1>
+{% include "_hr_nav.html" %}
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الموقع</label><select name="site"><option value="">الكل</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الحالة</label><select name="state"><option value="active" {{ 'selected' if state == 'active' }}>على رأس العمل</option><option value="ended" {{ 'selected' if state == 'ended' }}>منتهية خدمتهم</option><option value="all" {{ 'selected' if state == 'all' }}>الكل</option></select></div>
+  <div class="f"><label>بحث (الاسم / الرقم / الوظيفة)</label><input name="q" value="{{ q }}"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <button type="button" class="btn sec" onclick="print()">طباعة</button>
+</form>
+{% if can_edit %}
+<form class="card noprint" method="post" action="/employees" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <h2 style="width:100%;margin:0 0 4px">إضافة موظف</h2>
+  <div class="f"><label>الرقم الوظيفي *</label><input name="emp_no" required style="max-width:120px"></div>
+  <div class="f" style="min-width:200px"><label>الاسم *</label><input name="name" required></div>
+  <div class="f"><label>الوظيفة</label><input name="job_title" style="max-width:150px"></div>
+  <div class="f"><label>الموقع</label><select name="site_id"><option value="">-</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>تاريخ التعيين</label><input type="date" name="hire_date"></div>
+  <div class="f"><label>الراتب الأساسي</label><input name="basic" type="number" step="0.01" min="0" style="max-width:110px"></div>
+  <div class="f"><label>بدل السكن</label><input name="housing" type="number" step="0.01" min="0" style="max-width:100px"></div>
+  <div class="f"><label>بدل النقل</label><input name="transport" type="number" step="0.01" min="0" style="max-width:100px"></div>
+  <div class="f"><label>بدلات أخرى</label><input name="other_allow" type="number" step="0.01" min="0" style="max-width:100px"></div>
+  <button class="btn green">حفظ</button>
+  <span class="muted" style="font-size:12px;width:100%">باقي البيانات (الهوية، الجنسية، الآيبان ...) من صفحة الموظف. الرقم الوظيفي نفس رقم الموظف في العهد فتظهر عهده في ملفه.</span>
+</form>{% endif %}
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الرقم</th><th>الاسم</th><th>الوظيفة</th><th>الموقع</th><th>تاريخ التعيين</th><th class="n">الأساسي</th><th class="n">البدلات</th><th class="n">الإجمالي</th><th>الحالة</th></tr>
+{% for e in rows %}<tr><td>{{ e.emp_no }}</td><td><a href="/employees/{{ e.id }}"><b>{{ e.name }}</b></a></td><td>{{ e.job_title or '' }}</td><td>{{ e.site.name if e.site else '' }}</td>
+  <td>{{ e.hire_date or '' }}</td><td class="n">{{ fmt(e.basic) }}</td><td class="n">{{ fmt(e.allowances) }}</td><td class="n"><b>{{ fmt(e.gross) }}</b></td>
+  <td>{% if e.active %}على رأس العمل{% else %}<span class="muted">انتهت {{ e.end_date or '' }}</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">لا يوجد موظفين</td></tr>{% endfor %}
+{% if rows %}<tr class="total"><td colspan="5">الإجمالي ({{ rows|length }} موظف)</td><td class="n">{{ fmt(rows|sum(attribute='basic')) }}</td><td class="n">{{ fmt(rows|sum(attribute='allowances')) }}</td><td class="n">{{ fmt(rows|sum(attribute='gross')) }}</td><td></td></tr>{% endif %}
+</table></div></div>
+{% endblock %}

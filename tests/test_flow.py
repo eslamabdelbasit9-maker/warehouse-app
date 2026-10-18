@@ -2027,3 +2027,97 @@ def test_sales_invoices_customers_collections_and_aging(env):
     login(c, env, "prod.manager@example.com")
     assert c.get("/receivables").status_code == 200 and "فواتير البيع" in c.get("/").text
     assert c.post("/customers", data={"name": "س"}, follow_redirects=False).status_code == 403
+
+
+def test_hr_employees_attendance_advances_payroll(env):
+    """موظف ← حضور (غياب وإضافي) ← سلفة ← مسير مسودة ← ترحيل بقيد ← صرف بقيد؛ والعهد تظهر في ملف الموظف."""
+    from app import accounting as AC
+    from app.auth import hash_password
+    from app.models import AuditLog, CustodyRecord, Employee, EmployeeAdvance, JournalEntry, PayrollRun
+    _acc_user(env)
+    db = SessionLocal()
+    hr = User(email="hr@example.com", name="شؤون", roles="hr", all_sites=True, password_hash=hash_password("x" * 8))
+    db.add(hr)
+    db.add(CustodyRecord(site_id=env["site"], employee_no="E-77", employee_name="سالم", category="device", item_name="جهاز لاسلكي",
+                         issued_at=date(2026, 1, 5)))
+    db.commit()
+    env["hr@example.com"] = hr.id
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/employees", follow_redirects=False).status_code == 403
+    login(c, env, "hr@example.com")
+    r = c.post("/employees", data={"emp_no": "E-77", "name": "سالم", "site_id": env["site"], "hire_date": "2025-01-01",
+                                   "basic": "3000", "housing": "750", "transport": "250"}, follow_redirects=True)
+    assert "تم حفظ بيانات الموظف" in r.text and "جهاز لاسلكي" in r.text and "4,000" in r.text
+    assert "يوجد موظف بنفس الرقم" in c.post("/employees", data={"emp_no": "E-77", "name": "آخر"}, follow_redirects=True).text
+    # موظف معيّن منتصف الشهر بيتحسب نسبة
+    c.post("/employees", data={"emp_no": "E-78", "name": "ماجد", "site_id": env["site"], "hire_date": "2026-09-16", "basic": "3000"})
+    db = SessionLocal()
+    eid = db.query(Employee).filter_by(emp_no="E-77").one().id
+    eid2 = db.query(Employee).filter_by(emp_no="E-78").one().id
+    db.close()
+    c.post("/attendance", data={"period": "2026-09", "emp_id": [eid, eid2], "absent": ["2", ""], "ot": ["10", ""], "note": ["", ""]})
+    assert 'value="2"' in c.get("/attendance?period=2026-09").text
+    assert c.post("/advances/new", data={"employee_id": eid, "amount": "1000"}, follow_redirects=False).status_code == 403
+    login(c, env, "acc@example.com")
+    c.post("/advances/new", data={"employee_id": eid, "date": "2026-09-03", "amount": "1000", "installment": "250", "method": "cash"})
+    r = c.post("/payroll/new", data={"period": "2026-09"}, follow_redirects=True)
+    assert "مسودة" in r.text
+    db = SessionLocal()
+    run = db.query(PayrollRun).one()
+    rid = run.id
+    by = {l.employee_id: l for l in run.lines}
+    l1, l2 = by[eid], by[eid2]
+    # الغياب: 4000/30×2 = 266.67، الإضافي: 3000/30/8×1.5×10 = 187.5، القسط 250
+    assert (l1.basic, l1.allowances, l1.overtime, l1.absence_ded, l1.advance_ded) == (3000, 1000, 187.5, 266.67, 250)
+    assert l1.net == round(4187.5 - 266.67 - 250, 2) and l2.basic == 1500
+    lid1, lid2 = l1.id, l2.id
+    db.close()
+    # قسط أكبر من المتبقي مرفوض؛ وتعديل الخصومات يتحفظ
+    assert "أكبر من المتبقي" in c.post(f"/payroll/{rid}/save", data={"line_id": [lid1, lid2], "adv": ["1500", "0"], "other": ["", ""],
+                                                                     "note": ["", ""]}, follow_redirects=True).text
+    c.post(f"/payroll/{rid}/save", data={"line_id": [lid1, lid2], "adv": ["300", "0"], "other": ["50", ""], "note": ["جزاء", ""]})
+    r = c.post(f"/payroll/{rid}/post", data={"line_id": [lid1, lid2], "adv": ["300", "0"], "other": ["50", ""], "note": ["جزاء", ""],
+                                             "post_date": "2026-09-30"}, follow_redirects=True)
+    assert "تم ترحيل" in r.text
+    db = SessionLocal()
+    AC.sync(db)
+    k = AC.acc_by_key(db)
+    run = db.get(PayrollRun, rid)
+    net = run.total("net")
+    je = db.query(JournalEntry).filter_by(source="payroll", source_id=str(rid)).one()
+    sums = {}
+    for l in je.lines:
+        sums[l.account_id] = round(sums.get(l.account_id, 0) + l.debit - l.credit, 2)
+    assert sums == {k["salaries"]: round(net + 300, 2), k["emp_adv"]: -300, k["salaries_payable"]: -net}
+    adv_je = db.query(JournalEntry).filter_by(source="advance").one()
+    assert {(l.account_id, l.debit, l.credit) for l in adv_je.lines} == {(k["emp_adv"], 1000, 0), (k["cash"], 0, 1000)}
+    db.close()
+    # بعد الترحيل: الحضور للعرض فقط، والسلفة ما تتحذفش لأن اتخصم منها
+    assert "للعرض فقط" in c.get("/attendance?period=2026-09").text
+    db = SessionLocal()
+    aid = db.query(EmployeeAdvance).one().id
+    db.close()
+    assert "خُصم منها" in c.post(f"/advances/{aid}/delete", follow_redirects=True).text
+    assert "700" in c.get("/advances").text   # المتبقي 1000 − 300
+    c.post(f"/payroll/{rid}/pay", data={"paid_date": "2026-10-02", "method": "bank", "ref": "WPS-9"})
+    db = SessionLocal()
+    AC.sync(db)
+    pj = db.query(JournalEntry).filter_by(source="payroll_pay", source_id=str(rid)).one()
+    assert round(sum(l.debit for l in pj.lines if l.account_id == k["salaries_payable"]), 2) == net
+    assert round(sum(l.credit for l in pj.lines if l.account_id == k["bank"]), 2) == net
+    assert db.query(AuditLog).filter_by(entity="payroll").count() >= 3
+    db.close()
+    assert "قسيمة راتب" in c.get(f"/payroll/{rid}/slip/{lid1}").text
+    # إلغاء الصرف ثم الترحيل يرجّع مسودة ويشيل القيود
+    c.post(f"/payroll/{rid}/unpay")
+    c.post(f"/payroll/{rid}/unpost")
+    db = SessionLocal()
+    AC.sync(db)
+    assert db.get(PayrollRun, rid).status == "draft"
+    assert db.query(JournalEntry).filter(JournalEntry.source.in_(("payroll", "payroll_pay"))).count() == 0
+    db.close()
+    login(c, env, "prod.manager@example.com")
+    assert c.get(f"/payroll/{rid}").status_code == 200
+    assert c.post(f"/payroll/{rid}/post", data={}, follow_redirects=False).status_code == 403

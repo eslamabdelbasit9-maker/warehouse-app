@@ -2,7 +2,7 @@ import io
 import time
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Query, Request
@@ -3714,3 +3714,368 @@ def receivables_statement(request: Request, party: str = "", date_from: str | No
     return render(request, "receivables_statement.html", user, party=party, cust=cust, ob=ob, rows=rows, d_from=f, d_to=t,
                   doc_link=AC.doc_link, can_collect=user.has("accountant") and cust is not None, today=date.today(),
                   sites=user_sites(db, user), co=company_info(db))
+
+
+# ================= الموارد البشرية: الموظفين، الحضور، السلف، مسير الرواتب =================
+from calendar import monthrange  # noqa: E402
+
+from .models import PAYROLL_STATUS, Attendance, CustodyRecord as _Custody, Employee, EmployeeAdvance, PayrollLine, PayrollRun  # noqa: E402
+
+T.env.globals.update(PAYROLL_STATUS=PAYROLL_STATUS)
+HR_EDIT = ("hr", "accountant")
+HR_VIEW = ("hr", "accountant", "manager", "final")
+EMP_FIELDS = ["emp_no", "name", "job_title", "id_no", "nationality", "phone", "iban", "notes"]
+EMP_MONEY = ["basic", "housing", "transport", "other_allow"]
+
+
+def _period(v, default=None):
+    """«2026-10» أو تاريخ ← أول يوم في الشهر."""
+    try:
+        y, m = str(v or "")[:7].split("-")
+        return date(int(y), int(m), 1)
+    except (ValueError, TypeError):
+        return default or date.today().replace(day=1)
+
+
+def _month_end(p):
+    return p.replace(day=monthrange(p.year, p.month)[1])
+
+
+def advance_balances(db, upto_run=None):
+    """{رقم الموظف: (إجمالي السلف، المخصوم في المسيرات المرحّلة، المتبقي)}."""
+    adv = dict(db.query(EmployeeAdvance.employee_id, func.sum(EmployeeAdvance.amount)).group_by(EmployeeAdvance.employee_id).all())
+    q = (db.query(PayrollLine.employee_id, func.sum(PayrollLine.advance_ded)).join(PayrollRun)
+         .filter(PayrollRun.status.in_(("posted", "paid"))))
+    if upto_run is not None:
+        q = q.filter(PayrollRun.id != upto_run)
+    ded = dict(q.group_by(PayrollLine.employee_id).all())
+    return {e: (adv.get(e) or 0, ded.get(e) or 0, round((adv.get(e) or 0) - (ded.get(e) or 0), 2)) for e in set(adv) | set(ded)}
+
+
+def build_payroll(db, run):
+    """يجهّز سطور المسير من بيانات الموظفين والحضور وأقساط السلف (للمسودة بس). الشهر = 30 يوم."""
+    start, end = run.period, _month_end(run.period)
+    att = {a.employee_id: a for a in db.query(Attendance).filter(Attendance.period == start)}
+    keep = {l.employee_id: l for l in run.lines}
+    bals = advance_balances(db, upto_run=run.id)
+    inst = dict(db.query(EmployeeAdvance.employee_id, func.sum(EmployeeAdvance.installment)).group_by(EmployeeAdvance.employee_id).all())
+    run.lines.clear()
+    db.flush()
+    emps = (db.query(Employee).filter(or_(Employee.hire_date.is_(None), Employee.hire_date <= end),
+                                      or_(Employee.end_date.is_(None), Employee.end_date >= start))
+            .order_by(Employee.emp_no).all())
+    for e in emps:
+        if not e.active and not e.end_date:
+            continue
+        f, t = max(start, e.hire_date or start), min(end, e.end_date or end)
+        days = 30 if (f == start and t == end) else min(30, (t - f).days + 1)
+        ratio = days / 30
+        a = att.get(e.id)
+        absent = min(a.absent_days or 0, days) if a else 0
+        ot = (a.overtime_hours or 0) if a else 0
+        rem = bals.get(e.id, (0, 0, 0))[2]
+        old = keep.get(e.id)
+        adv = old.advance_ded if old and old.advance_ded <= rem + 0.004 else min(rem, inst.get(e.id) or 0) if rem > 0 else 0
+        run.lines.append(PayrollLine(
+            employee_id=e.id, site_id=e.site_id, basic=round((e.basic or 0) * ratio, 2), allowances=round(e.allowances * ratio, 2),
+            overtime=round((e.basic or 0) / 30 / 8 * 1.5 * ot, 2), absence_ded=round(e.gross / 30 * absent, 2),
+            advance_ded=round(max(adv, 0), 2), other_ded=old.other_ded if old else 0,
+            notes=old.notes if old else (("أيام العمل " + S.fmt(days)) if days < 30 else None)))
+
+
+@app.get("/employees", response_class=HTMLResponse)
+def employees(request: Request, q: str = "", site: str = "", state: str = "active", db: Session = Depends(get_db),
+              user: User = Depends(require(*HR_VIEW))):
+    qry = db.query(Employee).options(selectinload(Employee.site))
+    if state == "active":
+        qry = qry.filter(Employee.active.is_(True))
+    elif state == "ended":
+        qry = qry.filter(Employee.active.is_(False))
+    if site.isdigit():
+        qry = qry.filter(Employee.site_id == int(site))
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(Employee.name.ilike(like), Employee.emp_no.ilike(like), Employee.job_title.ilike(like)))
+    rows = qry.order_by(Employee.emp_no).all()
+    return render(request, "hr_employees.html", user, rows=rows, q=q, site=site, state=state,
+                  sites=db.query(Site).filter(Site.active.is_(True)).order_by(Site.name).all(), can_edit=user.has(*HR_EDIT))
+
+
+@app.post("/employees")
+async def employees_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_EDIT))):
+    form = await request.form()
+    eid = form.get("id")
+    e = db.get(Employee, int(eid)) if str(eid or "").isdigit() else Employee()
+    vals = {k: " ".join((form.get(k) or "").split())[:150] or None for k in EMP_FIELDS if k != "notes"}
+    if not vals["emp_no"] or not vals["name"]:
+        flash(request, "الرقم الوظيفي والاسم مطلوبين", "err")
+        return back("/employees")
+    if db.query(Employee).filter(Employee.emp_no == vals["emp_no"], Employee.id != (e.id or 0)).first():
+        flash(request, "يوجد موظف بنفس الرقم الوظيفي", "err")
+        return back("/employees")
+    old = {k: getattr(e, k) for k in EMP_MONEY} if eid else None
+    for k, v in vals.items():
+        setattr(e, k, v)
+    e.notes = (form.get("notes") or "").strip() or None
+    for k in EMP_MONEY:
+        v = parse_float(form.get(k))
+        setattr(e, k, round(v, 2) if v and v > 0 else 0.0)
+    e.site_id = int(form.get("site_id")) if str(form.get("site_id") or "").isdigit() else None
+    e.hire_date = parse_date(form.get("hire_date"))
+    e.end_date = parse_date(form.get("end_date"))
+    e.active = e.end_date is None or e.end_date >= date.today()
+    db.add(e)
+    db.flush()
+    AC.audit(db, user, "edit" if eid else "create", "employee", e.emp_no,
+             {"الاسم": e.name, "الراتب": e.gross, **({"الراتب السابق": sum(v or 0 for v in old.values())} if old else {})}, request)
+    db.commit()
+    flash(request, f"تم حفظ بيانات الموظف {e.name}")
+    return back(f"/employees/{e.id}")
+
+
+@app.get("/employees/{eid}", response_class=HTMLResponse)
+def employee_detail(eid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    e = db.get(Employee, eid)
+    if not e:
+        return back("/employees")
+    custody = (db.query(_Custody).filter(_Custody.employee_no == e.emp_no).order_by(_Custody.returned_at.isnot(None), _Custody.issued_at.desc()).all())
+    advs = db.query(EmployeeAdvance).filter_by(employee_id=e.id).order_by(EmployeeAdvance.date.desc()).all()
+    pays = (db.query(PayrollLine).join(PayrollRun).options(selectinload(PayrollLine.run)).filter(PayrollLine.employee_id == e.id)
+            .order_by(PayrollRun.period.desc()).limit(24).all())
+    return render(request, "hr_employee.html", user, e=e, custody=custody, advs=advs, pays=pays,
+                  bal=advance_balances(db).get(e.id, (0, 0, 0)), can_edit=user.has(*HR_EDIT),
+                  sites=db.query(Site).filter(Site.active.is_(True)).order_by(Site.name).all())
+
+
+@app.get("/attendance", response_class=HTMLResponse)
+def attendance(request: Request, period: str = "", site: str = "", db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    p = _period(period)
+    end = _month_end(p)
+    qry = db.query(Employee).filter(or_(Employee.hire_date.is_(None), Employee.hire_date <= end),
+                                    or_(Employee.end_date.is_(None), Employee.end_date >= p))
+    if site.isdigit():
+        qry = qry.filter(Employee.site_id == int(site))
+    emps = [e for e in qry.order_by(Employee.emp_no) if e.active or e.end_date]
+    att = {a.employee_id: a for a in db.query(Attendance).filter(Attendance.period == p)}
+    run = db.query(PayrollRun).filter_by(period=p).first()
+    return render(request, "hr_attendance.html", user, emps=emps, att=att, period=p, site=site, run=run,
+                  sites=db.query(Site).filter(Site.active.is_(True)).order_by(Site.name).all(),
+                  can_edit=user.has(*HR_EDIT) and (not run or run.status == "draft"))
+
+
+@app.post("/attendance")
+async def attendance_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_EDIT))):
+    form = await request.form()
+    p = _period(form.get("period"))
+    run = db.query(PayrollRun).filter_by(period=p).first()
+    if run and run.status != "draft":
+        flash(request, "مسير هذا الشهر مرحّل — ألغِ الترحيل أولاً لتعديل الحضور", "err")
+        return back(f"/attendance?period={p:%Y-%m}")
+    att = {a.employee_id: a for a in db.query(Attendance).filter(Attendance.period == p)}
+    n = 0
+    for eid, ab, ot, nt in zip(form.getlist("emp_id"), form.getlist("absent"), form.getlist("ot"), form.getlist("note")):
+        if not str(eid).isdigit():
+            continue
+        ab, ot, nt = max(parse_float(ab) or 0, 0), max(parse_float(ot) or 0, 0), (nt or "").strip()[:300] or None
+        a = att.get(int(eid))
+        if not a and not (ab or ot or nt):
+            continue
+        if not a:
+            a = Attendance(employee_id=int(eid), period=p)
+            db.add(a)
+        if (a.absent_days, a.overtime_hours, a.notes) != (ab, ot, nt):
+            n += 1
+        a.absent_days, a.overtime_hours, a.notes = min(ab, 30), ot, nt
+    if n:
+        AC.audit(db, user, "edit", "attendance", f"{p:%Y-%m}", {"عدد الموظفين": n}, request)
+    db.commit()
+    flash(request, f"تم حفظ حضور شهر {p:%Y-%m}")
+    return back(f"/attendance?period={p:%Y-%m}" + (f"&site={form.get('site')}" if form.get("site") else ""))
+
+
+@app.get("/advances", response_class=HTMLResponse)
+def advances(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    rows = (db.query(EmployeeAdvance).options(selectinload(EmployeeAdvance.employee), selectinload(EmployeeAdvance.created_by))
+            .order_by(EmployeeAdvance.date.desc(), EmployeeAdvance.id.desc()).limit(300).all())
+    bals = advance_balances(db)
+    emps = {e.id: e for e in db.query(Employee)}
+    open_ = sorted(((emps[k], v) for k, v in bals.items() if v[2] > 0.004 and k in emps), key=lambda x: -x[1][2])
+    return render(request, "hr_advances.html", user, rows=rows, open_=open_, today=date.today(),
+                  emps=[e for e in emps.values() if e.active], can_edit=user.has("accountant"))
+
+
+@app.post("/advances/new")
+async def advance_new(request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    form = await request.form()
+    try:
+        d = parse_date(form.get("date"), date.today())
+        AC.check_lock(db, d, "تسجيل سلفة")
+        e = db.get(Employee, int(form.get("employee_id") or 0)) if str(form.get("employee_id") or "").isdigit() else None
+        if not e or not e.active:
+            raise S.BusinessError("اختر الموظف")
+        amt = parse_float(form.get("amount"))
+        if not amt or amt <= 0:
+            raise S.BusinessError("أدخل مبلغ السلفة")
+        inst = parse_float(form.get("installment")) or 0
+        if inst < 0 or inst > amt:
+            raise S.BusinessError("القسط الشهري يجب أن يكون بين صفر ومبلغ السلفة")
+        a = EmployeeAdvance(adv_no=_next_no(db, EmployeeAdvance, EmployeeAdvance.adv_no, f"ADV-{d.year}-"), employee_id=e.id, date=d,
+                            amount=round(amt, 2), installment=round(inst or amt, 2),
+                            method=form.get("method") if form.get("method") in PAY_METHODS else "bank",
+                            notes=(form.get("notes") or "").strip() or None, created_by_id=user.id)
+        db.add(a)
+        db.flush()
+        AC.audit(db, user, "create", "advance", a.adv_no, {"الموظف": e.name, "المبلغ": a.amount}, request)
+        db.commit()
+    except S.BusinessError as ex:
+        db.rollback()
+        flash(request, str(ex), "err")
+        return back("/advances")
+    flash(request, f"تم تسجيل السلفة {a.adv_no} للموظف {e.name}")
+    return back("/advances")
+
+
+@app.post("/advances/{aid}/delete")
+def advance_delete(aid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    a = db.get(EmployeeAdvance, aid)
+    if not a:
+        return back("/advances")
+    try:
+        AC.check_lock(db, a.date, "حذف سلفة")
+        if advance_balances(db).get(a.employee_id, (0, 0, 0))[2] < a.amount - 0.004:
+            raise S.BusinessError("لا يمكن حذف السلفة — خُصم منها أقساط في مسير مرحّل")
+    except S.BusinessError as ex:
+        flash(request, str(ex), "err")
+        return back("/advances")
+    AC.audit(db, user, "delete", "advance", a.adv_no, {"الموظف": a.employee.name, "المبلغ": a.amount}, request)
+    db.delete(a)
+    db.commit()
+    flash(request, f"تم حذف السلفة {a.adv_no}")
+    return back("/advances")
+
+
+@app.get("/payroll", response_class=HTMLResponse)
+def payroll(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    runs = db.query(PayrollRun).options(selectinload(PayrollRun.lines)).order_by(PayrollRun.period.desc()).all()
+    nxt = (runs[0].period.replace(day=28) + timedelta(days=4)).replace(day=1) if runs else date.today().replace(day=1)
+    return render(request, "hr_payroll.html", user, runs=runs, nxt=nxt, can_edit=user.has("accountant"))
+
+
+@app.post("/payroll/new")
+async def payroll_new(request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    form = await request.form()
+    p = _period(form.get("period"))
+    old = db.query(PayrollRun).filter_by(period=p).first()
+    if old:
+        return back(f"/payroll/{old.id}")
+    run = PayrollRun(period=p, created_by_id=user.id)
+    db.add(run)
+    db.flush()
+    build_payroll(db, run)
+    if not run.lines:
+        db.rollback()
+        flash(request, "لا يوجد موظفين نشطين في هذا الشهر", "err")
+        return back("/payroll")
+    AC.audit(db, user, "create", "payroll", f"{p:%Y-%m}", {"الموظفين": len(run.lines)}, request)
+    db.commit()
+    flash(request, f"تم تجهيز مسير شهر {p:%Y-%m} (مسودة) — راجعه ثم رحّله")
+    return back(f"/payroll/{run.id}")
+
+
+def _run(db, rid):
+    return (db.query(PayrollRun).options(selectinload(PayrollRun.lines).selectinload(PayrollLine.employee)).filter_by(id=rid).first())
+
+
+@app.get("/payroll/{rid}", response_class=HTMLResponse)
+def payroll_detail(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    run = _run(db, rid)
+    if not run:
+        return back("/payroll")
+    lines = sorted(run.lines, key=lambda l: ((l.employee.site.name if l.employee.site else ""), l.employee.emp_no))
+    return render(request, "hr_payroll_run.html", user, run=run, lines=lines, today=date.today(), month_end=_month_end(run.period),
+                  bals=advance_balances(db, upto_run=run.id), can_edit=user.has("accountant"))
+
+
+@app.post("/payroll/{rid}/{action}")
+async def payroll_action(rid: int, action: str, request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    run = _run(db, rid)
+    if not run:
+        return back("/payroll")
+    form = await request.form()
+    label = f"{run.period:%Y-%m}"
+    try:
+        if action in ("save", "rebuild", "delete", "post") and run.status != "draft":
+            raise S.BusinessError("المسير مرحّل — ألغِ الترحيل أولاً")
+        if action == "save" or action == "post":
+            bals = advance_balances(db, upto_run=run.id)
+            by_id = {l.id: l for l in run.lines}
+            for lid, adv, oth, nt in zip(form.getlist("line_id"), form.getlist("adv"), form.getlist("other"), form.getlist("note")):
+                l = by_id.get(int(lid)) if str(lid).isdigit() else None
+                if not l:
+                    continue
+                adv, oth = max(parse_float(adv) or 0, 0), max(parse_float(oth) or 0, 0)
+                rem = bals.get(l.employee_id, (0, 0, 0))[2]
+                if adv > rem + 0.004:
+                    raise S.BusinessError(f"قسط السلفة للموظف {l.employee.name} أكبر من المتبقي عليه ({S.fmt(rem)})")
+                l.advance_ded, l.other_ded, l.notes = round(adv, 2), round(oth, 2), (nt or "").strip()[:300] or None
+                if l.net < -0.004:
+                    raise S.BusinessError(f"صافي راتب {l.employee.name} بالسالب — راجع الخصومات")
+        if action == "rebuild":
+            build_payroll(db, run)
+            msg = "تم إعادة احتساب المسير من بيانات الموظفين والحضور"
+        elif action == "save":
+            msg = "تم حفظ المسير"
+        elif action == "post":
+            run.post_date = parse_date(form.get("post_date"), _month_end(run.period))
+            AC.check_lock(db, run.post_date, "ترحيل مسير الرواتب")
+            run.status = "posted"
+            msg = f"تم ترحيل مسير {label} — الرواتب أصبحت مستحقة"
+        elif action == "unpost":
+            if run.status != "posted":
+                raise S.BusinessError("ألغِ تسجيل الصرف أولاً" if run.status == "paid" else "المسير غير مرحّل")
+            AC.check_lock(db, run.post_date or run.period, "إلغاء ترحيل المسير")
+            run.status, run.post_date = "draft", None
+            msg = f"تم إلغاء ترحيل مسير {label}"
+        elif action == "pay":
+            if run.status != "posted":
+                raise S.BusinessError("رحّل المسير أولاً")
+            d = parse_date(form.get("paid_date"), date.today())
+            if d < (run.post_date or run.period):
+                raise S.BusinessError("تاريخ الصرف قبل تاريخ الاستحقاق")
+            AC.check_lock(db, d, "صرف الرواتب")
+            run.status, run.paid_date = "paid", d
+            run.paid_method = form.get("method") if form.get("method") in PAY_METHODS else "bank"
+            run.paid_ref = (form.get("ref") or "").strip()[:100] or None
+            msg = f"تم تسجيل صرف رواتب {label}"
+        elif action == "unpay":
+            if run.status != "paid":
+                raise S.BusinessError("المسير غير مصروف")
+            AC.check_lock(db, run.paid_date, "إلغاء صرف الرواتب")
+            run.status, run.paid_date, run.paid_method, run.paid_ref = "posted", None, None, None
+            msg = f"تم إلغاء تسجيل صرف رواتب {label}"
+        elif action == "delete":
+            AC.audit(db, user, "delete", "payroll", label, {"الصافي": run.total("net")}, request)
+            db.delete(run)
+            db.commit()
+            flash(request, f"تم حذف مسودة مسير {label}")
+            return back("/payroll")
+        else:
+            return back(f"/payroll/{rid}")
+        if action != "save":
+            AC.audit(db, user, "edit", "payroll", label, {"الإجراء": msg, "الصافي": run.total("net")}, request)
+        db.commit()
+    except S.BusinessError as ex:
+        db.rollback()
+        flash(request, str(ex), "err")
+        return back(f"/payroll/{rid}")
+    flash(request, msg)
+    return back(f"/payroll/{rid}")
+
+
+@app.get("/payroll/{rid}/slip/{lid}", response_class=HTMLResponse)
+def payroll_slip(rid: int, lid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*HR_VIEW))):
+    l = db.get(PayrollLine, lid)
+    if not l or l.run_id != rid:
+        return back(f"/payroll/{rid}")
+    att = db.query(Attendance).filter_by(employee_id=l.employee_id, period=l.run.period).first()
+    return render(request, "hr_slip.html", user, l=l, run=l.run, att=att, co=company_info(db))

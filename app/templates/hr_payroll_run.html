@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>مسير رواتب شهر {{ run.period.strftime('%Y-%m') }} <span class="st st-{{ {'draft':'pending','posted':'partial','paid':'approved'}[run.status] }}" style="font-size:14px;vertical-align:middle">{{ PAYROLL_STATUS[run.status] }}</span></h1>
+{% include "_hr_nav.html" %}
+{% set draft = run.status == 'draft' and can_edit %}
+<form method="post" class="card" id="pform">
+  <p class="muted" style="margin-top:0">
+    {% if run.post_date %}تاريخ الاستحقاق {{ run.post_date }}{% endif %}{% if run.paid_date %} — صُرف {{ run.paid_date }} ({{ PAY_METHODS.get(run.paid_method, '') }}{% if run.paid_ref %} {{ run.paid_ref }}{% endif %}){% endif %}
+    {% if draft %}قسط السلفة والخصومات الأخرى قابلة للتعديل قبل الترحيل. «إعادة الاحتساب» تحدّث الرواتب والحضور من بياناتها.{% endif %}</p>
+  <div class="tw"><table class="t">
+  <tr><th>الرقم</th><th>الموظف</th><th>الموقع</th><th class="n">الأساسي</th><th class="n">البدلات</th><th class="n">الإضافي</th><th class="n">خصم الغياب</th><th class="n">قسط السلفة</th><th class="n">خصومات أخرى</th><th class="n">الصافي</th><th>ملاحظات</th><th class="noprint"></th></tr>
+  {% for l in lines %}<tr><td>{{ l.employee.emp_no }}<input type="hidden" name="line_id" value="{{ l.id }}"></td><td style="white-space:nowrap"><b>{{ l.employee.name }}</b></td><td>{{ l.employee.site.name if l.employee.site else '' }}</td>
+    <td class="n">{{ fmt(l.basic) }}</td><td class="n">{{ fmt(l.allowances) }}</td><td class="n">{{ fmt(l.overtime) if l.overtime else '-' }}</td><td class="n">{{ fmt(l.absence_ded) if l.absence_ded else '-' }}</td>
+    {% if draft %}{% set rem = bals.get(l.employee_id, (0, 0, 0))[2] %}<td><input name="adv" type="number" step="0.01" min="0" max="{{ rem }}" value="{{ l.advance_ded or '' }}" style="max-width:100px" {{ 'disabled' if rem <= 0 }} title="المتبقي {{ fmt(rem) }}">{% if rem <= 0 %}<input type="hidden" name="adv" value="0">{% endif %}</td>
+      <td><input name="other" type="number" step="0.01" min="0" value="{{ l.other_ded or '' }}" style="max-width:100px"></td>
+    {% else %}<td class="n">{{ fmt(l.advance_ded) if l.advance_ded else '-' }}</td><td class="n">{{ fmt(l.other_ded) if l.other_ded else '-' }}</td>{% endif %}
+    <td class="n"><b>{{ fmt(l.net) }}</b></td>
+    <td>{% if draft %}<input name="note" value="{{ l.notes or '' }}" style="max-width:160px">{% else %}{{ l.notes or '' }}{% endif %}</td>
+    <td class="noprint"><a class="btn sec sm" href="/payroll/{{ run.id }}/slip/{{ l.id }}">القسيمة</a></td></tr>{% endfor %}
+  <tr class="total"><td colspan="3">الإجمالي ({{ lines|length }} موظف)</td><td class="n">{{ fmt(run.total('basic')) }}</td><td class="n">{{ fmt(run.total('allowances')) }}</td><td class="n">{{ fmt(run.total('overtime')) }}</td>
+    <td class="n">{{ fmt(run.total('absence_ded')) }}</td><td class="n">{{ fmt(run.total('advance_ded')) }}</td><td class="n">{{ fmt(run.total('other_ded')) }}</td><td class="n">{{ fmt(run.total('net')) }}</td><td></td><td class="noprint"></td></tr>
+  </table></div>
+  <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:flex-end">
+    {% if draft %}
+    <button class="btn sec" formaction="/payroll/{{ run.id }}/save">حفظ التعديلات</button>
+    <button class="btn sec" formaction="/payroll/{{ run.id }}/rebuild" onclick="return confirm('إعادة احتساب المسير من بيانات الموظفين والحضور؟')">إعادة الاحتساب</button>
+    <div class="f"><label>تاريخ الاستحقاق</label><input type="date" name="post_date" value="{{ month_end }}"></div>
+    <button class="btn green" formaction="/payroll/{{ run.id }}/post" onclick="return confirm('ترحيل المسير؟ (الرواتب مدين ← رواتب مستحقة والسلف دائن)')">ترحيل المسير</button>
+    <button class="btn red" formaction="/payroll/{{ run.id }}/delete" onclick="return confirm('حذف مسودة المسير؟')">حذف المسودة</button>
+    {% endif %}
+    <button type="button" class="btn sec" onclick="print()">طباعة المسير</button>
+  </div>
+</form>
+{% if can_edit and run.status == 'posted' %}
+<form method="post" class="card noprint" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <h2 style="width:100%;margin:0 0 4px">تسجيل صرف الرواتب ({{ fmt(run.total('net')) }})</h2>
+  <div class="f"><label>تاريخ الصرف</label><input type="date" name="paid_date" value="{{ today }}"></div>
+  <div class="f"><label>الطريقة</label><select name="method">{% for k, v in PAY_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>المرجع</label><input name="ref"></div>
+  <button class="btn green" formaction="/payroll/{{ run.id }}/pay">تسجيل الصرف</button>
+  <button class="btn sec" formaction="/payroll/{{ run.id }}/unpost" onclick="return confirm('إلغاء ترحيل المسير وإرجاعه مسودة؟')">إلغاء الترحيل</button>
+</form>{% endif %}
+{% if can_edit and run.status == 'paid' %}
+<form method="post" action="/payroll/{{ run.id }}/unpay" class="card noprint" onsubmit="return confirm('إلغاء تسجيل الصرف؟')"><button class="btn sec">إلغاء تسجيل الصرف</button></form>{% endif %}
+{% endblock %}

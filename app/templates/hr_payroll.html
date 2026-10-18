@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>مسيرات الرواتب</h1>
+{% include "_hr_nav.html" %}
+{% if can_edit %}<form class="filters card noprint" method="post" action="/payroll/new">
+  <div class="f"><label>الشهر</label><input type="month" name="period" value="{{ nxt.strftime('%Y-%m') }}" required></div>
+  <button class="btn green">تجهيز مسير الشهر</button>
+  <span class="muted" style="font-size:12px">يُحسب من رواتب الموظفين والحضور الشهري وأقساط السلف، ويُحفظ مسودة للمراجعة قبل الترحيل.</span>
+</form>{% endif %}
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الشهر</th><th class="n">عدد الموظفين</th><th class="n">المستحقات</th><th class="n">الخصومات</th><th class="n">الصافي</th><th>الحالة</th><th>تاريخ الصرف</th></tr>
+{% for r in runs %}<tr><td><a href="/payroll/{{ r.id }}"><b>{{ r.period.strftime('%Y-%m') }}</b></a></td><td class="n">{{ r.lines|length }}</td>
+  <td class="n">{{ fmt(r.total('earnings')) }}</td><td class="n">{{ fmt(r.total('absence_ded') + r.total('advance_ded') + r.total('other_ded')) }}</td>
+  <td class="n"><b>{{ fmt(r.total('net')) }}</b></td>
+  <td><span class="st st-{{ {'draft':'pending','posted':'partial','paid':'approved'}[r.status] }}">{{ PAYROLL_STATUS[r.status] }}</span></td><td>{{ r.paid_date or '' }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">لا توجد مسيرات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

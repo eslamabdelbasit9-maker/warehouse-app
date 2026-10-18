@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:720px">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div><h2 style="margin:0">{{ co.company_name or '' }}</h2><div class="muted">قسيمة راتب شهر {{ run.period.strftime('%Y-%m') }}</div></div>
+    <div style="text-align:left"><div>الرقم الوظيفي: <b>{{ l.employee.emp_no }}</b></div><div class="noprint">{{ PAYROLL_STATUS[run.status] }}</div></div>
+  </div>
+  <div class="meta" style="margin:12px 0">
+    <div><span class="muted">الموظف</span> <b>{{ l.employee.name }}</b></div>
+    {% if l.employee.job_title %}<div><span class="muted">الوظيفة</span> {{ l.employee.job_title }}</div>{% endif %}
+    {% if l.employee.site %}<div><span class="muted">الموقع</span> {{ l.employee.site.name }}</div>{% endif %}
+    {% if l.employee.iban %}<div><span class="muted">الآيبان</span> <span dir="ltr">{{ l.employee.iban }}</span></div>{% endif %}
+  </div>
+  <table class="t">
+    <tr><th>المستحقات</th><th class="n">المبلغ</th><th>الخصومات</th><th class="n">المبلغ</th></tr>
+    <tr><td>الراتب الأساسي</td><td class="n">{{ fmt(l.basic) }}</td><td>الغياب{% if att and att.absent_days %} ({{ fmt(att.absent_days) }} يوم){% endif %}</td><td class="n">{{ fmt(l.absence_ded) }}</td></tr>
+    <tr><td>البدلات</td><td class="n">{{ fmt(l.allowances) }}</td><td>قسط السلفة</td><td class="n">{{ fmt(l.advance_ded) }}</td></tr>
+    <tr><td>الإضافي{% if att and att.overtime_hours %} ({{ fmt(att.overtime_hours) }} ساعة){% endif %}</td><td class="n">{{ fmt(l.overtime) }}</td><td>خصومات أخرى</td><td class="n">{{ fmt(l.other_ded) }}</td></tr>
+    <tr class="total"><td>إجمالي المستحقات</td><td class="n">{{ fmt(l.earnings) }}</td><td>إجمالي الخصومات</td><td class="n">{{ fmt(l.absence_ded + l.advance_ded + l.other_ded) }}</td></tr>
+    <tr class="total"><td colspan="3">صافي الراتب</td><td class="n">{{ fmt(l.net) }}</td></tr>
+  </table>
+  {% if l.notes %}<p><b>ملاحظات:</b> {{ l.notes }}</p>{% endif %}
+  <p style="margin-top:40px;display:flex;justify-content:space-between"><span>توقيع الموظف: ..................</span><span>المحاسب: ..................</span></p>
+  <div class="noprint" style="display:flex;gap:8px"><button class="btn sec" onclick="print()">طباعة</button><a class="btn sec" href="/payroll/{{ run.id }}">رجوع للمسير</a></div>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>الحضور الشهري — {{ period.strftime('%Y-%m') }}</h1>
+{% include "_hr_nav.html" %}
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الشهر</label><input type="month" name="period" value="{{ period.strftime('%Y-%m') }}"></div>
+  <div class="f"><label>الموقع</label><select name="site"><option value="">الكل</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  {% if run %}<a class="btn sec" href="/payroll/{{ run.id }}">مسير الشهر ({{ PAYROLL_STATUS[run.status] }})</a>{% endif %}
+</form>
+<form method="post" action="/attendance" class="card">
+  <input type="hidden" name="period" value="{{ period.strftime('%Y-%m') }}"><input type="hidden" name="site" value="{{ site }}">
+  <p class="muted" style="margin-top:0">أدخل أيام الغياب وساعات العمل الإضافي فقط — الباقي يُعتبر حضوراً كاملاً. خصم الغياب = (إجمالي الراتب ÷ 30) × الأيام، والإضافي = (الأساسي ÷ 30 ÷ 8) × 1.5 × الساعات.
+    {% if run and run.status != 'draft' %}<b class="low">مسير الشهر مرحّل، فالحضور للعرض فقط.</b>{% endif %}</p>
+  <div class="tw"><table class="t">
+  <tr><th>الرقم</th><th>الموظف</th><th>الموقع</th><th>أيام الغياب</th><th>ساعات الإضافي</th><th>ملاحظات</th></tr>
+  {% for e in emps %}{% set a = att.get(e.id) %}<tr><td>{{ e.emp_no }}<input type="hidden" name="emp_id" value="{{ e.id }}"></td><td><b>{{ e.name }}</b></td><td>{{ e.site.name if e.site else '' }}</td>
+    <td><input name="absent" type="number" step="0.5" min="0" max="30" value="{{ (a.absent_days|string).rstrip('0').rstrip('.') if a and a.absent_days else '' }}" style="max-width:90px" {{ 'disabled' if not can_edit }}></td>
+    <td><input name="ot" type="number" step="0.5" min="0" value="{{ (a.overtime_hours|string).rstrip('0').rstrip('.') if a and a.overtime_hours else '' }}" style="max-width:90px" {{ 'disabled' if not can_edit }}></td>
+    <td><input name="note" value="{{ a.notes or '' if a else '' }}" {{ 'disabled' if not can_edit }}></td></tr>
+  {% else %}<tr><td colspan="6" class="muted">لا يوجد موظفين في هذا الشهر</td></tr>{% endfor %}
+  </table></div>
+  {% if can_edit and emps %}<button class="btn" style="margin-top:10px">حفظ الحضور</button>{% endif %}
+</form>
+{% endblock %}

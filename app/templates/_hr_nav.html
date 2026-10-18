@@ -1,0 +1,4 @@
+<div class="card noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+  {% for href, label in [('/employees','الموظفين'),('/attendance','الحضور الشهري'),('/advances','السلف'),('/payroll','مسيرات الرواتب')] %}
+  <a class="btn {{ '' if path==href else 'sec' }} sm" href="{{ href }}">{{ label }}</a>{% endfor %}
+</div>

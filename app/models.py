@@ -16,6 +16,7 @@ ROLES = {
     "manager": "مدير الإنتاج",
     "final": "الاعتماد النهائي",
     "accountant": "محاسب",
+    "hr": "شؤون الموظفين",
 }
 UNIT_KINDS = {
     "asphalt": "خلاطة اسفلت",
@@ -466,7 +467,8 @@ class SalesLine(Base):
 ACCOUNT_TYPES = {"asset": "أصول", "liability": "خصوم", "equity": "حقوق ملكية", "revenue": "إيرادات", "expense": "مصروفات"}
 JOURNAL_SOURCES = {"manual": "قيد يدوي", "opening": "أرصدة منقولة", "receipt": "فاتورة وارد", "issue": "صرف معتمد",
                    "production": "إنتاج الكسارات", "transfer": "تحويل بين الفروع", "sale": "مستخلص مبيعات",
-                   "payment": "سداد مورد", "sinvoice": "فاتورة بيع", "collection": "تحصيل من عميل"}
+                   "payment": "سداد مورد", "sinvoice": "فاتورة بيع", "collection": "تحصيل من عميل",
+                   "advance": "سلفة موظف", "payroll": "مسير رواتب", "payroll_pay": "صرف رواتب"}
 
 
 class Account(Base):
@@ -717,3 +719,118 @@ class CustomerReceipt(Base):
     customer: Mapped[Customer] = relationship()
     site: Mapped[Site | None] = relationship()
     created_by: Mapped[User | None] = relationship()
+
+
+# ---------- الموارد البشرية: الموظفين، الحضور الشهري، السلف، مسير الرواتب ----------
+PAYROLL_STATUS = {"draft": "مسودة", "posted": "مرحّل (مستحق)", "paid": "مصروف"}
+
+
+class Employee(Base):
+    """الموظف — رقمه الوظيفي هو نفس رقم الموظف في العهد (الأصول) فبيترابطوا."""
+    __tablename__ = "employees"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    emp_no: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    job_title: Mapped[str | None] = mapped_column(String(150))
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    id_no: Mapped[str | None] = mapped_column(String(30))            # الهوية / الإقامة
+    nationality: Mapped[str | None] = mapped_column(String(50))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    hire_date: Mapped[date | None] = mapped_column(Date)
+    basic: Mapped[float] = mapped_column(Float, default=0)             # الراتب الأساسي
+    housing: Mapped[float] = mapped_column(Float, default=0)           # بدل السكن
+    transport: Mapped[float] = mapped_column(Float, default=0)         # بدل النقل
+    other_allow: Mapped[float] = mapped_column(Float, default=0)       # بدلات أخرى
+    iban: Mapped[str | None] = mapped_column(String(40))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    end_date: Mapped[date | None] = mapped_column(Date)               # تاريخ انتهاء الخدمة
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site | None] = relationship()
+
+    @property
+    def allowances(self):
+        return round((self.housing or 0) + (self.transport or 0) + (self.other_allow or 0), 2)
+
+    @property
+    def gross(self):
+        return round((self.basic or 0) + self.allowances, 2)
+
+
+class Attendance(Base):
+    """ملخص الحضور الشهري للموظف: أيام الغياب وساعات الإضافي (بيدخل في مسير نفس الشهر)."""
+    __tablename__ = "attendance"
+    __table_args__ = (UniqueConstraint("employee_id", "period"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), index=True)
+    period: Mapped[date] = mapped_column(Date, index=True)             # أول يوم في الشهر
+    absent_days: Mapped[float] = mapped_column(Float, default=0)
+    overtime_hours: Mapped[float] = mapped_column(Float, default=0)
+    notes: Mapped[str | None] = mapped_column(String(300))
+    employee: Mapped[Employee] = relationship()
+
+
+class EmployeeAdvance(Base):
+    """سلفة موظف — قيدها: سلف وعهد الموظفين مدين ← البنك / الصندوق دائن. بتتخصم أقساط من المسير."""
+    __tablename__ = "employee_advances"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    adv_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    installment: Mapped[float] = mapped_column(Float, default=0)       # القسط الشهري المقترح
+    method: Mapped[str] = mapped_column(String(10), default="bank")
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    employee: Mapped[Employee] = relationship()
+    created_by: Mapped[User | None] = relationship()
+
+
+class PayrollRun(Base):
+    """مسير رواتب شهر: مسودة ← ترحيل (الرواتب مدين ← رواتب مستحقة + السلف دائن) ← صرف (رواتب مستحقة مدين ← البنك دائن)."""
+    __tablename__ = "payroll_runs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    period: Mapped[date] = mapped_column(Date, unique=True, index=True)   # أول يوم في الشهر
+    status: Mapped[str] = mapped_column(String(10), default="draft")
+    post_date: Mapped[date | None] = mapped_column(Date)                # تاريخ الاستحقاق (آخر الشهر)
+    paid_date: Mapped[date | None] = mapped_column(Date)
+    paid_method: Mapped[str | None] = mapped_column(String(10))
+    paid_ref: Mapped[str | None] = mapped_column(String(100))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_by: Mapped[User | None] = relationship()
+    lines: Mapped[list["PayrollLine"]] = relationship(back_populates="run", cascade="all, delete-orphan",
+                                                      order_by="PayrollLine.id")
+
+    def total(self, attr):
+        return round(sum(getattr(l, attr) or 0 for l in self.lines), 2)
+
+
+class PayrollLine(Base):
+    __tablename__ = "payroll_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("payroll_runs.id"), index=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), index=True)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    basic: Mapped[float] = mapped_column(Float, default=0)
+    allowances: Mapped[float] = mapped_column(Float, default=0)
+    overtime: Mapped[float] = mapped_column(Float, default=0)          # قيمة الإضافي
+    absence_ded: Mapped[float] = mapped_column(Float, default=0)       # خصم الغياب
+    advance_ded: Mapped[float] = mapped_column(Float, default=0)       # قسط السلفة
+    other_ded: Mapped[float] = mapped_column(Float, default=0)         # خصومات أخرى (جزاءات، تأمينات ...)
+    notes: Mapped[str | None] = mapped_column(String(300))
+    run: Mapped[PayrollRun] = relationship(back_populates="lines")
+    employee: Mapped[Employee] = relationship()
+
+    @property
+    def earnings(self):
+        return round((self.basic or 0) + (self.allowances or 0) + (self.overtime or 0), 2)
+
+    @property
+    def expense(self):   # المحمّل على مصروف الرواتب
+        return round(self.earnings - (self.absence_ded or 0) - (self.other_ded or 0), 2)
+
+    @property
+    def net(self):
+        return round(self.expense - (self.advance_ded or 0), 2)

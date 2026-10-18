@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>ملف الموظف — {{ e.name }}</h1>
+{% include "_hr_nav.html" %}
+<form method="post" action="/employees" class="card">
+  <input type="hidden" name="id" value="{{ e.id }}">
+  <fieldset {{ 'disabled' if not can_edit }} style="border:0;padding:0;margin:0">
+  <div class="meta">
+    <div class="f"><label>الرقم الوظيفي *</label><input name="emp_no" value="{{ e.emp_no }}" required></div>
+    <div class="f"><label>الاسم *</label><input name="name" value="{{ e.name }}" required></div>
+    <div class="f"><label>الوظيفة</label><input name="job_title" value="{{ e.job_title or '' }}"></div>
+    <div class="f"><label>الموقع</label><select name="site_id"><option value="">-</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id == e.site_id }}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>رقم الهوية / الإقامة</label><input name="id_no" value="{{ e.id_no or '' }}"></div>
+    <div class="f"><label>الجنسية</label><input name="nationality" value="{{ e.nationality or '' }}"></div>
+    <div class="f"><label>الهاتف</label><input name="phone" value="{{ e.phone or '' }}"></div>
+    <div class="f"><label>الآيبان</label><input name="iban" value="{{ e.iban or '' }}" dir="ltr"></div>
+    <div class="f"><label>تاريخ التعيين</label><input type="date" name="hire_date" value="{{ e.hire_date or '' }}"></div>
+    <div class="f"><label>تاريخ انتهاء الخدمة</label><input type="date" name="end_date" value="{{ e.end_date or '' }}"></div>
+  </div>
+  <div class="meta" style="margin-top:10px">
+    <div class="f"><label>الراتب الأساسي</label><input name="basic" type="number" step="0.01" min="0" value="{{ e.basic }}"></div>
+    <div class="f"><label>بدل السكن</label><input name="housing" type="number" step="0.01" min="0" value="{{ e.housing }}"></div>
+    <div class="f"><label>بدل النقل</label><input name="transport" type="number" step="0.01" min="0" value="{{ e.transport }}"></div>
+    <div class="f"><label>بدلات أخرى</label><input name="other_allow" type="number" step="0.01" min="0" value="{{ e.other_allow }}"></div>
+    <div><span class="muted">إجمالي الراتب</span> <b>{{ fmt(e.gross) }}</b></div>
+  </div>
+  <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="notes" rows="2" style="width:100%">{{ e.notes or '' }}</textarea></div>
+  {% if can_edit %}<button class="btn" style="margin-top:10px">حفظ التعديلات</button>{% endif %}
+  </fieldset>
+  {% if e.end_date and custody|selectattr('returned_at', 'none')|list %}<p class="low"><b>تنبيه:</b> خدمة الموظف منتهية ولديه عهد لم تُسلَّم.</p>{% endif %}
+</form>
+<div class="card"><h2 style="margin-top:0">العهد (الأصول) <span class="muted" style="font-size:13px;font-weight:400">برقم الموظف {{ e.emp_no }}</span></h2><div class="tw"><table class="t">
+<tr><th>البند</th><th class="n">الكمية</th><th>الرقم التسلسلي</th><th>تاريخ الاستلام</th><th>الحالة</th></tr>
+{% for c in custody %}<tr><td>{{ c.item_name }}</td><td class="n">{{ fmt(c.qty) }}</td><td>{{ c.serial_no or '' }}</td><td>{{ c.issued_at }}</td>
+  <td>{% if c.returned_at %}<span class="muted">سُلِّمت {{ c.returned_at }}</span>{% else %}<b>في عهدته</b>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا توجد عهد</td></tr>{% endfor %}
+</table></div></div>
+<div class="card"><h2 style="margin-top:0">السلف <span class="muted" style="font-size:13px;font-weight:400">الإجمالي {{ fmt(bal[0]) }} — المخصوم {{ fmt(bal[1]) }} — المتبقي <b>{{ fmt(bal[2]) }}</b></span></h2><div class="tw"><table class="t">
+<tr><th>الرقم</th><th>التاريخ</th><th class="n">المبلغ</th><th class="n">القسط الشهري</th><th>ملاحظات</th></tr>
+{% for a in advs %}<tr><td>{{ a.adv_no }}</td><td>{{ a.date }}</td><td class="n">{{ fmt(a.amount) }}</td><td class="n">{{ fmt(a.installment) }}</td><td>{{ a.notes or '' }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">لا توجد سلف</td></tr>{% endfor %}
+</table></div></div>
+<div class="card"><h2 style="margin-top:0">الرواتب</h2><div class="tw"><table class="t">
+<tr><th>الشهر</th><th class="n">المستحقات</th><th class="n">الخصومات</th><th class="n">الصافي</th><th>الحالة</th><th class="noprint"></th></tr>
+{% for l in pays %}<tr><td><a href="/payroll/{{ l.run.id }}">{{ l.run.period.strftime('%Y-%m') }}</a></td><td class="n">{{ fmt(l.earnings) }}</td>
+  <td class="n">{{ fmt(l.absence_ded + l.advance_ded + l.other_ded) }}</td><td class="n"><b>{{ fmt(l.net) }}</b></td><td>{{ PAYROLL_STATUS[l.run.status] }}</td>
+  <td class="noprint"><a class="btn sec sm" href="/payroll/{{ l.run.id }}/slip/{{ l.id }}">قسيمة الراتب</a></td></tr>
+{% else %}<tr><td colspan="6" class="muted">لا توجد مسيرات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}
