@@ -1688,3 +1688,44 @@ def test_dark_board_follows_theme_color(env):
     c.post("/account/appearance", data={"primary": "#7A1F3D", "bg": "gray", "font": "Cairo"})
     assert f"--t-acc:{b2['dk_acc']}" in c.get("/").text
     c.post("/account/appearance", data={"reset": "1"})
+
+
+def test_sales_import_dashboard(env):
+    """استيراد مستخلصات المبيعات من Excel، الاستبدال لنفس الشهر والوحدة، ولوحة المبيعات."""
+    import io
+    from openpyxl import Workbook
+    from app.models import SalesLine
+    from app import sales as SL
+    c = TestClient(app)
+
+    def book(rows):
+        wb = Workbook(); ws = wb.active; ws.title = "المبيعات"; ws.append(SL.HEAD)
+        for r in rows:
+            ws.append(r)
+        b = io.BytesIO(); wb.save(b); return b.getvalue()
+    data = book([["2026-09", "كسارات", "كسارة الكدمي", "برايت", "3/8", "طن", 100, 16, 1600, 240, 1840, "ضريبي", "إيميل"],
+                 ["2026-09", "", "خلاطة أسفلت الكدمي", "رابكو", "bwc", "طن", 10, 200, 2000, None, 2300, "ضريبي", ""],
+                 ["2026-08", "خرسانة", "خلاطة خرسانة الدار", "اسكان الدار", "450", "م3", 5, 235, 1175, 176.25, None, "", ""]])
+    db = SessionLocal()
+    n, k = SL.import_xlsx(db, data); db.commit()
+    assert (n, k) == (3, 3)
+    asp = db.query(SalesLine).filter_by(customer="رابكو").one()
+    assert asp.kind == "asphalt" and asp.vat == 300 and asp.price == 200
+    assert db.query(SalesLine).filter_by(unit="خلاطة خرسانة الدار").one().total == 1351.25
+    # نفس الشهر والوحدة بيستبدل
+    SL.import_xlsx(db, book([["2026-09", "كسارات", "كسارة الكدمي", "برايت", "3/8", "طن", 50, 16, 800, 120, 920, "", ""]])); db.commit()
+    assert db.query(SalesLine).filter_by(unit="كسارة الكدمي").count() == 1
+    assert db.query(SalesLine).count() == 3
+    d = SL.build(db.query(SalesLine).all(), date(2026, 8, 1), date(2026, 9, 1))
+    assert d["k"]["amount"] == 800 + 2000 + 1175 and d["k"]["m3"] == 5 and d["k"]["tons"] == 60
+    db.close()
+    admin_id = next(v for kk, v in env.items() if isinstance(kk, str) and kk.startswith("admin"))
+    c.cookies.clear(); c.post("/dev-login", data={"uid": admin_id})
+    r = c.get("/sales?frm=2026-08&to=2026-09")
+    assert r.status_code == 200 and "رابكو" in r.text and "المبيعات الشهرية" in r.text
+    assert c.get("/export/sales.xlsx").status_code == 200
+    login(c, env, "requester@example.com")
+    assert c.get("/sales").status_code == 403
+
+
+from datetime import date  # noqa: E402

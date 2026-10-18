@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block body %}
+{% set k = d.k %}
+<h1>المبيعات</h1>
+<div class="dboard rpt">
+<form class="filters card noprint" method="get">
+  <div class="f"><label>من شهر</label><input type="month" name="frm" value="{{ frm }}"></div>
+  <div class="f"><label>إلى شهر</label><input type="month" name="to" value="{{ to }}"></div>
+  <div class="f"><label>النوع</label><select name="kind"><option value="">الكل</option>{% for kk, v in SALES_KINDS.items() %}<option value="{{ kk }}" {{ 'selected' if kind == kk }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>الوحدة</label><select name="unit"><option value="">كل الوحدات</option>{% for u in unit_names %}<option {{ 'selected' if unit == u }}>{{ u }}</option>{% endfor %}</select></div>
+  <div class="f"><label>العميل</label><input name="q" value="{{ q }}" placeholder="جزء من الاسم"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <a class="btn sec" href="/export/sales.xlsx?frm={{ frm }}&to={{ to }}">تصدير Excel</a>
+</form>
+<p class="muted">مستخلصات العملاء المعتمدة — من {{ frm }} إلى {{ to }}. المبيعات هنا مستقلة عن أرصدة المخزون. القيم بالريال.</p>
+
+<div class="grid g4">
+  <div class="card kpi"><div class="v">{{ fmt(k.amount, 0) }}</div><div class="l">المبيعات بدون ضريبة</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(k.total, 0) }}</div><div class="l">شامل الضريبة (الضريبة {{ fmt(k.vat, 0) }})</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(k.tons, 0) }}</div><div class="l">الكمية المباعة (طن)</div></div>
+  {% if k.m3 %}<div class="card kpi"><div class="v">{{ fmt(k.m3, 0) }}</div><div class="l">خرسانة (م³)</div></div>{% endif %}
+  <div class="card kpi"><div class="v">{{ d.n_cust }}</div><div class="l">عدد العملاء / المشاريع</div></div>
+  <div class="card kpi"><div class="v">{{ d.n_units }}</div><div class="l">عدد الوحدات</div></div>
+</div>
+
+{% if lines %}
+<div class="rp-charts">{% for c in d.charts %}<div class="card rp-chart{{ ' wide' if c.span == 2 }}"><h3>{{ c.title }}</h3><div class="rp-cv"><canvas id="{{ c.id }}"></canvas></div></div>{% endfor %}</div>
+
+<div class="card"><h3 style="margin-top:0">المبيعات الشهرية حسب الوحدة</h3><div class="tw"><table class="t rp">
+<tr><th>الوحدة</th>{% for l in d.month_labels %}<th class="n">{{ l }}</th>{% endfor %}<th class="n">الإجمالي</th></tr>
+{% for u, vals, tot in d.pivot %}<tr><td><a href="?frm={{ frm }}&to={{ to }}&unit={{ u|urlencode }}">{{ u }}</a></td>{% for v in vals %}<td class="n">{{ fmt(v, 0) if v else '-' }}</td>{% endfor %}<td class="n"><b>{{ fmt(tot, 0) }}</b></td></tr>{% endfor %}
+<tr class="total"><td>الإجمالي</td>{% for v in d.month_tot %}<td class="n">{{ fmt(v, 0) if v else '-' }}</td>{% endfor %}<td class="n">{{ fmt(k.amount, 0) }}</td></tr>
+</table></div></div>
+
+<div class="card"><h3 style="margin-top:0">حسب الوحدة</h3><div class="tw"><table class="t rp">
+<tr><th>الوحدة</th><th>النوع</th><th class="n">الكمية</th><th class="n">عدد العملاء</th><th class="n">بدون ضريبة</th><th class="n">شامل الضريبة</th><th class="n">النسبة</th></tr>
+{% for u, v in d.units %}<tr><td>{{ u }}</td><td>{{ SALES_KINDS.get(v.kind, v.kind) }}</td>
+<td class="n">{% for uom, qq in v.qty.items() %}{{ fmt(qq, 0) }} {{ uom }}{{ '، ' if not loop.last }}{% endfor %}</td><td class="n">{{ v.custs|length }}</td>
+<td class="n">{{ fmt(v.amount, 0) }}</td><td class="n">{{ fmt(v.total, 0) }}</td><td class="n">{{ fmt(100 * v.amount / k.amount, 1) if k.amount else 0 }}%</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h3 style="margin-top:0">العملاء والمشاريع</h3><div class="tw"><table class="t rp">
+<tr><th>العميل / المشروع</th><th>الوحدات</th><th class="n">الكمية</th><th class="n">بدون ضريبة</th><th class="n">شامل الضريبة</th><th class="n">النسبة</th></tr>
+{% for cc, v in d.custs %}<tr><td><a href="?frm={{ frm }}&to={{ to }}&q={{ cc|urlencode }}">{{ cc }}</a></td><td>{{ v.units|sort|join('، ') }}</td>
+<td class="n">{% for uom, qq in v.qty.items() %}{{ fmt(qq, 0) }} {{ uom }}{{ '، ' if not loop.last }}{% endfor %}</td>
+<td class="n">{{ fmt(v.amount, 0) }}</td><td class="n">{{ fmt(v.total, 0) }}</td><td class="n">{{ fmt(100 * v.amount / k.amount, 1) if k.amount else 0 }}%</td></tr>{% endfor %}
+</table></div></div>
+
+{% if d.prods %}<div class="card"><h3 style="margin-top:0">حسب الصنف</h3><div class="tw"><table class="t rp">
+<tr><th>الصنف</th><th>الوحدة</th><th class="n">الكمية</th><th class="n">متوسط السعر</th><th class="n">بدون ضريبة</th></tr>
+{% for (p, uom), v in d.prods %}<tr><td>{{ p }}</td><td>{{ uom }}</td><td class="n">{{ fmt(v.qty, 0) }}</td><td class="n">{{ fmt(v.amount / v.qty) if v.qty else '-' }}</td><td class="n">{{ fmt(v.amount, 0) }}</td></tr>{% endfor %}
+</table></div></div>{% endif %}
+
+<div class="card"><h3 style="margin-top:0">تفاصيل المستخلصات ({{ lines|length }} سطر)</h3><div class="tw"><table class="t rp">
+<tr><th>الشهر</th><th>الوحدة</th><th>العميل / المشروع</th><th>الصنف</th><th class="n">الكمية</th><th>الوحدة</th><th class="n">السعر</th><th class="n">بدون ضريبة</th><th class="n">الضريبة</th><th class="n">الإجمالي</th><th>ملاحظات</th></tr>
+{% for x in lines %}<tr><td>{{ '%04d-%02d' % (x.period.year, x.period.month) }}</td><td>{{ x.unit }}</td><td>{{ x.customer }}</td><td>{{ x.product or '' }}</td>
+<td class="n">{{ fmt(x.qty) }}</td><td>{{ x.uom or '' }}</td><td class="n">{{ fmt(x.price) if x.price else '' }}</td><td class="n">{{ fmt(x.amount) }}</td><td class="n">{{ fmt(x.vat) }}</td><td class="n">{{ fmt(x.total) }}</td>
+<td title="{{ x.source or '' }}">{{ x.notes or '' }}</td></tr>{% endfor %}
+</table></div></div>
+{% else %}
+<div class="card"><p class="muted" style="margin:0">لا توجد مبيعات مسجلة في الفترة المحددة{% if not n_all %} — لم تُستورد أي مستخلصات بعد{% endif %}.</p></div>
+{% endif %}
+
+{% if user.has('admin') %}
+<form class="card noprint" method="post" action="/sales/import" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <div class="f" style="flex:1;min-width:240px"><label>استيراد مستخلصات (Excel)</label><input type="file" name="file" accept=".xlsx" required></div>
+  <button class="btn">استيراد</button>
+  <a class="btn sec" href="/sales/template.xlsx">تحميل النموذج</a>
+  <span class="muted" style="font-size:12px">كل شهر + وحدة في الملف بيستبدل المسجّل قبل كده لنفس الشهر والوحدة.</span>
+</form>{% endif %}
+</div>
+<style>
+.rp-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+.rp-chart.wide{grid-column:1/-1}.rp-chart h3{margin:0 0 10px;font-size:15px}
+.rp-cv{position:relative;height:300px}.rp-empty{display:flex;align-items:center;justify-content:center;height:100%}.rp-chart.wide .rp-cv{height:340px}
+@media (max-width:900px){.rp-charts{grid-template-columns:minmax(0,1fr)}.rp-cv,.rp-chart.wide .rp-cv{height:260px}}
+@media print{.rp-cv{height:260px}}
+</style>
+{% if lines %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+(function(){
+  const CH = {{ d.charts|tojson }};
+  const board = document.querySelector('.dboard') || document.documentElement, css = getComputedStyle(board);
+  const txt = css.getPropertyValue('--dk-muted').trim() || '#97A2AD', grid = css.getPropertyValue('--dk-line').trim() || '#22302A';
+  const card = css.getPropertyValue('--dk-card').trim() || '#131B18';
+  const PAL = {{ pal|tojson }}, DARK = [css.getPropertyValue('--dk-acc').trim() || '#3DDC84', '#B8F26B', '#F5B83D', '#FF8A5B', '#A08CFF', '#2BC4B0', '#F07AA8', '#7FD3FF', '#8E9AA6'];
+  const recolor = (v) => { if (Array.isArray(v)) return v.map(recolor); if (typeof v !== 'string') return v;
+    const i = PAL.indexOf(v.slice(0, 7)); return i < 0 ? v : DARK[i] + v.slice(7); };
+  const nf = new Intl.NumberFormat('en', {maximumFractionDigits: 0});
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = txt;
+  CH.forEach((c) => {
+    const el = document.getElementById(c.id); if (!el) return;
+    if (!c.datasets.some((ds) => ds.data.some((v) => v))) { el.parentNode.innerHTML = '<p class="muted rp-empty">لا توجد بيانات</p>'; return; }
+    const donut = c.type === 'doughnut', fmtTick = (v) => nf.format(v);
+    let scales = {};
+    if (!donut && c.horizontal) scales = {x: {reverse: true, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}},
+                                          y: {position: 'right', grid: {display: false}, ticks: {autoSkip: false}}};
+    else if (!donut) scales = {x: {reverse: true, stacked: !!c.stacked, grid: {display: false}},
+                               y: {position: 'right', stacked: !!c.stacked, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}}};
+    c.datasets.forEach((ds) => {
+      ds.backgroundColor = recolor(ds.backgroundColor); ds.borderColor = recolor(ds.borderColor);
+      if ((ds.type || c.type) === 'bar') { ds.maxBarThickness = c.horizontal ? 34 : 46; if (!c.stacked) { ds.borderRadius = 999; ds.borderSkipped = 'start'; } }
+      if (donut) { ds.borderColor = card; ds.borderWidth = 3; }
+    });
+    const total = donut ? c.datasets[0].data.reduce((a, b) => a + b, 0) : 0;
+    new Chart(el, {type: c.type, data: {labels: c.labels, datasets: c.datasets},
+      options: {responsive: true, maintainAspectRatio: false, indexAxis: c.horizontal ? 'y' : 'x', locale: 'en', cutout: donut ? '62%' : undefined,
+        interaction: {mode: donut ? 'nearest' : 'index', intersect: donut},
+        plugins: {legend: {display: donut || c.datasets.length > 1, position: donut ? 'right' : 'top', rtl: true, labels: {usePointStyle: true, boxWidth: 10, padding: 14}},
+          tooltip: {rtl: true, callbacks: {label: (ctx) => {
+            const v = ctx.parsed && typeof ctx.parsed === 'object' ? (c.horizontal ? ctx.parsed.x : ctx.parsed.y) : ctx.parsed;
+            const pct = donut && total ? ' (' + (100 * v / total).toFixed(1) + '%)' : '';
+            return ' ' + (donut ? ctx.label + ': ' : (c.datasets.length > 1 ? ctx.dataset.label + ': ' : '')) + nf.format(v) + (c.unit ? ' ' + c.unit : '') + pct; }}}},
+        scales: scales}});
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -431,3 +431,29 @@ class CrusherProductionLine(Base):
     def value(self):
         return round((self.qty or 0) * (self.unit_price or 0), 2)
 
+
+
+SALES_KINDS = {"crusher": "كسارات", "asphalt": "خلاطات أسفلت", "concrete": "خرسانة", "other": "أخرى"}
+
+
+class SalesLine(Base):
+    """مبيعات المستخلصات الشهرية (من إيميلات المستخلصات) — منفصلة عن أرصدة المخزون.
+    سطر لكل (شهر، وحدة، عميل، صنف)."""
+    __tablename__ = "sales_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    period: Mapped[date] = mapped_column(Date, index=True)            # أول يوم في الشهر
+    kind: Mapped[str] = mapped_column(String(20), default="other")    # crusher | asphalt | concrete | other
+    unit: Mapped[str] = mapped_column(String(120))                    # «كسارة الكدمي»، «خلاطة أسفلت الضيقة» ...
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    customer: Mapped[str] = mapped_column(String(200))
+    product: Mapped[str | None] = mapped_column(String(80))           # 3/4، مخلوط، BWC، خرسانة 450 ...
+    uom: Mapped[str | None] = mapped_column(String(20))               # طن / م3
+    qty: Mapped[float] = mapped_column(Float, default=0)
+    price: Mapped[float | None] = mapped_column(Float)                # سعر الوحدة بدون ضريبة
+    amount: Mapped[float] = mapped_column(Float, default=0)           # المبلغ بدون ضريبة
+    vat: Mapped[float] = mapped_column(Float, default=0)
+    total: Mapped[float] = mapped_column(Float, default=0)            # شامل الضريبة
+    notes: Mapped[str | None] = mapped_column(String(200))            # ضريبي / بدون ضريبة / شركة المسار ...
+    source: Mapped[str | None] = mapped_column(String(300))           # موضوع الإيميل وتاريخه
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site | None] = relationship()

@@ -41,6 +41,7 @@ if (!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matche
     {% if is_approver %}{{ nl('/approvals', 'الاعتمادات', 'check', path.startswith('/approvals'), pending_n) }}{% endif %}
     {{ nl('/requests', 'الطلبات', 'file', path == '/requests' or (path.startswith('/requests/') and not path.startswith('/requests/new'))) }}
     {% if user.has('engineer', 'manager', 'final', 'admin') %}{{ nl('/reports', 'التقارير', 'chart', path.startswith('/reports')) }}{% endif %}
+    {% if user.has('manager', 'final') %}{{ nl('/sales', 'المبيعات', 'cart', path.startswith('/sales')) }}{% endif %}
     {% if bi_links %}{% for name, url in bi_links %}<a href="{{ url }}" target="_blank" rel="noopener" title="{{ name }}">{{ icon('chart', 19) }}<span>{{ name }} ↗</span></a>{% endfor %}{% endif %}
     {% if user.has('requester', 'storekeeper') %}<div class="sg">الصرف</div>
     {{ nl('/requests/new/spare', 'قطع غيار', 'wrench', path.startswith('/requests/new/spare')) }}

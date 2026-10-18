@@ -2809,3 +2809,81 @@ def export_csv(table: str, key: str = "", db: Session = Depends(get_db)):
                 "الإجمالي بدون ضريبة", "الضريبة 15%", "الإجمالي شامل الضريبة"]
         return _csv_response(head, rows, "receipts")
     return JSONResponse({"error": "unknown table"}, status_code=404)
+
+
+# ---------------- المبيعات (مستخلصات العملاء الشهرية) ----------------
+SALES_ROLES = ("manager", "final")   # + مدير النظام
+
+
+@app.get("/sales", response_class=HTMLResponse)
+def sales_page(request: Request, frm: str = "", to: str = "", kind: str = "", unit: str = "", q: str = "",
+               db: Session = Depends(get_db), user: User = Depends(require(*SALES_ROLES))):
+    """لوحة المبيعات: مستخلصات العملاء المعتمدة شهريًا — مستقلة عن أرصدة المخزون."""
+    from . import sales as SL
+    from .models import SALES_KINDS, SalesLine
+    last = db.query(func.max(SalesLine.period)).scalar() or date.today().replace(day=1)
+    first = db.query(func.min(SalesLine.period)).scalar() or last
+    try:
+        t = SL._period(to) if to else last
+        y12, m12 = (t.year, t.month - 11) if t.month == 12 else (t.year - 1, t.month + 1)   # آخر 12 شهر
+        f = SL._period(frm) if frm else max(first, date(y12, m12, 1))
+    except ValueError:
+        f, t = first, last
+    if t < f:
+        f, t = t, f
+    qy = db.query(SalesLine).filter(SalesLine.period >= f, SalesLine.period <= t)
+    if kind in SALES_KINDS:
+        qy = qy.filter(SalesLine.kind == kind)
+    if unit:
+        qy = qy.filter(SalesLine.unit == unit)
+    if q.strip():
+        qy = qy.filter(SalesLine.customer.like(f"%{q.strip()}%"))
+    lines = qy.order_by(SalesLine.period.desc(), SalesLine.unit, SalesLine.amount.desc()).all()
+    d = SL.build(lines, f, t)
+    unit_names = [u for (u,) in db.query(SalesLine.unit).distinct().order_by(SalesLine.unit)]
+    return render(request, "sales.html", user, d=d, lines=lines, frm=f"{f:%Y-%m}", to=f"{t:%Y-%m}", kind=kind, unit=unit, q=q,
+                  unit_names=unit_names, SALES_KINDS=SALES_KINDS, pal=SL.PAL, n_all=db.query(SalesLine).count())
+
+
+@app.post("/sales/import")
+async def sales_import(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    from . import sales as SL
+    form = await request.form()
+    up = form.get("file")
+    if not up or not getattr(up, "filename", ""):
+        flash(request, "اختر ملف Excel", "err")
+        return back("/sales")
+    try:
+        n, k = SL.import_xlsx(db, await up.read(), source_default=up.filename)
+        db.commit()
+        flash(request, f"تم استيراد {n} سطر مبيعات ({k} مستخلص شهري لوحدة)")
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        flash(request, f"تعذر الاستيراد: {e}", "err")
+    return back("/sales")
+
+
+@app.get("/sales/template.xlsx")
+def sales_template(user: User = Depends(require(*SALES_ROLES))):
+    from . import sales as SL
+    buf = _xlsx(SL.HEAD, [["2026-09", "كسارات", "كسارة الكدمي", "اسم العميل", "3/4", "طن", 100, 15, 1500, 225, 1725, "ضريبي", "إيميل المستخلص"]],
+                "المبيعات")
+    return _send_xlsx(buf, "نموذج_المبيعات.xlsx")
+
+
+@app.get("/export/sales.xlsx")
+def export_sales(frm: str = "", to: str = "", db: Session = Depends(get_db), user: User = Depends(require(*SALES_ROLES))):
+    from . import sales as SL
+    from .models import SALES_KINDS, SalesLine
+    qy = db.query(SalesLine)
+    try:
+        if frm:
+            qy = qy.filter(SalesLine.period >= SL._period(frm))
+        if to:
+            qy = qy.filter(SalesLine.period <= SL._period(to))
+    except ValueError:
+        pass
+    rows = [[f"{x.period:%Y-%m}", SALES_KINDS.get(x.kind, x.kind), x.unit, x.customer, x.product or "", x.uom or "", x.qty,
+             x.price, x.amount, x.vat, x.total, x.notes or "", x.source or ""]
+            for x in qy.order_by(SalesLine.period, SalesLine.unit, SalesLine.customer)]
+    return _send_xlsx(_xlsx(SL.HEAD, rows, "المبيعات"), "المبيعات.xlsx")
