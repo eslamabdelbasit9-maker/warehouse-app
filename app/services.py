@@ -390,7 +390,7 @@ def _nice_step(top, n=4):
     return 10 * mag
 
 
-def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, bar_max=22):
+def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, bar_max=22, r_max=4):
     """أبعاد رسم أعمدة SVG (سلسلة واحدة) من اليمين للشمال (عربي): أول قيمة على اليمين والأرقام على اليمين.
     أعمدة بعرض ≤24px وطرف علوي مدوّر 4px، وخطوط شبكة بأرقام مقرّبة."""
     step = _nice_step(max(values or [0]))
@@ -406,7 +406,7 @@ def column_chart(values, w=1000, h=210, pad_l=8, pad_r=62, pad_t=22, pad_b=44, b
         bh = plot_h * (v / top) if top else 0
         x = slot + (band - bw) / 2
         y = pad_t + plot_h - bh
-        r = min(4, bh, bw / 2)
+        r = min(r_max, bh, bw / 2)   # r_max كبير = عمود كبسولة (لوحة المتابعة)
         path = (f"M{x:.1f},{pad_t + plot_h:.1f} V{y + r:.1f} Q{x:.1f},{y:.1f} {x + r:.1f},{y:.1f} "
                 f"H{x + bw - r:.1f} Q{x + bw:.1f},{y:.1f} {x + bw:.1f},{y + r:.1f} V{pad_t + plot_h:.1f} Z") if bh > 0 else ""
         bars.append(dict(path=path, x=x, cx=x + bw / 2, y=y, v=v, hit_x=slot, band=band, bw=bw))
@@ -430,6 +430,7 @@ def stacked_chart(stacks, keys, gap=2, **kw):
     stacks: list of dict(key → value). كل جزء بياخد ترتيب المفتاح (k) عشان اللون يفضل ثابت للفرع."""
     totals = [sum(s.get(k, 0) or 0 for k in keys) for s in stacks]
     c = column_chart(totals, **kw)
+    r_max = kw.get("r_max", 4)
     scale = c["plot_h"] / c["top"] if c["top"] else 0
     for b, s in zip(c["bars"], stacks):
         segs, y = [], c["base"]
@@ -439,7 +440,7 @@ def stacked_chart(stacks, keys, gap=2, **kw):
             top_seg = j == len(parts) - 1
             hh = h - (0 if j == 0 else gap)          # الفاصل بياكل من الجزء اللي فوق
             if hh > 0.3:
-                r = min(4, hh, b["bw"] / 2) if top_seg else 0
+                r = min(r_max, hh, b["bw"] / 2) if top_seg else 0
                 segs.append(dict(k=i, path=_bar_path(b["x"], y - h, b["bw"], hh, r)))
             y -= h
         b["segs"] = segs
@@ -454,6 +455,7 @@ def grouped_chart(stacks, keys, gap=2, subs=None, bar_max=22, **kw):
         v = s.get(k, 0) or 0
         return sum(x or 0 for x in v.values()) if isinstance(v, dict) else v
     c = column_chart([max([total(s, k) for k in keys] or [0]) for s in stacks], **kw)
+    r_max = kw.get("r_max", 4)
     n = max(1, len(keys))
     scale = c["plot_h"] / c["top"] if c["top"] else 0
     for b, s in zip(c["bars"], stacks):
@@ -472,11 +474,11 @@ def grouped_chart(stacks, keys, gap=2, subs=None, bar_max=22, **kw):
                     sh = sv * scale
                     hh = sh - (0 if jj == 0 else gap)
                     if hh > 0.3:
-                        r = min(4, hh, bw / 2) if jj == len(vals) - 1 else 0
+                        r = min(r_max, hh, bw / 2) if jj == len(vals) - 1 else 0
                         parts.append(dict(s=j, v=sv, path=_bar_path(x, y - sh, bw, hh, r)))
                     y -= sh
             cols.append(dict(k=i, v=v, x=x, bw=bw, cx=x + bw / 2, y=c["base"] - h, h=h, parts=parts,
-                             path=_bar_path(x, c["base"] - h, bw, h, min(4, h, bw / 2)) if h > 0.3 else ""))
+                             path=_bar_path(x, c["base"] - h, bw, h, min(r_max, h, bw / 2)) if h > 0.3 else ""))
         b["segs"] = cols
     c["grouped"] = True
     return c

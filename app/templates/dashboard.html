@@ -2,6 +2,7 @@
 {% from "_icons.html" import icon, card_h %}
 {% block body %}
 {% with hero_sub = sel.name if sel else 'كل المواقع' %}{% include "_hero.html" %}{% endwith %}
+<div class="dboard">
 <form class="filters card noprint" method="get">
   <div class="f"><label>الموقع</label>
     <select name="site"><option value="">كل المواقع</option>
@@ -16,7 +17,7 @@
 <div class="grid g4 kpis">
   {% if is_approver %}<a class="card kpi" href="/approvals"><span class="kpi-ic">{{ icon('inbox') }}</span><div class="v">{{ my_pending|length }}</div><div class="l">طلبات بانتظار اعتمادي</div></a>
   {% else %}<a class="card kpi" href="/requests?status=pending"><span class="kpi-ic">{{ icon('inbox') }}</span><div class="v">{{ pending_by_stage.values()|sum }}</div><div class="l">طلبات قيد الاعتماد</div></a>{% endif %}
-  <div class="card kpi"><span class="kpi-ic">{{ icon('wrench') }}</span><div class="v">{{ fmt(period_spend) }}</div><div class="l">صرف قطع الغيار المعتمد</div><div class="s">{{ per }}</div></div>
+  <div class="card kpi feat"><span class="kpi-ic">{{ icon('wrench') }}</span><div class="v">{{ fmt(period_spend) }}</div><div class="l">صرف قطع الغيار المعتمد</div><div class="s">{{ per }}</div></div>
   <a class="card kpi" href="/receipts{{ q }}"><span class="kpi-ic">{{ icon('cart') }}</span><div class="v">{{ fmt(period_purchases) }}</div><div class="l">قيمة المشتريات (شامل الضريبة 15%)</div><div class="s">{{ per }}</div></a>
   <div class="card kpi"><span class="kpi-ic">{{ icon('file') }}</span><div class="v">{{ period_reqs }}</div><div class="l">عدد الطلبات في الفترة</div></div>
   <div class="card kpi"><span class="kpi-ic">{{ icon('steps') }}</span><div class="v">{{ pending_by_stage[1] }} / {{ pending_by_stage[2] }} / {{ pending_by_stage[3] }}</div><div class="l">قيد الاعتماد</div><div class="s">المهندس / مدير الإنتاج / النهائي</div></div>
@@ -78,6 +79,7 @@
     {% for r in recent %}<tr><td><a href="/requests/{{ r.id }}">{{ r.req_no }}</a></td><td>{{ r.work_date }}</td><td>{{ r.unit.name if r.unit else '-' }}</td>
     <td><span class="st st-{{ r.status }}">{{ REQ_STATUS[r.status] }}{% if r.status=='pending' %} — {{ STAGES[r.current_stage] }}{% endif %}</span></td></tr>{% endfor %}
   </table></div></div>
+</div>
 </div>
 {% endblock %}
 

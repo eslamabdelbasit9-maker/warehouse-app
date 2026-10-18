@@ -42,10 +42,12 @@
 
   // ---------- محتوى الصفحة: بيدخل واحد ورا التاني بميلة 3D خفيفة ----------
   var items = [];
-  document.querySelectorAll('main > *').forEach(function (el) {
+  function collect(el) {
     if (el.classList.contains('grid')) el.querySelectorAll(':scope > .card').forEach(function (c) { items.push(c); });
+    else if (el.classList.contains('dboard')) { gsap.set(el, { visibility: 'visible' }); [].forEach.call(el.children, collect); }   // لوحة المتابعة: اللي جواها بيدخل واحد واحد
     else items.push(el);
-  });
+  }
+  document.querySelectorAll('main > *').forEach(collect);
   var now = [], later = [];
   items.forEach(function (el) { (el.getBoundingClientRect().top < innerHeight * 0.95 ? now : later).push(el); });
   gsap.set(items, { visibility: 'visible', transformPerspective: 900, transformOrigin: '50% 0%' });

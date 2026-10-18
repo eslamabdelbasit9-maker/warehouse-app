@@ -539,7 +539,7 @@ def month_after(ym):
 SUB_COLORS = {"asphalt": 3, "crusher": 4, "concrete": 5, "transport": 6, "other": 7}   # ألوان أنواع الوحدات (غير ألوان الفروع)
 
 
-def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None):
+def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None, pill=False):
     """رسم شهري منفصل لكل نوع وحدة (الكسارات، الخلاطات، ...) — وجوه كل رسم مقارنة الفروع.
     rows: (site_id, date, value, kind). الضغط على عمود بيفتح صرف النوع ده بس (&kind=)."""
     rows = list(rows)
@@ -549,12 +549,12 @@ def kind_charts(rows, months, sel, pivot_sites, sites, kinds, link=None):
         if not any(r[2] for r in sub):
             continue
         klink = (lambda sid, y, m, k=k: link(sid, y, m) + f"&kind={k}") if link else None
-        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=klink, h2=320)
+        mc = monthly_charts(sub, months, sel, pivot_sites, sites, link=klink, h2=320, pill=pill)
         out.append(dict(key=k, name=name, c=SUB_COLORS.get(k, 7), total=mc["total"], mc=mc))
     return out
 
 
-def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, h2=400):
+def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, h2=400, pill=False):
     """rows: (site_id, date, value[, sub]) → قيم شهرية لكل فرع + رسمين: «الإجمالي» (مقسوم بالفرع) و«مقارنة الفروع».
     subs (اختياري، dict مفتاح → اسم، زي أنواع الوحدات): في المقارنة كل عمود فرع بيتقسم بالـ subs، ولفرع واحد
     المقارنة بتبقى عمود لكل sub. لون كل فرع ثابت حسب ترتيبه."""
@@ -583,13 +583,14 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, 
     sub_legend = [dict(name=subs[k], c=SUB_COLORS.get(k, 7),
                        total=sum(v.get(k, 0) for p in data for v in p["sub"].values())) for k in sub_keys]
     chart2, legend = None, []
+    rk = dict(r_max=99) if pill else {}   # pill = أعمدة كبسولة (لوحة المتابعة)
     if len(chart_sites) > 1:
         keys = [s.id for s in chart_sites]
-        chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=34, h=260)
+        chart = S.stacked_chart([p["by"] for p in data], keys, bar_max=34, h=260, **rk)
         if sub_keys:
-            chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=400, pad_t=100, bar_max=30)
+            chart2 = S.grouped_chart([p["sub"] for p in data], keys, subs=sub_keys, h=400, pad_t=100, bar_max=30, **rk)
         else:
-            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=h2, pad_t=90, bar_max=30)
+            chart2 = S.grouped_chart([p["by"] for p in data], keys, h=h2, pad_t=90, bar_max=30, **rk)
         for b in chart["bars"]:
             for sg in b["segs"]:
                 sg["c"] = site_color[chart_sites[sg["k"]].id]
@@ -602,10 +603,10 @@ def monthly_charts(rows, months, sel, pivot_sites, sites, link=None, subs=None, 
                     part["c"] = SUB_COLORS.get(sub_keys[part["s"]], 7)
         legend = [dict(name=s.name, c=site_color[s.id], total=sum(p["by"].get(s.id, 0) for p in data)) for s in chart_sites]
     else:
-        chart = S.column_chart([p["total"] for p in data], bar_max=34, h=260)
+        chart = S.column_chart([p["total"] for p in data], bar_max=34, h=260, **rk)
         if len(sub_keys) > 1:   # فرع واحد: عمود لكل نوع وحدة
             per = [{k: sum(v.get(k, 0) for v in p["sub"].values()) for k in sub_keys} for p in data]
-            chart2 = S.grouped_chart(per, sub_keys, h=300, pad_t=56, bar_max=26)
+            chart2 = S.grouped_chart(per, sub_keys, h=300, pad_t=56, bar_max=26, **rk)
             for b, p in zip(chart2["bars"], data):
                 for col in b["segs"]:
                     k = sub_keys[col["k"]]
@@ -690,7 +691,7 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
         db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
         .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date >= first, Receipt.date < last)
         .group_by(Receipt.id, Receipt.site_id, Receipt.date), months, sel, pivot_sites, sites,
-        link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""))
+        link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""), pill=True)
     # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
     issue_rows = (db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
                   .outerjoin(Unit, Unit.id == Req.unit_id)
@@ -698,8 +699,8 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                           RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
                   .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind).all())
     issue_link = lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else "")
-    issues = monthly_charts([(r[0], r[1], r[2]) for r in issue_rows], months, sel, pivot_sites, sites, link=issue_link)
-    issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link)
+    issues = monthly_charts([(r[0], r[1], r[2]) for r in issue_rows], months, sel, pivot_sites, sites, link=issue_link, pill=True)
+    issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link, pill=True)
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", not_tr_req, *approved)
