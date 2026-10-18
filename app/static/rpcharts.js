@@ -1,8 +1,8 @@
 /* رسوم التقارير والمبيعات (Chart.js): ألوان خضراء زي المرجع، تدرّج في الأعمدة والمساحات، منحنيات ناعمة وحركة هادية.
    rpCharts(CH, {pal, digits}) — CH من السيرفر (type, labels, datasets, horizontal, stacked, dual, y_title, y1_title, unit). */
 (function () {
-  // درجات الأخضر (زي المرجع) — كل رسم بياخدها بالترتيب: أول سلسلة أخضر، التانية ليموني، التالتة تركواز ...
-  var GREEN = ['#22C55E', '#A3E635', '#14B8A6', '#15803D', '#BEF264', '#2DD4BF', '#4ADE80', '#65A30D', '#0F766E', '#86EFAC'];
+  // ألوان هادية ومختلفة عن بعض (أزرق، تركواز، كهرماني، مرجاني، بنفسجي، ...) — كل رسم بياخدها بالترتيب
+  var GREEN = ['#5B8DEF', '#3FB8A9', '#F0B458', '#E9806E', '#9A86E8', '#7DB87A', '#E28DB4', '#5FB4D9', '#B39A7A', '#8C9AAD'];
 
   function rgba(hex, a) {
     var h = hex.replace('#', '');
@@ -63,7 +63,7 @@
           return;
         }
         var base = GREEN[i % GREEN.length];
-        if (type === 'line' && c.dual) base = dark ? '#FDE047' : '#0F766E';   // خط المقياس التاني بلون واضح فوق الأعمدة الخضرا
+        if (type === 'line' && c.dual) base = dark ? '#E2E8F0' : '#334155';   // خط المقياس التاني (رمادي غامق) واضح فوق الأعمدة الملونة
         if (type === 'bar') {
           ds.backgroundColor = grad(base, 1, c.stacked ? .85 : .45, H);
           ds.hoverBackgroundColor = base;
