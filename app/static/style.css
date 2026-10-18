@@ -536,6 +536,25 @@ table.t tr.colf input[type=search]{min-width:60px}
   canvas{max-width:100% !important}
 }
 
+/* ================= التقارير والمبيعات (الشكل الفاتح): كروت ناعمة، أول مؤشر مميز بالأخضر، تبويبات كبسولة ================= */
+.dboard.rpt .card{border-radius:18px;border:1px solid rgba(15,23,42,.06);box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 28px -16px rgba(16,24,40,.18)}
+.dboard.rpt .g4{gap:14px;margin-bottom:14px}
+.dboard.rpt .kpi{min-height:122px;justify-content:center;padding:18px 20px}
+.dboard.rpt .kpi::before{display:none}
+.dboard.rpt .kpi .v{font-size:28px;letter-spacing:-.3px}
+.dboard.rpt .kpi .s{align-self:flex-start;border-radius:999px;padding:3px 10px;margin-top:6px;font-size:12px}
+.dboard.rpt .kpi .s.up{background:rgba(34,197,94,.12);color:#15803D}.dboard.rpt .kpi .s.down{background:rgba(239,68,68,.10);color:#B91C1C}
+.dboard.rpt .g4>.kpi:first-child{background:linear-gradient(150deg,#34D27B 0%,#16A34A 55%,#0F7A3A 100%);border-color:transparent;
+  box-shadow:0 16px 34px -18px rgba(22,163,74,.6)}
+.dboard.rpt .g4>.kpi:first-child .v,.dboard.rpt .g4>.kpi:first-child .l{color:#fff}
+.dboard.rpt .g4>.kpi:first-child .s{background:rgba(255,255,255,.2);color:#fff}
+.dboard.rpt .rp-tabs{gap:8px}
+.dboard.rpt .rp-tabs .btn{border-radius:999px;padding:7px 16px}
+.dboard.rpt .rp-tabs .btn:not(.sec){background:#16A34A;color:#fff}
+.dboard.rpt .rp-chart h3{display:flex;align-items:center;gap:8px}
+.dboard.rpt .rp-chart h3::before{content:"";width:8px;height:8px;border-radius:50%;background:#22C55E;box-shadow:0 0 0 4px rgba(34,197,94,.15)}
+.dboard.rpt .tw{border-radius:14px}
+
 /* ================= لوحة المتابعة: لوحة داكنة بلون أخضر (شكل التقارير الحديثة) ================= */
 html[data-mode=dark] .dboard{--dk-bg:var(--bg,#12161C);--dk-card:color-mix(in srgb,var(--dk-bg) 92%,#fff 8%);--dk-card2:color-mix(in srgb,var(--dk-bg) 88%,#fff 12%);--dk-line:color-mix(in srgb,var(--dk-bg) 80%,#fff 20%);--dk-text:#E9EDF1;--dk-muted:#97A2AD;
   --dk-acc:var(--t-acc,#3DDC84);--dk-acc-d:var(--t-acc-d,#178049);--dk-acc-dd:var(--t-acc-dd,#0F5F36);--dk-rgb:var(--t-acc-rgb,61,220,132);--dk-acc2:#B8F26B;--line:var(--dk-line);--muted:var(--dk-muted);

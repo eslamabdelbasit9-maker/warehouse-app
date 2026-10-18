@@ -101,7 +101,7 @@ def _asset_version():
     """رقم نسخة لملفات التصميم والحركة — بيتغير مع أي تعديل، فالمتصفح ياخد النسخة الجديدة بعد كل Deploy."""
     import hashlib
     h = hashlib.md5(usedforsecurity=False)   # رقم نسخة للملفات بس، مش للأمان
-    for f in ("static/style.css", "static/anim.js", "static/charts.js", "static/picker.js"):
+    for f in ("static/style.css", "static/anim.js", "static/charts.js", "static/picker.js", "static/rpcharts.js"):
         h.update((APP_DIR / f).read_bytes())
     return h.hexdigest()[:10]
 

@@ -78,44 +78,9 @@
 </style>
 {% if lines %}
 <script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/rpcharts.js?v={{ ASSET_V }}"></script>
 <script>
-(function(){
-  const CH = {{ d.charts|tojson }};
-  const board = document.querySelector('.dboard') || document.documentElement, css = getComputedStyle(board);
-  const txt = css.getPropertyValue('--dk-muted').trim() || '#97A2AD', grid = css.getPropertyValue('--dk-line').trim() || '#22302A';
-  const card = css.getPropertyValue('--dk-card').trim() || '#131B18';
-  const PAL = {{ pal|tojson }}, DARK = [css.getPropertyValue('--dk-acc').trim() || '#3DDC84', '#B8F26B', '#F5B83D', '#FF8A5B', '#A08CFF', '#2BC4B0', '#F07AA8', '#7FD3FF', '#8E9AA6'];
-  const recolor = (v) => { if (Array.isArray(v)) return v.map(recolor); if (typeof v !== 'string') return v;
-    const i = PAL.indexOf(v.slice(0, 7)); return i < 0 ? v : DARK[i] + v.slice(7); };
-  const nf = new Intl.NumberFormat('en', {maximumFractionDigits: 0});
-  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-  Chart.defaults.color = txt;
-  CH.forEach((c) => {
-    const el = document.getElementById(c.id); if (!el) return;
-    if (!c.datasets.some((ds) => ds.data.some((v) => v))) { el.parentNode.innerHTML = '<p class="muted rp-empty">لا توجد بيانات</p>'; return; }
-    const donut = c.type === 'doughnut', fmtTick = (v) => nf.format(v);
-    let scales = {};
-    if (!donut && c.horizontal) scales = {x: {reverse: true, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}},
-                                          y: {position: 'right', grid: {display: false}, ticks: {autoSkip: false}}};
-    else if (!donut) scales = {x: {reverse: true, stacked: !!c.stacked, grid: {display: false}},
-                               y: {position: 'right', stacked: !!c.stacked, beginAtZero: true, grid: {color: grid}, ticks: {callback: fmtTick}}};
-    c.datasets.forEach((ds) => {
-      ds.backgroundColor = recolor(ds.backgroundColor); ds.borderColor = recolor(ds.borderColor);
-      if ((ds.type || c.type) === 'bar') { ds.maxBarThickness = c.horizontal ? 34 : 46; if (!c.stacked) { ds.borderRadius = 999; ds.borderSkipped = 'start'; } }
-      if (donut) { ds.borderColor = card; ds.borderWidth = 3; }
-    });
-    const total = donut ? c.datasets[0].data.reduce((a, b) => a + b, 0) : 0;
-    new Chart(el, {type: c.type, data: {labels: c.labels, datasets: c.datasets},
-      options: {responsive: true, maintainAspectRatio: false, indexAxis: c.horizontal ? 'y' : 'x', locale: 'en', cutout: donut ? '62%' : undefined,
-        interaction: {mode: donut ? 'nearest' : 'index', intersect: donut},
-        plugins: {legend: {display: donut || c.datasets.length > 1, position: donut ? 'right' : 'top', rtl: true, labels: {usePointStyle: true, boxWidth: 10, padding: 14}},
-          tooltip: {rtl: true, callbacks: {label: (ctx) => {
-            const v = ctx.parsed && typeof ctx.parsed === 'object' ? (c.horizontal ? ctx.parsed.x : ctx.parsed.y) : ctx.parsed;
-            const pct = donut && total ? ' (' + (100 * v / total).toFixed(1) + '%)' : '';
-            return ' ' + (donut ? ctx.label + ': ' : (c.datasets.length > 1 ? ctx.dataset.label + ': ' : '')) + nf.format(v) + (c.unit ? ' ' + c.unit : '') + pct; }}}},
-        scales: scales}});
-  });
-})();
+rpCharts({{ d.charts|tojson }}, {pal: {{ pal|tojson }}, digits: 0});
 </script>
 {% endif %}
 {% endblock %}
