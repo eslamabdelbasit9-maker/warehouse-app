@@ -63,7 +63,7 @@
 
 {% if user.has('admin') %}
 <form class="card noprint" method="post" action="/sales/import" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-  <div class="f" style="flex:1;min-width:240px"><label>استيراد مستخلصات (Excel)</label><input type="file" name="file" accept=".xlsx" required></div>
+  <div class="f" style="flex:1;min-width:240px"><label>استيراد مستخلصات (Excel)</label><input type="file" name="file" accept=".xlsx,.csv,.tsv,.txt" required></div>
   <button class="btn">استيراد</button>
   <a class="btn sec" href="/sales/template.xlsx">تحميل النموذج</a>
   <span class="muted" style="font-size:12px">كل شهر + وحدة في الملف بيستبدل المسجّل قبل كده لنفس الشهر والوحدة.</span>

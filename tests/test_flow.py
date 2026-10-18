@@ -1716,6 +1716,10 @@ def test_sales_import_dashboard(env):
     SL.import_xlsx(db, book([["2026-09", "كسارات", "كسارة الكدمي", "برايت", "3/8", "طن", 50, 16, 800, 120, 920, "", ""]])); db.commit()
     assert db.query(SalesLine).filter_by(unit="كسارة الكدمي").count() == 1
     assert db.query(SalesLine).count() == 3
+    tsv = "\t".join(SL.HEAD) + "\n" + "2026-07\tكسارات\tكسارة الشفاء\tمشروع الحائر\t3/8\tطن\t10\t16\t160\t24\t184\tشركة المسار\tإيميل\n"
+    assert SL.import_xlsx(db, tsv.encode("utf-8-sig")) == (1, 1); db.commit()
+    assert db.query(SalesLine).filter_by(unit="كسارة الشفاء").one().total == 184
+    db.query(SalesLine).filter_by(unit="كسارة الشفاء").delete(); db.commit()
     d = SL.build(db.query(SalesLine).all(), date(2026, 8, 1), date(2026, 9, 1))
     assert d["k"]["amount"] == 800 + 2000 + 1175 and d["k"]["m3"] == 5 and d["k"]["tons"] == 60
     db.close()

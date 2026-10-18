@@ -62,11 +62,17 @@ def guess_site(db: Session, unit: str):
 
 
 def import_xlsx(db: Session, data: bytes, source_default=""):
-    """يستورد شيت «المبيعات» (أو أول شيت). كل (شهر، وحدة) في الملف بيستبدل المسجّل قبل كده لنفس الشهر والوحدة."""
-    from openpyxl import load_workbook
-    wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-    ws = wb["المبيعات"] if "المبيعات" in wb.sheetnames else wb.worksheets[0]
-    rows = list(ws.iter_rows(values_only=True))
+    """يستورد شيت «المبيعات» (أو أول شيت) — أو ملف نصي مفصول بـ Tab/CSV. كل (شهر، وحدة) في الملف بيستبدل المسجّل قبل كده لنفس الشهر والوحدة."""
+    if data[:2] == b"PK":   # Excel
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        ws = wb["المبيعات"] if "المبيعات" in wb.sheetnames else wb.worksheets[0]
+        rows = list(ws.iter_rows(values_only=True))
+    else:                   # نص مفصول بـ Tab أو CSV (UTF-8)
+        import csv
+        text = data.decode("utf-8-sig")
+        delim = "\t" if "\t" in text.split("\n", 1)[0] else ","
+        rows = [tuple(r) for r in csv.reader(io.StringIO(text), delimiter=delim)]
     if not rows:
         raise ValueError("الملف فاضي")
     head = [_norm(h) for h in rows[0]]
