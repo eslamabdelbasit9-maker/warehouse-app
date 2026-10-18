@@ -687,11 +687,12 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                         .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date.between(d_from, d_to)).scalar() or 0)
     months = last_12_months(d_to)
     first, last = date(*months[0], 1), month_after(months[-1])
+    pill = S.get_theme(db, user.id)["dark"]   # أعمدة كبسولة مع الشكل الغامق بس (خلفية غامقة من الإعدادات)
     purchases = monthly_charts(
         db.query(Receipt.site_id, Receipt.date, line_val).select_from(ReceiptLine).join(Receipt)
         .filter(Receipt.site_id.in_(ids), not_tr_rec, Receipt.date >= first, Receipt.date < last)
         .group_by(Receipt.id, Receipt.site_id, Receipt.date), months, sel, pivot_sites, sites,
-        link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""), pill=True)
+        link=lambda sid, y, m: f"/receipts?month={y}-{m:02d}" + (f"&site={sid}" if sid else ""), pill=pill)
     # صرف قطع الغيار المعتمد شهرياً (نفس الشكل والمقارنة)
     issue_rows = (db.query(Req.site_id, Req.work_date, func.sum(RequestLine.value), Unit.kind).select_from(RequestLine).join(Req)
                   .outerjoin(Unit, Unit.id == Req.unit_id)
@@ -699,8 +700,8 @@ def dashboard(request: Request, site: str | None = None, date_from: str | None =
                           RequestLine.status == "approved", Req.work_date >= first, Req.work_date < last)
                   .group_by(Req.id, Req.site_id, Req.work_date, Unit.kind).all())
     issue_link = lambda sid, y, m: f"/requests?type=spare&ok=1&month={y}-{m:02d}" + (f"&site={sid}" if sid else "")
-    issues = monthly_charts([(r[0], r[1], r[2]) for r in issue_rows], months, sel, pivot_sites, sites, link=issue_link, pill=True)
-    issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link, pill=True)
+    issues = monthly_charts([(r[0], r[1], r[2]) for r in issue_rows], months, sel, pivot_sites, sites, link=issue_link, pill=pill)
+    issues["kinds"] = kind_charts(issue_rows, months, sel, pivot_sites, sites, UNIT_KINDS, link=issue_link, pill=pill)
 
     top_items = (db.query(Item.code, Item.name, Item.uom, func.sum(RequestLine.qty), func.sum(RequestLine.value))
                  .select_from(RequestLine).join(Req).join(Item).filter(Req.type == "spare", not_tr_req, *approved)
