@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>فاتورة بيع جديدة</h1>
+<form method="post" class="card" id="frm">
+  <div class="meta">
+    <div class="f"><label>العميل *</label><select name="customer_id" required><option value="">اختر العميل</option>
+      {% for c in customers %}<option value="{{ c.id }}" {{ 'selected' if c.id == sel_c }}>{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>الموقع</label><select name="site_id">{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="f"><label>النوع (حساب الإيراد)</label><select name="kind">{% for k, v in SALES_KINDS_ALL.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="f"><label>تاريخ الفاتورة</label><input type="date" name="date" value="{{ today }}"></div>
+    <div class="f"><label>تاريخ الاستحقاق</label><input type="date" name="due_date"></div>
+    <div class="f"><label>المشروع / موقع التوريد</label><input name="project"></div>
+    <label class="f" style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="no_vat" value="1"> بدون ضريبة</label>
+  </div>
+  <div class="tw" style="margin-top:14px"><table class="t lines" id="lines">
+    <tr><th style="width:42%">الصنف / الخدمة</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة (بدون ضريبة)</th><th class="n">الإجمالي</th><th></th></tr>
+  </table></div>
+  <p><button type="button" class="btn sec sm" onclick="addRow()">+ سطر</button></p>
+  <div class="meta" style="margin:6px 0 12px">
+    <div><b>الإجمالي بدون ضريبة</b> <span id="s_net">0</span></div>
+    <div><b>الضريبة 15%</b> <span id="s_vat">0</span></div>
+    <div><b>الإجمالي شامل الضريبة</b> <span id="s_gross">0</span></div>
+  </div>
+  <div class="f"><label>ملاحظات</label><textarea name="notes" rows="2" style="width:100%"></textarea></div>
+  <p class="muted">يُرحَّل قيد الفاتورة تلقائياً (العملاء مدين ← الإيراد وضريبة المخرجات دائن).
+    {% if start %}فواتير البيع تبدأ من شهر {{ start.strftime('%Y-%m') }}، وما قبله مسجّل من المستخلصات.{% else %}أول فاتورة تحدد شهر بداية فواتير البيع، وبعدها يُمنع استيراد مستخلصات لنفس الشهر أو ما بعده حتى لا تتكرر المبيعات.{% endif %}</p>
+  <button class="btn">حفظ الفاتورة</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+function addRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input name="desc" maxlength="250"></td><td><input name="uom" maxlength="20" style="max-width:90px" placeholder="طن / م³"></td>
+    <td><input name="qty" type="number" step="any" min="0"></td><td><input name="price" type="number" step="any" min="0"></td>
+    <td class="n tot"></td><td><button type="button" class="btn sec sm" onclick="this.closest('tr').remove();sums()">حذف</button></td>`;
+  document.getElementById('lines').appendChild(tr);
+  tr.addEventListener('input', () => { const q = +tr.querySelector('[name=qty]').value || 0, p = +tr.querySelector('[name=price]').value || 0;
+    tr.querySelector('.tot').textContent = (q * p).toLocaleString('en', {maximumFractionDigits: 2}); sums(); });
+}
+function sums() {
+  let n = 0; document.querySelectorAll('#lines tr').forEach(tr => { const q = tr.querySelector('[name=qty]'), p = tr.querySelector('[name=price]');
+    if (q && p) n += (+q.value || 0) * (+p.value || 0); });
+  const v = document.querySelector('[name=no_vat]').checked ? 0 : n * 0.15, f = x => x.toLocaleString('en', {maximumFractionDigits: 2});
+  document.getElementById('s_net').textContent = f(n); document.getElementById('s_vat').textContent = f(v); document.getElementById('s_gross').textContent = f(n + v);
+}
+document.querySelector('[name=no_vat]').addEventListener('change', sums);
+addRow(); addRow();
+</script>
+{% endblock %}

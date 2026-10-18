@@ -3442,3 +3442,275 @@ def payables_statement(request: Request, party: str = "", date_from: str | None 
     return render(request, "payables_statement.html", user, party=party, ob=ob, rows=rows, d_from=f, d_to=t,
                   open_pos=[p for p in pos if p.state in ("approved", "partial")], doc_link=AC.doc_link,
                   can_pay=user.has("accountant"), today=date.today(), sites=user_sites(db, user))
+
+
+# ================= المبيعات والعملاء: العملاء، فواتير البيع، التحصيل =================
+from .models import SINV_STATUS, SALES_KINDS, Customer, CustomerReceipt, SalesInvoice, SalesInvoiceLine  # noqa: E402
+
+T.env.globals.update(SINV_STATUS=SINV_STATUS, SALES_KINDS_ALL=SALES_KINDS)
+SINV_EDIT = ("accountant",)
+SINV_VIEW = ("accountant", "manager", "final")
+COMPANY_KEYS = [("company_name", "اسم الشركة"), ("company_vat", "الرقم الضريبي"), ("company_cr", "السجل التجاري"),
+                ("company_address", "العنوان"), ("company_phone", "الهاتف")]
+
+
+def company_info(db):
+    from .models import AppSetting
+    return {k: (db.get(AppSetting, k).value if db.get(AppSetting, k) else "") for k, _ in COMPANY_KEYS}
+
+
+def _next_no(db, model, col, prefix):
+    last = db.scalar(select(func.max(col)).where(col.like(prefix + "%")))
+    return f"{prefix}{(int(last.rsplit('-', 1)[1]) + 1) if last else 1:04d}"
+
+
+def _sinv_start(db):
+    from .models import AppSetting
+    row = db.get(AppSetting, "sinv_start")
+    return date.fromisoformat(row.value) if row and row.value else None
+
+
+@app.get("/admin/company", response_class=HTMLResponse)
+def admin_company(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    return render(request, "admin_company.html", user, info=company_info(db), keys=COMPANY_KEYS)
+
+
+@app.post("/admin/company")
+async def admin_company_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require("admin"))):
+    from .models import AppSetting
+    form = await request.form()
+    for k, _ in COMPANY_KEYS:
+        v = (form.get(k) or "").strip()[:300]
+        row = db.get(AppSetting, k)
+        if row:
+            row.value = v
+        else:
+            db.add(AppSetting(key=k, value=v))
+    AC.audit(db, user, "edit", "settings", "company", {k: form.get(k) for k, _ in COMPANY_KEYS}, request)
+    db.commit()
+    flash(request, "تم حفظ بيانات الشركة")
+    return back("/admin/company")
+
+
+@app.get("/customers", response_class=HTMLResponse)
+def customers(request: Request, q: str = "", db: Session = Depends(get_db), user: User = Depends(require(*SINV_VIEW))):
+    AC.sync(db)
+    bals = AC.party_balances(db, "ar")
+    rows = db.query(Customer).order_by(Customer.active.desc(), Customer.name).all()
+    if q.strip():
+        rows = [c for c in rows if q.strip() in c.name]
+    return render(request, "customers.html", user, rows=rows, bals=bals, q=q, can_edit=user.has(*SINV_EDIT))
+
+
+@app.post("/customers")
+async def customers_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*SINV_EDIT))):
+    form = await request.form()
+    name = " ".join((form.get("name") or "").split())[:200]
+    cid = form.get("id")
+    c = db.get(Customer, int(cid)) if str(cid or "").isdigit() else Customer()
+    if len(name) < 2:
+        flash(request, "أدخل اسم العميل", "err")
+        return back("/customers")
+    dup = db.query(Customer).filter(Customer.name == name, Customer.id != (c.id or 0)).first()
+    if dup:
+        flash(request, "يوجد عميل بنفس الاسم", "err")
+        return back("/customers")
+    old = c.name
+    c.name = name
+    c.vat_no = (form.get("vat_no") or "").strip() or None
+    c.cr_no = (form.get("cr_no") or "").strip() or None
+    c.phone = (form.get("phone") or "").strip() or None
+    c.address = (form.get("address") or "").strip() or None
+    c.credit_limit = parse_float(form.get("credit_limit"))
+    c.active = form.get("active") == "1" if cid else True
+    db.add(c)
+    db.flush()
+    AC.audit(db, user, "edit" if cid else "create", "customer", c.id, {"الاسم": name, "الاسم السابق": old} if cid else name, request)
+    db.commit()
+    flash(request, "تم حفظ العميل")
+    return back("/customers")
+
+
+@app.get("/sales-invoices", response_class=HTMLResponse)
+def sales_invoices(request: Request, date_from: str | None = None, date_to: str | None = None, q: str = "", status: str = "",
+                   db: Session = Depends(get_db), user: User = Depends(require(*SINV_VIEW))):
+    f = parse_date(date_from, date.today().replace(day=1))
+    t = parse_date(date_to, date.today())
+    qry = (db.query(SalesInvoice).options(selectinload(SalesInvoice.lines), selectinload(SalesInvoice.customer),
+                                          selectinload(SalesInvoice.site))
+           .filter(SalesInvoice.date.between(f, t)))
+    if status in SINV_STATUS:
+        qry = qry.filter(SalesInvoice.status == status)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        qry = qry.filter(or_(SalesInvoice.inv_no.ilike(like), SalesInvoice.project.ilike(like),
+                             SalesInvoice.customer.has(Customer.name.ilike(like))))
+    rows = qry.order_by(SalesInvoice.date.desc(), SalesInvoice.id.desc()).limit(500).all()
+    return render(request, "sinv_list.html", user, rows=rows, d_from=f, d_to=t, q=q, status=status,
+                  can_edit=user.has(*SINV_EDIT))
+
+
+@app.get("/sales-invoices/new", response_class=HTMLResponse)
+def sinv_new(request: Request, customer: int | None = None, db: Session = Depends(get_db), user: User = Depends(require(*SINV_EDIT))):
+    custs = db.query(Customer).filter(Customer.active.is_(True)).order_by(Customer.name).all()
+    if not custs:
+        flash(request, "أضف العميل أولاً من صفحة العملاء", "err")
+        return back("/customers")
+    return render(request, "sinv_new.html", user, customers=custs, sel_c=customer, sites=user_sites(db, user),
+                  today=date.today(), start=_sinv_start(db))
+
+
+@app.post("/sales-invoices/new")
+async def sinv_new_post(request: Request, db: Session = Depends(get_db), user: User = Depends(require(*SINV_EDIT))):
+    from .models import AppSetting, SalesLine
+    form = await request.form()
+    try:
+        d = parse_date(form.get("date"), date.today())
+        AC.check_lock(db, d, "تسجيل فاتورة بيع")
+        cust = db.get(Customer, int(form.get("customer_id") or 0)) if str(form.get("customer_id") or "").isdigit() else None
+        if not cust or not cust.active:
+            raise S.BusinessError("اختر العميل")
+        sites, sel = pick_site(db, user, form.get("site_id"))
+        month = d.replace(day=1)
+        start = _sinv_start(db)
+        if start is None:   # أول فاتورة: ما ينفعش يكون فيه مستخلصات مستوردة لنفس الشهر أو بعده (منعاً للتكرار)
+            last = db.query(func.max(SalesLine.period)).scalar()
+            if last and last >= month:
+                raise S.BusinessError(f"توجد مستخلصات مبيعات مستوردة حتى شهر {last:%Y-%m} — ابدأ فواتير البيع من الشهر التالي له حتى لا تتكرر المبيعات")
+            db.add(AppSetting(key="sinv_start", value=month.isoformat()))
+        elif month < start:
+            raise S.BusinessError(f"فواتير البيع تبدأ من {start:%Y-%m} (ما قبله مسجّل من المستخلصات)")
+        kind = form.get("kind") if form.get("kind") in SALES_KINDS else "other"
+        inv = SalesInvoice(inv_no=_next_no(db, SalesInvoice, SalesInvoice.inv_no, f"SI-{sel.code}-{d.year}-"), site_id=sel.id,
+                           customer_id=cust.id, kind=kind, date=d, due_date=parse_date(form.get("due_date")),
+                           project=(form.get("project") or "").strip() or None, no_vat=bool(form.get("no_vat")),
+                           notes=(form.get("notes") or "").strip() or None, created_by_id=user.id)
+        for desc, uom, qty, price in zip(form.getlist("desc"), form.getlist("uom"), form.getlist("qty"), form.getlist("price")):
+            desc = (desc or "").strip()
+            if not desc and not qty:
+                continue
+            q, p = parse_float(qty), parse_float(price)
+            if not desc or not q or q <= 0 or p is None or p < 0:
+                raise S.BusinessError(f"بيانات السطر غير مكتملة: «{desc or '—'}»")
+            inv.lines.append(SalesInvoiceLine(description=desc[:250], uom=(uom or "").strip()[:20] or None, qty=q, unit_price=p))
+        if not inv.lines:
+            raise S.BusinessError("أضف سطراً واحداً على الأقل")
+        db.add(inv)
+        db.flush()
+        AC.audit(db, user, "create", "sales_invoice", inv.inv_no, {"العميل": cust.name, "الإجمالي": inv.gross}, request)
+        db.commit()
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back("/sales-invoices/new")
+    flash(request, f"تم تسجيل فاتورة البيع {inv.inv_no}")
+    return back(f"/sales-invoices/{inv.id}")
+
+
+@app.get("/sales-invoices/{iid}", response_class=HTMLResponse)
+def sinv_detail(iid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*SINV_VIEW))):
+    inv = db.get(SalesInvoice, iid)
+    if not inv:
+        return back("/sales-invoices")
+    return render(request, "sinv_detail.html", user, inv=inv, co=company_info(db),
+                  can_cancel=inv.status == "posted" and user.has(*SINV_EDIT))
+
+
+@app.post("/sales-invoices/{iid}/cancel")
+async def sinv_cancel(iid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require(*SINV_EDIT))):
+    inv = db.get(SalesInvoice, iid)
+    form = await request.form()
+    reason = (form.get("reason") or "").strip()
+    try:
+        if not inv or inv.status != "posted":
+            raise S.BusinessError("الفاتورة ملغاة من قبل")
+        if not reason:
+            raise S.BusinessError("أدخل سبب الإلغاء")
+        AC.check_lock(db, inv.date, "إلغاء فاتورة")
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back(f"/sales-invoices/{iid}")
+    inv.status, inv.cancel_reason = "cancelled", reason
+    AC.audit(db, user, "delete", "sales_invoice", inv.inv_no, {"السبب": reason, "الإجمالي": inv.gross}, request)
+    db.commit()
+    flash(request, f"تم إلغاء الفاتورة {inv.inv_no} وعكس قيدها")
+    return back(f"/sales-invoices/{iid}")
+
+
+@app.get("/receivables", response_class=HTMLResponse)
+def receivables(request: Request, date_to: str | None = None, q: str = "", db: Session = Depends(get_db),
+                user: User = Depends(require(*SINV_VIEW))):
+    AC.sync(db)
+    t = parse_date(date_to, date.today())
+    ag = AC.aging(db, "ar", t)
+    bals = AC.party_balances(db, "ar", t)
+    rows = sorted(((p, bals.get(p, (0, 0, 0)), ag.get(p)) for p in set(bals) | set(ag)
+                   if abs(bals.get(p, (0, 0, 0))[2]) >= 0.01), key=lambda x: -x[1][2])
+    if q.strip():
+        rows = [r for r in rows if q.strip() in r[0]]
+    limits = {c.name: c.credit_limit for c in db.query(Customer) if c.credit_limit}
+    recs = (db.query(CustomerReceipt).options(selectinload(CustomerReceipt.customer), selectinload(CustomerReceipt.created_by))
+            .order_by(CustomerReceipt.date.desc(), CustomerReceipt.id.desc()).limit(30).all())
+    totals = [round(sum((r[2][0][i] if r[2] else 0) for r in rows), 2) for i in range(len(AC.AGING))]
+    return render(request, "receivables.html", user, rows=rows, d_to=t, q=q, recs=recs, aging_heads=[h for _, h in AC.AGING],
+                  totals=totals, total=sum(r[1][2] for r in rows), limits=limits, today=date.today(),
+                  customers=db.query(Customer).filter(Customer.active.is_(True)).order_by(Customer.name).all(),
+                  sites=user_sites(db, user), can_collect=user.has("accountant"))
+
+
+@app.post("/collections/new")
+async def collection_new(request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    form = await request.form()
+    try:
+        d = parse_date(form.get("date"), date.today())
+        AC.check_lock(db, d, "تسجيل تحصيل")
+        cust = db.get(Customer, int(form.get("customer_id") or 0)) if str(form.get("customer_id") or "").isdigit() else None
+        if not cust:
+            raise S.BusinessError("اختر العميل")
+        amt = parse_float(form.get("amount"))
+        if not amt or amt <= 0:
+            raise S.BusinessError("أدخل مبلغ التحصيل")
+        method = form.get("method") if form.get("method") in PAY_METHODS else "bank"
+        rc = CustomerReceipt(rc_no=_next_no(db, CustomerReceipt, CustomerReceipt.rc_no, f"RC-{d.year}-"), date=d, customer_id=cust.id,
+                             amount=round(amt, 2), method=method, ref=(form.get("ref") or "").strip() or None,
+                             site_id=int(form.get("site_id")) if str(form.get("site_id") or "").isdigit() else None,
+                             notes=(form.get("notes") or "").strip() or None, created_by_id=user.id)
+        db.add(rc)
+        db.flush()
+        AC.audit(db, user, "create", "collection", rc.rc_no, {"العميل": cust.name, "المبلغ": rc.amount}, request)
+        db.commit()
+    except S.BusinessError as e:
+        db.rollback()
+        flash(request, str(e), "err")
+        return back("/receivables")
+    flash(request, f"تم تسجيل التحصيل {rc.rc_no} من {cust.name} بمبلغ {S.fmt(rc.amount)}")
+    return back(f"/receivables/statement?party={quote_plus(cust.name)}")
+
+
+@app.post("/collections/{rid}/delete")
+def collection_delete(rid: int, request: Request, db: Session = Depends(get_db), user: User = Depends(require("accountant"))):
+    rc = db.get(CustomerReceipt, rid)
+    if not rc:
+        return back("/receivables")
+    try:
+        AC.check_lock(db, rc.date, "حذف تحصيل")
+    except S.BusinessError as e:
+        flash(request, str(e), "err")
+        return back("/receivables")
+    AC.audit(db, user, "delete", "collection", rc.rc_no, {"العميل": rc.customer.name, "المبلغ": rc.amount, "التاريخ": rc.date}, request)
+    db.delete(rc)
+    db.commit()
+    flash(request, f"تم حذف التحصيل {rc.rc_no}")
+    return back("/receivables")
+
+
+@app.get("/receivables/statement", response_class=HTMLResponse)
+def receivables_statement(request: Request, party: str = "", date_from: str | None = None, date_to: str | None = None,
+                          db: Session = Depends(get_db), user: User = Depends(require(*SINV_VIEW))):
+    AC.sync(db)
+    f, t = parse_date(date_from), parse_date(date_to, date.today())
+    ob, rows = AC.party_statement(db, "ar", party, f, t)
+    cust = db.query(Customer).filter(Customer.name == party).first()
+    return render(request, "receivables_statement.html", user, party=party, cust=cust, ob=ob, rows=rows, d_from=f, d_to=t,
+                  doc_link=AC.doc_link, can_collect=user.has("accountant") and cust is not None, today=date.today(),
+                  sites=user_sites(db, user), co=company_info(db))

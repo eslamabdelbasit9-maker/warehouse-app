@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>فواتير البيع</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>من تاريخ</label><input type="date" name="date_from" value="{{ d_from }}"></div>
+  <div class="f"><label>إلى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
+  <div class="f"><label>الحالة</label><select name="status"><option value="">الكل</option>{% for k, v in SINV_STATUS.items() %}<option value="{{ k }}" {{ 'selected' if k == status }}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>بحث (الرقم / العميل / المشروع)</label><input name="q" value="{{ q }}"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <a class="btn sec" href="/customers">العملاء</a>{% if can_edit %}<a class="btn green" href="/sales-invoices/new">+ فاتورة بيع</a>{% endif %}
+</form>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>رقم الفاتورة</th><th>التاريخ</th><th>العميل</th><th>المشروع</th><th>النوع</th><th>الموقع</th><th class="n">بدون ضريبة</th><th class="n">الضريبة</th><th class="n">الإجمالي</th><th>الحالة</th></tr>
+{% set ok = rows|selectattr('status', 'equalto', 'posted')|list %}
+{% for i in rows %}<tr class="{{ 'muted' if i.status == 'cancelled' }}"><td><a href="/sales-invoices/{{ i.id }}"><b>{{ i.inv_no }}</b></a></td><td>{{ i.date }}</td>
+  <td>{{ i.customer.name }}</td><td>{{ i.project or '' }}</td><td>{{ SALES_KINDS_ALL.get(i.kind, i.kind) }}</td><td>{{ i.site.name }}</td>
+  <td class="n">{{ fmt(i.net) }}</td><td class="n">{{ fmt(i.vat) }}</td><td class="n"><b>{{ fmt(i.gross) }}</b></td>
+  <td><span class="st st-{{ 'approved' if i.status == 'posted' else 'cancelled' }}">{{ SINV_STATUS[i.status] }}</span></td></tr>
+{% else %}<tr><td colspan="10" class="muted">لا توجد فواتير في هذه الفترة</td></tr>{% endfor %}
+{% if ok %}<tr class="total"><td colspan="6">الإجمالي (بدون الملغاة)</td><td class="n">{{ fmt(ok|sum(attribute='net')) }}</td><td class="n">{{ fmt(ok|sum(attribute='vat')) }}</td><td class="n">{{ fmt(ok|sum(attribute='gross')) }}</td><td></td></tr>{% endif %}
+</table></div></div>
+{% endblock %}

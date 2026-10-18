@@ -655,3 +655,5 @@ html[data-mode=dark] .dboard .btn:not(.sec){background:var(--dk-acc);color:var(-
 html[data-mode=dark] .dboard .btn.sec{background:transparent;color:var(--dk-text);border:1px solid var(--dk-line)}
 html[data-mode=dark] .dboard .btn.sec:hover{background:rgba(255,255,255,.05)}
 html[data-mode=dark] .dboard td.low,html[data-mode=dark] .dboard .low{color:#FF8A80}
+.onlyprint{display:none}
+@media print{.onlyprint{display:block !important}}

@@ -466,7 +466,7 @@ class SalesLine(Base):
 ACCOUNT_TYPES = {"asset": "أصول", "liability": "خصوم", "equity": "حقوق ملكية", "revenue": "إيرادات", "expense": "مصروفات"}
 JOURNAL_SOURCES = {"manual": "قيد يدوي", "opening": "أرصدة منقولة", "receipt": "فاتورة وارد", "issue": "صرف معتمد",
                    "production": "إنتاج الكسارات", "transfer": "تحويل بين الفروع", "sale": "مستخلص مبيعات",
-                   "payment": "سداد مورد"}
+                   "payment": "سداد مورد", "sinvoice": "فاتورة بيع", "collection": "تحصيل من عميل"}
 
 
 class Account(Base):
@@ -628,5 +628,92 @@ class SupplierPayment(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site | None] = relationship()
+    created_by: Mapped[User | None] = relationship()
+
+
+# ================= المبيعات والعملاء =================
+SINV_STATUS = {"posted": "مرحّلة", "cancelled": "ملغاة"}
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    vat_no: Mapped[str | None] = mapped_column(String(30))        # الرقم الضريبي
+    cr_no: Mapped[str | None] = mapped_column(String(30))         # السجل التجاري
+    phone: Mapped[str | None] = mapped_column(String(40))
+    address: Mapped[str | None] = mapped_column(String(300))
+    credit_limit: Mapped[float | None] = mapped_column(Float)      # حد الائتمان (اختياري)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SalesInvoice(Base):
+    """فاتورة بيع (ضريبية) — قيدها التلقائي: العملاء مدين ← الإيراد (حسب النوع) + ضريبة المخرجات دائن."""
+    __tablename__ = "sales_invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    inv_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id"))
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="other")          # crusher | asphalt | concrete | other
+    due_date: Mapped[date | None] = mapped_column(Date)                    # قبل date (نفس سبب أمر الشراء)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    project: Mapped[str | None] = mapped_column(String(200))               # المشروع / موقع التوريد
+    no_vat: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="posted")
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    site: Mapped[Site] = relationship()
+    customer: Mapped[Customer] = relationship()
+    created_by: Mapped[User | None] = relationship()
+    lines: Mapped[list["SalesInvoiceLine"]] = relationship(back_populates="invoice", cascade="all, delete-orphan",
+                                                           order_by="SalesInvoiceLine.id")
+
+    @property
+    def net(self):
+        return round(sum(l.total for l in self.lines), 2)
+
+    @property
+    def vat(self):
+        return 0.0 if self.no_vat else round(self.net * VAT_RATE, 2)
+
+    @property
+    def gross(self):
+        return round(self.net + self.vat, 2)
+
+
+class SalesInvoiceLine(Base):
+    __tablename__ = "sales_invoice_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("sales_invoices.id"), index=True)
+    description: Mapped[str] = mapped_column(String(250))                 # الصنف / الخدمة (بحص 3/4، أسفلت، خرسانة 350 ...)
+    uom: Mapped[str | None] = mapped_column(String(20))
+    qty: Mapped[float] = mapped_column(Float)
+    unit_price: Mapped[float] = mapped_column(Float, default=0)
+    invoice: Mapped[SalesInvoice] = relationship(back_populates="lines")
+
+    @property
+    def total(self):
+        return round((self.qty or 0) * (self.unit_price or 0), 2)
+
+
+class CustomerReceipt(Base):
+    """تحصيل من عميل — قيده التلقائي: البنك / الصندوق مدين ← العملاء دائن."""
+    __tablename__ = "customer_receipts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rc_no: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    amount: Mapped[float] = mapped_column(Float)
+    method: Mapped[str] = mapped_column(String(10), default="bank")
+    ref: Mapped[str | None] = mapped_column(String(100))
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    customer: Mapped[Customer] = relationship()
     site: Mapped[Site | None] = relationship()
     created_by: Mapped[User | None] = relationship()

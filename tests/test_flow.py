@@ -1947,3 +1947,83 @@ def test_purchase_order_cycle_and_supplier_payments(env):
     db = SessionLocal()
     assert db.get(PurchaseOrder, pid2).status == "cancelled"
     db.close()
+
+
+def test_sales_invoices_customers_collections_and_aging(env):
+    """عميل ← فاتورة بيع بقيدها ← تحصيل ← رصيد وأعمار ديون ← إلغاء الفاتورة؛ وحماية التكرار مع المستخلصات."""
+    from datetime import date as D
+    from app import accounting as AC
+    from app import sales as SL
+    from app.models import AppSetting, AuditLog, Customer, CustomerReceipt, JournalEntry, SalesInvoice, SalesLine
+    _acc_user(env)
+    db = SessionLocal()
+    db.query(SalesLine).delete()   # مستخلصات الاختبارات السابقة (نفس قاعدة الاختبار)
+    db.add(SalesLine(period=D(2026, 8, 1), kind="crusher", unit="كسارة", customer="عميل قديم", qty=1, amount=100, vat=15, total=115))
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "storekeeper@example.com")
+    assert c.get("/sales-invoices", follow_redirects=False).status_code == 403
+    login(c, env, "admin@example.com")
+    c.post("/admin/company", data={"company_name": "شركة الاختبار", "company_vat": "300000000000003"})
+    login(c, env, "acc@example.com")
+    assert "أضف العميل" in c.get("/sales-invoices/new", follow_redirects=True).text
+    c.post("/customers", data={"name": "عميل  تجريبي", "vat_no": "311111111100003", "credit_limit": "500"})
+    assert "يوجد عميل بنفس الاسم" in c.post("/customers", data={"name": "عميل تجريبي"}, follow_redirects=True).text
+    db = SessionLocal()
+    cid = db.query(Customer).filter_by(name="عميل تجريبي").one().id
+    db.close()
+    inv = {"customer_id": cid, "site_id": env["site"], "kind": "crusher", "project": "طريق 5",
+           "desc": ["بحص 3/4", ""], "uom": ["طن", ""], "qty": ["10", ""], "price": ["50", ""]}
+    # شهر فيه مستخلصات مستوردة مرفوض لأول فاتورة
+    assert "توجد مستخلصات" in c.post("/sales-invoices/new", data={**inv, "date": "2026-08-20"}, follow_redirects=True).text
+    r = c.post("/sales-invoices/new", data={**inv, "date": "2026-09-05"}, follow_redirects=True)
+    assert "تم تسجيل فاتورة البيع" in r.text and "فاتورة ضريبية" in r.text and "شركة الاختبار" in r.text and "575" in r.text
+    db = SessionLocal()
+    si = db.query(SalesInvoice).one()
+    sid, sno = si.id, si.inv_no
+    assert si.gross == 575 and si.inv_no.endswith("-0001") and db.get(AppSetting, "sinv_start").value == "2026-09-01"
+    AC.sync(db)
+    k = AC.acc_by_key(db)
+    je = db.query(JournalEntry).filter_by(source="sinvoice", source_id=str(si.id)).one()
+    assert {(l.account_id, l.debit, l.credit) for l in je.lines} == {(k["ar"], 575, 0), (k["rev_crusher"], 0, 500), (k["vat_out"], 0, 75)}
+    # بعد البداية: فاتورة قبلها مرفوضة، واستيراد مستخلصات لنفس الشهر أو بعده مرفوض
+    try:
+        SL.import_xlsx(db, "الشهر,الوحدة,العميل,المبلغ بدون ضريبة\n2026-09,كسارة,س,10\n".encode(), "")
+        raise AssertionError("كان لازم يرفض")
+    except ValueError as e:
+        assert "فواتير البيع مفعّلة" in str(e)
+    db.rollback()
+    db.close()
+    assert "تبدأ من" in c.post("/sales-invoices/new", data={**inv, "date": "2026-08-25"}, follow_redirects=True).text
+    # تحصيل جزئي ← رصيد وأعمار ديون وكشف حساب
+    r = c.post("/collections/new", data={"customer_id": cid, "date": "2026-09-20", "amount": "200", "method": "bank", "ref": "TR-9"},
+               follow_redirects=True)
+    assert "تم تسجيل التحصيل" in r.text and "كشف حساب العميل" in r.text and sno in r.text
+    db = SessionLocal()
+    assert round(AC.party_balances(db, "ar")["عميل تجريبي"][2], 2) == 375
+    buckets, _, total = AC.aging(db, "ar", D(2026, 12, 31))["عميل تجريبي"]
+    assert total == 375 and buckets[-1] == 375   # أكثر من 90 يوم
+    rc = db.query(CustomerReceipt).one()
+    db.close()
+    page = c.get("/receivables?date_to=2026-12-31").text
+    assert "عميل تجريبي" in page and "375" in page and rc.rc_no in page
+    assert "375" in c.get("/customers").text
+    # الإلغاء يحتاج سبب، ويعكس القيد
+    assert "سبب الإلغاء" in c.post(f"/sales-invoices/{sid}/cancel", data={}, follow_redirects=True).text
+    c.post(f"/sales-invoices/{sid}/cancel", data={"reason": "خطأ في الكمية"})
+    db = SessionLocal()
+    assert db.get(SalesInvoice, sid).status == "cancelled"
+    AC.sync(db)
+    assert db.query(JournalEntry).filter_by(source="sinvoice").count() == 0
+    assert round(AC.party_balances(db, "ar")["عميل تجريبي"][2], 2) == -200
+    assert db.query(AuditLog).filter_by(entity="sales_invoice").count() == 2
+    db.close()
+    c.post(f"/collections/{rc.id}/delete")
+    db = SessionLocal()
+    assert db.query(CustomerReceipt).count() == 0
+    db.close()
+    # المدير يشوف ومايعدّلش
+    login(c, env, "prod.manager@example.com")
+    assert c.get("/receivables").status_code == 200 and "فواتير البيع" in c.get("/").text
+    assert c.post("/customers", data={"name": "س"}, follow_redirects=False).status_code == 403

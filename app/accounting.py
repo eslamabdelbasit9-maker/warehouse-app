@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .models import (Account, AppSetting, AuditLog, CrusherProduction, CrusherProductionLine, Item, JournalEntry,
                      JournalLine, LineDecision, OpeningBalance, Receipt, ReceiptLine, Request, RequestLine, SalesLine,
-                     SupplierPayment, Transfer, TransferLine, Unit)
+                     SupplierPayment, Transfer, TransferLine, Unit, SalesInvoice, SalesInvoiceLine, CustomerReceipt, Customer)
 
 ACC_VIEW = ("accountant", "manager", "final")   # + مدير النظام
 ACC_EDIT = ("accountant",)                      # + مدير النظام
@@ -162,7 +162,8 @@ AUDIT_ACTIONS = {"login": "تسجيل دخول", "login_failed": "محاولة �
 # ---------------- المزامنة التلقائية ----------------
 _STATE = {"dirty": True}
 _WATCH = (Receipt, ReceiptLine, Request, RequestLine, LineDecision, OpeningBalance, CrusherProduction,
-          CrusherProductionLine, Transfer, TransferLine, SalesLine, Unit, Item, SupplierPayment)
+          CrusherProductionLine, Transfer, TransferLine, SalesLine, Unit, Item, SupplierPayment, SalesInvoice,
+          SalesInvoiceLine, CustomerReceipt, Customer)
 
 
 @event.listens_for(Session, "after_flush")
@@ -312,6 +313,20 @@ def build_auto_entries(db):
             e.dr("ar", s.total, s.site_id, s.customer)
             e.cr(f"rev_{s.kind if s.kind in ('crusher', 'asphalt', 'concrete') else 'other'}", s.amount, s.site_id)
             e.cr("vat_out", s.vat, s.site_id)
+    # 7-أ) فواتير البيع المرحّلة: العملاء مدين ← الإيراد حسب النوع + ضريبة المخرجات دائن
+    for inv in (db.query(SalesInvoice).options(selectinload(SalesInvoice.lines), selectinload(SalesInvoice.customer))
+                .filter(SalesInvoice.status == "posted", SalesInvoice.date >= start)):
+        if not inv.net:
+            continue
+        e = E[("sinvoice", str(inv.id))] = _E(inv.date, f"فاتورة بيع — {inv.customer.name}", inv.inv_no, inv.site_id)
+        e.dr("ar", inv.gross, inv.site_id, inv.customer.name)
+        e.cr(f"rev_{inv.kind if inv.kind in ('crusher', 'asphalt', 'concrete') else 'other'}", inv.net, inv.site_id)
+        e.cr("vat_out", inv.vat, inv.site_id)
+    # 7-ب) التحصيل من العملاء: البنك / الصندوق مدين ← العملاء دائن
+    for rc in db.query(CustomerReceipt).options(selectinload(CustomerReceipt.customer)).filter(CustomerReceipt.date >= start):
+        e = E[("collection", str(rc.id))] = _E(rc.date, f"تحصيل من العميل {rc.customer.name}", rc.rc_no, rc.site_id)
+        e.dr("cash" if rc.method == "cash" else "bank", rc.amount, rc.site_id, rc.customer.name, rc.ref)
+        e.cr("ar", rc.amount, rc.site_id, rc.customer.name, rc.ref)
     # 7) سداد الموردين: الموردين مدين ← البنك / الصندوق دائن
     for pmt in db.query(SupplierPayment).filter(SupplierPayment.date >= start):
         e = E[("payment", str(pmt.id))] = _E(pmt.date, f"سداد للمورد {pmt.supplier}", pmt.pay_no, pmt.site_id)
@@ -528,6 +543,10 @@ def doc_link(entry):
         return "/admin/opening"
     if entry.source == "payment":
         return "/payables"
+    if entry.source == "sinvoice":
+        return f"/sales-invoices/{sid}"
+    if entry.source == "collection":
+        return "/receivables"
     return None
 
 
@@ -560,3 +579,68 @@ def supplier_statement(db, party, d_from=None, d_to=None):
         bal += (l.credit or 0) - (l.debit or 0)
         rows.append((l, bal))
     return ob, rows
+
+
+# ---------------- أرصدة العملاء وأعمار الديون (من حساب العملاء) ----------------
+def party_balances(db, key, d_to=None):
+    """{الجهة: (مدين، دائن، الرصيد)} لحساب بمفتاحه (ar للعملاء). الرصيد = مدين − دائن."""
+    acc = acc_by_key(db).get(key)
+    q = (db.query(JournalLine.party, func.sum(JournalLine.debit), func.sum(JournalLine.credit)).join(JournalEntry)
+         .filter(JournalLine.account_id == acc))
+    if d_to:
+        q = q.filter(JournalEntry.date <= d_to)
+    return {(p or "—"): (d or 0.0, c or 0.0, (d or 0.0) - (c or 0.0)) for p, d, c in q.group_by(JournalLine.party)}
+
+
+def party_statement(db, key, party, d_from=None, d_to=None):
+    """كشف حساب جهة على حساب بمفتاحه — الرصيد مدين − دائن (للعملاء = المستحق على العميل)."""
+    acc = acc_by_key(db).get(key)
+    base = (db.query(JournalLine).join(JournalEntry).options(selectinload(JournalLine.entry))
+            .filter(JournalLine.account_id == acc, JournalLine.party == party))
+    ob = 0.0
+    if d_from:
+        d, c = (db.query(func.sum(JournalLine.debit), func.sum(JournalLine.credit)).join(JournalEntry)
+                .filter(JournalLine.account_id == acc, JournalLine.party == party, JournalEntry.date < d_from).one())
+        ob = (d or 0) - (c or 0)
+        base = base.filter(JournalEntry.date >= d_from)
+    if d_to:
+        base = base.filter(JournalEntry.date <= d_to)
+    rows, bal = [], ob
+    for l in base.order_by(JournalEntry.date, JournalEntry.id).all():
+        bal += (l.debit or 0) - (l.credit or 0)
+        rows.append((l, bal))
+    return ob, rows
+
+
+AGING = [(30, "حتى 30 يوم"), (60, "31 – 60"), (90, "61 – 90"), (None, "أكثر من 90")]
+
+
+def aging(db, key="ar", d_to=None):
+    """أعمار الديون: التحصيلات تُخصم من أقدم المديونيات أولاً، والباقي يتوزّع حسب عمره حتى التاريخ."""
+    d_to = d_to or date.today()
+    acc = acc_by_key(db).get(key)
+    q = (db.query(JournalLine.party, JournalEntry.date, JournalLine.debit, JournalLine.credit).join(JournalEntry)
+         .filter(JournalLine.account_id == acc, JournalEntry.date <= d_to).order_by(JournalEntry.date, JournalEntry.id))
+    per = defaultdict(lambda: {"debits": [], "credit": 0.0})
+    for party, d, dr, cr in q:
+        p = per[party or "—"]
+        if dr:
+            p["debits"].append([d, dr])
+        if cr:
+            p["credit"] += cr
+    out = {}
+    for party, p in per.items():
+        credit = p["credit"]
+        buckets = [0.0] * len(AGING)
+        for item in p["debits"]:
+            use = min(credit, item[1])
+            item[1] -= use
+            credit -= use
+            if item[1] > 0.004:
+                age = (d_to - item[0]).days
+                i = next((k for k, (lim, _) in enumerate(AGING) if lim is not None and age <= lim), len(AGING) - 1)
+                buckets[i] += item[1]
+        total = sum(buckets) - credit   # دفعة مقدمة زيادة = رصيد دائن
+        if abs(total) >= 0.01:
+            out[party] = (buckets, credit, total)
+    return out

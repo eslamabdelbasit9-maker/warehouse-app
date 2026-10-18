@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>بيانات الشركة</h1>
+{% include "_admin_nav.html" %}
+<form method="post" class="card" style="max-width:640px">
+  <p class="muted" style="margin-top:0">تظهر هذه البيانات في رأس فاتورة البيع الضريبية وكشوف حساب العملاء.</p>
+  {% for k, label in keys %}<div class="f" style="margin-bottom:10px"><label>{{ label }}</label><input name="{{ k }}" value="{{ info[k] }}" style="width:100%"></div>{% endfor %}
+  <button class="btn">حفظ</button>
+</form>
+{% endblock %}

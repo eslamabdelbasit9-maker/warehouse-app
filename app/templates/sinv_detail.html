@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card sinv">
+  <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <h2 style="margin:0">{{ co.company_name or 'اسم الشركة' }}</h2>
+      {% if co.company_address %}<div class="muted">{{ co.company_address }}</div>{% endif %}
+      {% if co.company_vat %}<div>الرقم الضريبي: <b dir="ltr">{{ co.company_vat }}</b></div>{% endif %}
+      {% if co.company_cr %}<div>السجل التجاري: <span dir="ltr">{{ co.company_cr }}</span></div>{% endif %}
+      {% if co.company_phone %}<div>الهاتف: <span dir="ltr">{{ co.company_phone }}</span></div>{% endif %}
+    </div>
+    <div style="text-align:left">
+      <h1 style="margin:0">فاتورة ضريبية</h1>
+      <div>رقم الفاتورة: <b dir="ltr">{{ inv.inv_no }}</b></div>
+      <div>التاريخ: <b>{{ inv.date }}</b></div>
+      {% if inv.due_date %}<div>تاريخ الاستحقاق: <b>{{ inv.due_date }}</b></div>{% endif %}
+      <div class="noprint"><span class="st st-{{ 'approved' if inv.status == 'posted' else 'cancelled' }}">{{ SINV_STATUS[inv.status] }}</span></div>
+    </div>
+  </div>
+  {% if inv.status == 'cancelled' %}<p class="low"><b>فاتورة ملغاة</b> — السبب: {{ inv.cancel_reason }}</p>{% endif %}
+  <div class="meta" style="margin-top:14px">
+    <div><span class="muted">العميل</span> <b>{{ inv.customer.name }}</b></div>
+    {% if inv.customer.vat_no %}<div><span class="muted">الرقم الضريبي للعميل</span> <b dir="ltr">{{ inv.customer.vat_no }}</b></div>{% endif %}
+    {% if inv.customer.address %}<div><span class="muted">العنوان</span> {{ inv.customer.address }}</div>{% endif %}
+    {% if inv.project %}<div><span class="muted">المشروع</span> <b>{{ inv.project }}</b></div>{% endif %}
+    <div class="noprint"><span class="muted">النوع</span> {{ SALES_KINDS_ALL.get(inv.kind, inv.kind) }} — <span class="muted">الموقع</span> {{ inv.site.name }}</div>
+  </div>
+  <div class="tw" style="margin-top:10px"><table class="t">
+  <tr><th>#</th><th>الصنف / الخدمة</th><th>الوحدة</th><th class="n">الكمية</th><th class="n">سعر الوحدة</th><th class="n">الإجمالي بدون ضريبة</th></tr>
+  {% for l in inv.lines %}<tr><td>{{ loop.index }}</td><td>{{ l.description }}</td><td>{{ l.uom or '' }}</td><td class="n">{{ fmt(l.qty) }}</td><td class="n">{{ fmt(l.unit_price) }}</td><td class="n">{{ fmt(l.total) }}</td></tr>{% endfor %}
+  <tr class="total"><td colspan="5">الإجمالي بدون ضريبة</td><td class="n">{{ fmt(inv.net) }}</td></tr>
+  <tr class="total"><td colspan="5">ضريبة القيمة المضافة {{ '0%' if inv.no_vat else '15%' }}</td><td class="n">{{ fmt(inv.vat) }}</td></tr>
+  <tr class="total"><td colspan="5">الإجمالي شامل الضريبة</td><td class="n">{{ fmt(inv.gross) }}</td></tr>
+  </table></div>
+  {% if inv.notes %}<p><b>ملاحظات:</b> {{ inv.notes }}</p>{% endif %}
+  <p class="muted noprint" style="margin-bottom:0">سجّلها {{ inv.created_by.name if inv.created_by else '-' }} {{ inv.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+  <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+    <button class="btn sec" onclick="print()">طباعة الفاتورة</button>
+    <a class="btn sec" href="/receivables/statement?party={{ inv.customer.name|urlencode }}">كشف حساب العميل</a>
+    <a class="btn sec" href="/sales-invoices">كل الفواتير</a>
+  </div>
+</div>
+{% if can_cancel %}
+<form method="post" action="/sales-invoices/{{ inv.id }}/cancel" class="card noprint" onsubmit="return confirm('إلغاء الفاتورة وعكس قيدها؟')">
+  <h2 style="margin-top:0">إلغاء الفاتورة</h2>
+  <div class="f"><label>سبب الإلغاء *</label><input name="reason" required style="width:100%"></div>
+  <button class="btn red" style="margin-top:10px">إلغاء الفاتورة</button>
+</form>{% endif %}
+{% endblock %}

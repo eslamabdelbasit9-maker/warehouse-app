@@ -110,6 +110,13 @@ def import_xlsx(db: Session, data: bytes, source_default=""):
                                notes=_norm(get(r, "ملاحظات"))[:200] or None,
                                source=(_norm(get(r, "المصدر")) or source_default)[:300] or None))
         keys.add((period, unit))
+    from .models import AppSetting
+    st = db.get(AppSetting, "sinv_start")
+    if st and st.value:   # بعد بداية فواتير البيع المبيعات بتتسجّل بالفواتير — منعاً للتكرار
+        start = date.fromisoformat(st.value)
+        late = sorted({p for p, _ in keys if p >= start})
+        if late:
+            raise ValueError(f"فواتير البيع مفعّلة من شهر {start:%Y-%m} — لا يمكن استيراد مستخلصات لشهر {late[0]:%Y-%m} أو ما بعده")
     for period, unit in keys:
         db.query(SalesLine).filter(SalesLine.period == period, SalesLine.unit == unit).delete()
     db.add_all(lines)

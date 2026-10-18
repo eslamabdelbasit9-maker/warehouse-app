@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>أرصدة العملاء وأعمار الديون</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>حتى تاريخ</label><input type="date" name="date_to" value="{{ d_to }}"></div>
+  <div class="f"><label>بحث (العميل)</label><input name="q" value="{{ q }}"></div>
+  <button class="btn">عرض</button><span class="right"></span>
+  <a class="btn sec" href="/customers">العملاء</a><a class="btn sec" href="/sales-invoices">فواتير البيع</a>
+  <button type="button" class="btn sec" onclick="print()">طباعة</button>
+</form>
+{% if can_collect and customers %}
+<form class="card noprint" method="post" action="/collections/new" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <h2 style="width:100%;margin:0 0 4px">تسجيل تحصيل من عميل</h2>
+  <div class="f" style="min-width:220px"><label>العميل *</label><select name="customer_id" required><option value="">اختر العميل</option>
+    {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>التاريخ</label><input type="date" name="date" value="{{ today }}"></div>
+  <div class="f"><label>المبلغ *</label><input name="amount" type="number" step="0.01" min="0.01" required style="max-width:140px"></div>
+  <div class="f"><label>الطريقة</label><select name="method">{% for k, v in PAY_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+  <div class="f"><label>رقم التحويل / الشيك</label><input name="ref" style="max-width:150px"></div>
+  <div class="f"><label>الموقع</label><select name="site_id"><option value="">-</option>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f" style="flex:1;min-width:160px"><label>ملاحظات</label><input name="notes"></div>
+  <button class="btn green">حفظ التحصيل</button>
+</form>{% endif %}
+<div class="card">
+  <p class="muted" style="margin-top:0">الرصيد = الفواتير شامل الضريبة − التحصيلات ± القيود اليدوية على حساب العملاء حتى {{ d_to }}. التحصيلات تُخصم من أقدم الفواتير أولاً، والباقي يتوزّع حسب عمره.</p>
+  <div class="tw"><table class="t">
+  <tr><th>العميل</th><th class="n">إجمالي المدين</th><th class="n">إجمالي الدائن</th>{% for h in aging_heads %}<th class="n">{{ h }}</th>{% endfor %}<th class="n">الرصيد المستحق</th></tr>
+  {% for name, (dr, cr, bal), ag in rows %}<tr><td><a href="/receivables/statement?party={{ name|urlencode }}"><b>{{ name }}</b></a>
+      {% if limits.get(name) and bal > limits[name] %}<div class="low" style="font-size:12px">تجاوز حد الائتمان ({{ fmt(limits[name]) }})</div>{% endif %}</td>
+    <td class="n">{{ fmt(dr) }}</td><td class="n">{{ fmt(cr) }}</td>
+    {% for i in range(aging_heads|length) %}{% set v = ag[0][i] if ag else 0 %}<td class="n {{ 'low' if loop.last and v > 0.005 }}">{{ fmt(v) if v > 0.005 else '-' }}</td>{% endfor %}
+    <td class="n"><b class="{{ 'low' if bal < -0.005 }}">{{ fmt(bal) }}</b></td></tr>
+  {% else %}<tr><td colspan="{{ 4 + aging_heads|length }}" class="muted">لا توجد أرصدة مستحقة</td></tr>{% endfor %}
+  {% if rows %}<tr class="total"><td>الإجمالي</td><td class="n">{{ fmt(rows|map(attribute=1)|map(attribute=0)|sum) }}</td><td class="n">{{ fmt(rows|map(attribute=1)|map(attribute=1)|sum) }}</td>
+    {% for v in totals %}<td class="n">{{ fmt(v) }}</td>{% endfor %}<td class="n">{{ fmt(total) }}</td></tr>{% endif %}
+  </table></div>
+</div>
+<div class="card"><h2 style="margin-top:0">آخر التحصيلات</h2><div class="tw"><table class="t">
+<tr><th>الرقم</th><th>التاريخ</th><th>العميل</th><th>الطريقة</th><th>المرجع</th><th class="n">المبلغ</th><th>سجّله</th>{% if can_collect %}<th class="noprint"></th>{% endif %}</tr>
+{% for r in recs %}<tr><td>{{ r.rc_no }}</td><td>{{ r.date }}</td><td><a href="/receivables/statement?party={{ r.customer.name|urlencode }}">{{ r.customer.name }}</a></td>
+  <td>{{ PAY_METHODS.get(r.method, r.method) }}</td><td>{{ r.ref or '' }}</td><td class="n"><b>{{ fmt(r.amount) }}</b></td><td>{{ r.created_by.name if r.created_by else '' }}</td>
+  {% if can_collect %}<td class="noprint"><form method="post" action="/collections/{{ r.id }}/delete" onsubmit="return confirm('حذف التحصيل {{ r.rc_no }}؟ (يُسجَّل في سجل النشاط)')"><button class="btn sec sm">حذف</button></form></td>{% endif %}</tr>
+{% else %}<tr><td colspan="8" class="muted">لا توجد تحصيلات</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}
