@@ -2121,3 +2121,30 @@ def test_hr_employees_attendance_advances_payroll(env):
     login(c, env, "prod.manager@example.com")
     assert c.get(f"/payroll/{rid}").status_code == 200
     assert c.post(f"/payroll/{rid}/post", data={}, follow_redirects=False).status_code == 403
+
+
+def test_admin_direct_issue(env):
+    """صرف مباشر من الأدمن: معتمد على طول بالتاريخ المكتوب، بدون إيميلات، ومش متاح لغير الأدمن."""
+    c = TestClient(app)
+    db = SessionLocal()
+    n_mail = db.query(MailLog).count()
+    db.close()
+    login(c, env, "requester@example.com")
+    c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["asphalt"], "reason": "x", "direct": "1",
+                                        "work_date": "2026-08-01", "item_id": [env["b"]], "qty": ["1"]})
+    db = SessionLocal()
+    req = db.query(Request).order_by(Request.id.desc()).first()
+    assert req.status == "pending"   # غير الأدمن: الطلب يمشي في الاعتماد العادي
+    db.close()
+    login(c, env, "admin@example.com")
+    r = c.post("/requests/new/spare", data={"site_id": env["site"], "unit_id": env["asphalt"], "reason": "صرف فاتورة",
+                                            "direct": "1", "work_date": "2026-08-01", "item_id": [env["b"]], "qty": ["1"]},
+               follow_redirects=False)
+    assert r.status_code == 303
+    rid = int(r.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    req = db.get(Request, rid)
+    assert req.status == "approved" and str(req.work_date) == "2026-08-01"
+    assert all(l.status == "approved" and l.unit_cost > 0 for l in req.lines)
+    assert db.query(MailLog).count() == n_mail + 1   # إيميل واحد بس لطلب غير الأدمن، ولا إيميل للصرف المباشر
+    db.close()

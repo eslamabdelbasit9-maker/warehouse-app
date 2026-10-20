@@ -652,8 +652,9 @@ def can_approve(db: Session, user: User, req: Request):
 
 
 def create_request(db: Session, *, rtype, site, unit, requester, work_date, reason, lines, asphalt_tons=None, party_tons=None,
-                   raw_dest=None, customer=None):
-    """lines: list of dict(item, qty, entity_type, entity_name, diesel_purpose)"""
+                   raw_dest=None, customer=None, direct=False):
+    """lines: list of dict(item, qty, entity_type, entity_name, diesel_purpose)
+    direct=True (للأدمن فقط): صرف مباشر معتمد — من غير دورة اعتماد ولا إيميلات، بأي تاريخ."""
     if not lines:
         raise BusinessError("أضف صنفاً واحداً على الأقل")
     if rtype == "spare":
@@ -677,8 +678,8 @@ def create_request(db: Session, *, rtype, site, unit, requester, work_date, reas
                   unit_id=unit.id if unit else None, requester_id=requester.id, work_date=work_date,
                   reason=(reason or "").strip() or None, asphalt_tons=asphalt_tons, status="pending",
                   raw_dest=(raw_dest or "asphalt") if rtype == "raw" else None, customer=customer)
-    req.current_stage = req.flow[0]
-    if not approvers_for(db, _probe(site, unit), req.current_stage):
+    req.current_stage = req.flow[-1] if direct else req.flow[0]
+    if not direct and not approvers_for(db, _probe(site, unit), req.current_stage):
         raise BusinessError(f"لا يوجد معتمد مُعرّف لمرحلة «{STAGES[req.current_stage]}» لهذا الطلب — راجع مدير النظام")
     req.site, req.unit, req.requester = site, unit, requester
     from .models import AsphaltPartyTons
@@ -689,9 +690,34 @@ def create_request(db: Session, *, rtype, site, unit, requester, work_date, reas
                                      entity_type=l.get("entity_type"), entity_name=l.get("entity_name"),
                                      diesel_purpose=l.get("diesel_purpose"), sale_price=l.get("sale_price")))
     db.add(req)
+    if direct:
+        _approve_direct(db, req, requester)
+        db.commit()
+        return req
     db.commit()
     notify_approvers(db, req)
     return req
+
+
+def _approve_direct(db: Session, req: Request, user: User):
+    """اعتماد نهائي فوري لصرف مباشر من الأدمن: التكلفة بمتوسط السعر زي الاعتماد العادي، وسجل قرار واحد في المرحلة الأخيرة."""
+    db.flush()
+    now = datetime.now()
+    if req.type == "spare":
+        st = stock_table(db, req.site_id, [l.item_id for l in req.lines])
+        avg = {i: v["avg"] for i, v in st.items()}
+    else:
+        avg = {i: v["avg"] for i, v in raw_stock_table(db, req.site_id).items()}
+    for l in req.lines:
+        l.unit_cost = round(avg.get(l.item_id, 0) or 0, 4)
+        l.value = round(l.unit_cost * l.qty, 2)
+        l.status = "approved"
+        db.add(LineDecision(request_id=req.id, line_id=l.id, stage=req.current_stage, user_id=user.id,
+                            decision="approved", comment="صرف مباشر (أدمن)", at=now))
+    req.status, req.closed_at = "approved", now
+    if req.type == "raw":
+        db.flush()
+        revalue_raw(db, req.site_id)
 
 
 class _probe:  # كائن مؤقت لحساب المعتمدين قبل إنشاء الطلب

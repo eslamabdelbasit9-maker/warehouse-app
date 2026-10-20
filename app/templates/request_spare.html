@@ -20,6 +20,7 @@
     <tr><th style="width:38%">الصنف (أدخل الكود أو الاسم)</th><th>الوحدة</th><th class="n">الرصيد المتاح</th><th>منصرف الشهر</th><th>منصرف السنة</th><th style="width:120px">الكمية المطلوبة</th><th></th></tr>
   </table></div>
   <p><button type="button" class="btn sec sm" onclick="addRow()">+ صنف</button></p>
+  {% if user.has("admin") %}<label style="display:block;margin:8px 0"><input type="checkbox" name="direct" value="1"> صرف مباشر معتمد (للأدمن) — بدون دورة اعتماد ولا إيميلات، بالتاريخ المكتوب</label>{% endif %}
   <button class="btn">إرسال للاعتماد</button>
 </form>
 {% endblock %}

@@ -58,6 +58,7 @@
   <div class="dpt" id="dpt" hidden>معدل استهلاك الديزل: <b id="dptv"></b> لتر لكل طن</div>
   {% endif %}
   <div class="f" style="margin-top:10px"><label>ملاحظات</label><textarea name="reason"></textarea></div>
+  {% if user.has("admin") %}<label style="display:block;margin:8px 0"><input type="checkbox" name="direct" value="1"> صرف مباشر معتمد (للأدمن) — بدون دورة اعتماد ولا إيميلات، بالتاريخ المكتوب</label>{% endif %}
   <button class="btn" style="margin-top:10px">إرسال للاعتماد</button>
 </form>
 {% if dest == 'project' %}

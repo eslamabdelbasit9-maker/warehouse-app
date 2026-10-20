@@ -848,6 +848,7 @@ async def new_spare_post(request: Request, db: Session = Depends(get_db),
                          user: User = Depends(require("requester", "storekeeper"))):
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("site_id"))
+    direct = bool(form.get("direct")) and user.has("admin")
     try:
         AC.check_lock(db, parse_date(form.get("work_date"), date.today()), "تسجيل طلب")
         unit = db.get(Unit, int(form.get("unit_id") or 0))
@@ -863,12 +864,15 @@ async def new_spare_post(request: Request, db: Session = Depends(get_db),
             lines.append(dict(item=item, qty=parse_float(qty)))
         req = S.create_request(db, rtype="spare", site=sel, unit=unit, requester=user,
                                work_date=parse_date(form.get("work_date"), date.today()),
-                               reason=form.get("reason"), lines=lines)
+                               reason=form.get("reason"), lines=lines, direct=direct)
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
         return back(f"/requests/new/spare?site={sel.id}")
-    flash(request, f"تم إرسال الطلب {req.req_no} للاعتماد")
+    if direct:
+        AC.audit(db, user, "create", "direct_issue", req.req_no, {"التاريخ": req.work_date, "الموقع": sel.name}, request)
+        db.commit()
+    flash(request, f"تم تسجيل الصرف المباشر {req.req_no} (معتمد)" if direct else f"تم إرسال الطلب {req.req_no} للاعتماد")
     return back(f"/requests/{req.id}")
 
 
@@ -901,6 +905,7 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
     form = await request.form()
     sites, sel = pick_site(db, user, form.get("site_id"))
     dest = form.get("dest") if form.get("dest") in RAW_DESTS else "asphalt"
+    direct = bool(form.get("direct")) and user.has("admin")
     try:
         AC.check_lock(db, parse_date(form.get("work_date"), date.today()), "تسجيل طلب")
         unit, tons, customer = None, None, None
@@ -969,12 +974,15 @@ async def new_raw_post(request: Request, db: Session = Depends(get_db),
         req = S.create_request(db, rtype="raw", site=sel, unit=unit, requester=user,
                                work_date=parse_date(form.get("work_date"), date.today()),
                                reason=form.get("reason"), lines=lines, asphalt_tons=tons, raw_dest=dest, customer=customer,
-                               party_tons=party_tons)
+                               party_tons=party_tons, direct=direct)
     except S.BusinessError as e:
         db.rollback()
         flash(request, str(e), "err")
         return back(f"/requests/new/raw?site={sel.id}&dest={dest}" + (f"&unit={unit.id}" if unit else ""))
-    flash(request, f"تم إرسال الطلب {req.req_no} للاعتماد")
+    if direct:
+        AC.audit(db, user, "create", "direct_issue", req.req_no, {"التاريخ": req.work_date, "الموقع": sel.name}, request)
+        db.commit()
+    flash(request, f"تم تسجيل الصرف المباشر {req.req_no} (معتمد)" if direct else f"تم إرسال الطلب {req.req_no} للاعتماد")
     return back(f"/requests/{req.id}")
 
 
