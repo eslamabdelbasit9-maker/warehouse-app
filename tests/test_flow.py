@@ -2148,3 +2148,21 @@ def test_admin_direct_issue(env):
     assert all(l.status == "approved" and l.unit_cost > 0 for l in req.lines)
     assert db.query(MailLog).count() == n_mail + 1   # إيميل واحد بس لطلب غير الأدمن، ولا إيميل للصرف المباشر
     db.close()
+
+
+def test_receipts_all_sites_filter(env):
+    """فلتر الوارد: «الكل» يعرض وارد كل الفروع المسموحة مع عمود الموقع."""
+    from app.models import Receipt
+    _acc_user(env)
+    db = SessionLocal()
+    s2 = db.query(Site).filter(Site.id != env["site"]).first()
+    db.add_all([Receipt(site_id=env["site"], date=date(2026, 10, 1), invoice_no="ALL-A", supplier="مورد"),
+                Receipt(site_id=s2.id, date=date(2026, 10, 2), invoice_no="ALL-B", supplier="مورد")])
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "acc@example.com")
+    page = c.get(f"/receipts?site={env['site']}").text
+    assert 'value="all"' in page and "ALL-A" in page and "ALL-B" not in page
+    page = c.get("/receipts?site=all").text
+    assert "كل الفروع" in page and "ALL-A" in page and "ALL-B" in page and s2.name in page

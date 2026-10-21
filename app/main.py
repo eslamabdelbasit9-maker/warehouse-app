@@ -1675,8 +1675,10 @@ def item_card(item_id: int, request: Request, site: str | None = None, date_from
 @app.get("/receipts", response_class=HTMLResponse)
 def receipts(request: Request, site: str | None = None, q: str = "", month: str = "", date_from: str = "",
              date_to: str = "", cat: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
-    sites, sel = pick_site(db, user, site)
-    qry = db.query(Receipt).filter(Receipt.site_id == sel.id)
+    all_sites = site == "all"
+    sites, sel = pick_site(db, user, None if all_sites else site)
+    all_sites = all_sites and len(sites) > 1
+    qry = db.query(Receipt).filter(Receipt.site_id.in_([s.id for s in sites]) if all_sites else Receipt.site_id == sel.id)
     mon = parse_month(month)
     if mon:
         qry = qry.filter(Receipt.date >= mon[0], Receipt.date < mon[1])
@@ -1696,8 +1698,11 @@ def receipts(request: Request, site: str | None = None, q: str = "", month: str 
                              Receipt.lines.any(ReceiptLine.item.has(or_(Item.name.ilike(like), Item.code.ilike(like))))))
     limited = not (d_from or d_to or mon or cat or q.strip())
     qry = qry.options(selectinload(Receipt.lines).selectinload(ReceiptLine.item)).order_by(Receipt.date.desc(), Receipt.id.desc())
+    if all_sites:
+        qry = qry.options(selectinload(Receipt.site))
     rows = qry.limit(500).all() if limited else qry.all()
     return render(request, "receipts.html", user, sites=sites, sel=sel, rows=rows, q=q, d_from=d_from, d_to=d_to, cat=cat,
+                  all_sites=all_sites, site_q="all" if all_sites else sel.id,
                   month=month if mon else "", month_label=month_label(mon))
 
 
