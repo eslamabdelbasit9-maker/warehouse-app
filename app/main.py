@@ -2940,7 +2940,7 @@ def _send_xlsx(buf, fname):
 @app.get("/export/requests.xlsx")
 def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str = "",
                     db: Session = Depends(get_db), user: User = Depends(current_user)):
-    ids = user.site_ids(db)
+    ids = [s.id for s in user_sites(db, user)]   # المواقع النشطة بس — زي التقارير وكشف الحساب (الموقع الموقوف ممكن يكون فيه نسخة قديمة مكررة)
     qry = (db.query(RequestLine).join(Req).filter(Req.site_id.in_(ids), Req.type == (type if type in REQ_TYPES else "spare")))
     ef = engineer_filter(db, user)
     if ef is not None:

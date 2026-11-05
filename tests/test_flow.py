@@ -17,7 +17,7 @@ from app.db import SessionLocal  # noqa: E402
 from app.main import app, init_db  # noqa: E402
 from app.models import Supplier  # noqa: E402
 from app.models import (CustodyRecord, Item, MailLog, OpeningBalance, Receipt, ReceiptLine, Request, Site, Transfer, Unit,  # noqa: E402
-                        User)
+                        RequestLine, User)
 from app import services as S  # noqa: E402
 from scripts import seed_demo  # noqa: E402
 
@@ -2203,3 +2203,23 @@ def test_crusher_sales_report(env, sale_on):
     names = [r[1] for r in wb.worksheets[0].iter_rows(min_row=2, values_only=True)]
     assert names[:2] == ["عميل تقرير الكسارة", "مشروع تقرير الكسارة"] and names[-1] is None
     assert wb.worksheets[1].max_row == 3
+
+
+def test_export_requests_skips_inactive_site(env):
+    """تصدير الصرف زي التقارير وكشف الحساب: الموقع الموقوف (نسخة قديمة مكررة) مايدخلش في الشيت."""
+    db = SessionLocal()
+    old = Site(code="OLDX", name="موقع موقوف", active=False)
+    db.add(old)
+    db.flush()
+    it = db.query(Item).filter_by(code="SP_1").one()
+    rq = Request(req_no="OLDX-REQ-1", type="spare", site_id=old.id, work_date=date(2026, 3, 1), status="approved",
+                 requester_name="ترحيل سجلات")
+    rq.lines.append(RequestLine(item_id=it.id, qty=1, status="approved", unit_cost=10, value=10))
+    db.add(rq)
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    from openpyxl import load_workbook
+    wb = load_workbook(io.BytesIO(c.get("/export/requests.xlsx?type=spare").content))
+    assert "OLDX-REQ-1" not in [r[0] for r in wb.active.iter_rows(min_row=2, values_only=True)]
