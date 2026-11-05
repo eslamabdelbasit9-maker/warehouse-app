@@ -16,6 +16,8 @@
   <span class="right"></span>
   <a class="btn sec" href="/export/requests.xlsx?type=spare&site={{ f.site }}">تصدير قطع الغيار Excel</a>
   <a class="btn sec" href="/export/requests.xlsx?type=raw&site={{ f.site }}">تصدير المواد الخام Excel</a>
+  <a class="btn sec" href="/export/requests.xlsx?type=spare&site={{ f.site }}&status=all" title="يشمل قيد الاعتماد والمرفوض والملغي">قطع الغيار (كل الحالات)</a>
+  <a class="btn sec" href="/export/requests.xlsx?type=raw&site={{ f.site }}&status=all" title="يشمل قيد الاعتماد والمرفوض والملغي">المواد الخام (كل الحالات)</a>
 </form>
 <div class="card"><div class="muted">{{ total }} طلب</div><div class="tw"><table class="t">
 <tr><th>رقم الطلب</th><th>النوع</th><th>التاريخ</th><th>الموقع</th><th>الوحدة</th><th>طالب الصرف</th><th>الأصناف</th><th class="n">القيمة</th><th>الحالة</th></tr>

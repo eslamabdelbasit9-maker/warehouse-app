@@ -2223,3 +2223,25 @@ def test_export_requests_skips_inactive_site(env):
     from openpyxl import load_workbook
     wb = load_workbook(io.BytesIO(c.get("/export/requests.xlsx?type=spare").content))
     assert "OLDX-REQ-1" not in [r[0] for r in wb.active.iter_rows(min_row=2, values_only=True)]
+
+
+def test_export_requests_approved_only_by_default(env):
+    """التصدير الافتراضي = المعتمد بس (زي التقارير)؛ الملغي بيظهر مع status=all، وصرف الخام فيه السعر والقيمة."""
+    db = SessionLocal()
+    it = db.query(Item).filter_by(code="SP_1").one()
+    for no, st in (("EXP-OK-1", "approved"), ("EXP-CXL-1", "cancelled")):
+        rq = Request(req_no=no, type="spare", site_id=env["site"], work_date=date(2026, 3, 1), status=st, requester_name="x")
+        rq.lines.append(RequestLine(item_id=it.id, qty=1, status="approved", unit_cost=10, value=10))
+        db.add(rq)
+    db.commit()
+    db.close()
+    c = TestClient(app)
+    login(c, env, "admin@example.com")
+    from openpyxl import load_workbook
+
+    def nos(url):
+        return [r[0] for r in load_workbook(io.BytesIO(c.get(url).content)).active.iter_rows(min_row=2, values_only=True)]
+    assert "EXP-OK-1" in nos("/export/requests.xlsx?type=spare") and "EXP-CXL-1" not in nos("/export/requests.xlsx?type=spare")
+    assert "EXP-CXL-1" in nos("/export/requests.xlsx?type=spare&status=all")
+    head = next(load_workbook(io.BytesIO(c.get("/export/requests.xlsx?type=raw").content)).active.iter_rows(max_row=1, values_only=True))
+    assert "القيمة" in head and "اسم الجهة" in head

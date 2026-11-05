@@ -2938,8 +2938,9 @@ def _send_xlsx(buf, fname):
 
 
 @app.get("/export/requests.xlsx")
-def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str = "",
+def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str = "", status: str = "approved",
                     db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """التصدير الافتراضي = الصرف المعتمد بس (زي التقارير وكشف الحساب)؛ status=all لكل الحالات (قيد الاعتماد/مرفوض/ملغي)."""
     ids = [s.id for s in user_sites(db, user)]   # المواقع النشطة بس — زي التقارير وكشف الحساب (الموقع الموقوف ممكن يكون فيه نسخة قديمة مكررة)
     qry = (db.query(RequestLine).join(Req).filter(Req.site_id.in_(ids), Req.type == (type if type in REQ_TYPES else "spare")))
     ef = engineer_filter(db, user)
@@ -2947,6 +2948,8 @@ def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str 
         qry = qry.filter(ef)
     if site.isdigit():
         qry = qry.filter(Req.site_id == int(site))
+    if status != "all":
+        qry = qry.filter(Req.status.in_(["approved", "partial"]), RequestLine.status == "approved")
     if parse_date(frm):
         qry = qry.filter(Req.work_date >= parse_date(frm))
     if parse_date(to):
@@ -2957,14 +2960,14 @@ def export_requests(type: str = "spare", site: str = "", frm: str = "", to: str 
         base = [r.req_no, r.work_date, r.site.name, r.unit.name if r.unit else "", l.item.code, l.item.name, l.qty, l.item.uom]
         if r.type == "raw":
             base += [l.entity_type or "", l.entity_name or "", l.diesel_purpose or "", r.asphalt_tons or "",
-                     round(r.liters_per_ton, 2) if r.liters_per_ton else ""]
+                     round(r.liters_per_ton, 2) if r.liters_per_ton else "", l.unit_cost, l.value]
         else:
             base += [l.unit_cost, l.value]
         base += [r.requester_display, r.reason or "", REQ_STATUS[r.status], LINE_STATUS[l.status],
                  STAGES.get(l.rejected_stage, "") if l.rejected_stage else ""]
         rows.append(base)
     h = ["رقم الطلب", "التاريخ", "الموقع", "الوحدة", "كود الصنف", "اسم الصنف", "الكمية", "الوحدة"]
-    h += ["نوع الجهة", "اسم الجهة", "غرض الديزل", "الأسفلت المنتج (طن)", "ديزل لكل طن (لتر)"] if type == "raw" else ["سعر الوحدة", "القيمة"]
+    h += (["نوع الجهة", "اسم الجهة", "غرض الديزل", "الأسفلت المنتج (طن)", "ديزل لكل طن (لتر)"] if type == "raw" else []) + ["سعر الوحدة", "القيمة"]
     h += ["طالب الصرف", "السبب", "حالة الطلب", "حالة الصنف", "رُفض في مرحلة"]
     return _send_xlsx(_xlsx(h, rows, "الصرف"), f"صرف_{REQ_TYPES.get(type, '')}.xlsx")
 
