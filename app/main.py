@@ -2107,6 +2107,137 @@ def unit_statement(request: Request, site: str | None = None, unit: str = "",
     return render(request, "unit_statement.html", user, **ctx)
 
 
+# ---------------- مبيعات الكسارة (عملاء ومشاريع) ----------------
+CRUSHER_ORDER = ["G15", "G1", "G34", "G38", "PWD", "PWD3", "MIX"]
+
+
+def _crusher_sales(db, user, site, d_from, d_to, ptype, q):
+    """صرف نواتج الكسارة المعتمد للعملاء ومشاريع الشركة (بدون خلاطة الأسفلت والخرسانة والتحويلات)."""
+    all_sites = site == "all"
+    sites, sel = pick_site(db, user, None if all_sites else site)
+    all_sites = all_sites and len(sites) > 1
+    f, t = parse_date(d_from), parse_date(d_to)
+    if f and t and t < f:
+        f, t = t, f
+    crusher_ids = [i for (i,) in db.query(Item.id).filter(Item.category == "raw", Item.crusher.is_(True))]
+    qy = (db.query(RequestLine).join(Req)
+          .filter(Req.type == "raw", Req.status.in_(["approved", "partial"]), RequestLine.status == "approved",
+                  RequestLine.item_id.in_(crusher_ids), Req.raw_dest.in_(["sale", "project", "crusher"]),
+                  Req.site_id.in_([x.id for x in sites]) if all_sites else Req.site_id == sel.id))
+    if f:
+        qy = qy.filter(Req.work_date >= f)
+    if t:
+        qy = qy.filter(Req.work_date <= t)
+    qy = qy.options(selectinload(RequestLine.item), selectinload(RequestLine.request).selectinload(Req.site))
+    out, needle = [], (q or "").strip()
+    for l in qy.order_by(Req.work_date, Req.id).all():
+        r = l.request
+        if r.raw_dest == "sale":
+            pt = "عميل"
+        elif r.raw_dest == "project":
+            pt = "مشروع"
+        else:
+            pt = "عميل" if (l.entity_type == "عميل" or l.sale_price) else "مشروع"
+        name = (l.entity_name or r.customer or "—").strip() if r.raw_dest == "crusher" else (r.customer or l.entity_name or "—").strip()
+        if ptype in ENTITY_TYPES and pt != ptype:
+            continue
+        if needle and needle not in name:
+            continue
+        out.append(dict(line=l, req=r, date=r.work_date, site=r.site.name, ptype=pt, party=name, item=l.item, qty=l.qty or 0,
+                        value=l.value or 0, sale=round((l.qty or 0) * l.sale_price, 2) if l.sale_price else 0))
+    return sites, sel, all_sites, f, t, out
+
+
+def _item_key(it):
+    k = it.code.rsplit("-", 1)[-1]
+    return (CRUSHER_ORDER.index(k) if k in CRUSHER_ORDER else 99, it.code)
+
+
+@app.get("/crusher-sales", response_class=HTMLResponse)
+def crusher_sales(request: Request, site: str | None = None, d_from: str | None = Query(None, alias="from"),
+                  d_to: str | None = Query(None, alias="to"), ptype: str = "", q: str = "",
+                  db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from collections import defaultdict
+    sites, sel, all_sites, f, t, rows = _crusher_sales(db, user, site, d_from, d_to, ptype, q)
+    items = sorted({r["item"].id: r["item"] for r in rows}.values(), key=_item_key)
+    parties = {}
+    for r in rows:
+        key = (r["ptype"], r["party"], r["site"] if all_sites else "")
+        p = parties.setdefault(key, dict(ptype=r["ptype"], party=r["party"], site=r["site"], by_item=defaultdict(float),
+                                         qty=0.0, value=0.0, sale=0.0, n=0, last=None))
+        p["by_item"][r["item"].id] += r["qty"]; p["qty"] += r["qty"]; p["value"] += r["value"]; p["sale"] += r["sale"]
+        p["n"] += 1; p["last"] = r["date"]
+    groups = []
+    for pt, label in (("عميل", "العملاء"), ("مشروع", "مشاريع الشركة")):
+        ps = sorted((p for p in parties.values() if p["ptype"] == pt), key=lambda p: -p["qty"])
+        if ps:
+            tot = defaultdict(float)
+            for p in ps:
+                for k, v in p["by_item"].items():
+                    tot[k] += v
+            groups.append(dict(ptype=pt, label=label, parties=ps, by_item=tot, qty=sum(p["qty"] for p in ps),
+                               value=sum(p["value"] for p in ps), sale=sum(p["sale"] for p in ps)))
+    months = {}
+    for r in rows:
+        m = months.setdefault((r["date"].year, r["date"].month), dict(c_qty=0.0, p_qty=0.0, c_val=0.0, p_val=0.0, c_n=set(), p_n=set()))
+        k = "c" if r["ptype"] == "عميل" else "p"
+        m[f"{k}_qty"] += r["qty"]; m[f"{k}_val"] += r["value"]; m[f"{k}_n"].add(r["party"])
+    by_item = defaultdict(float)
+    for r in rows:
+        by_item[r["item"].id] += r["qty"]
+    tot = dict(qty=sum(r["qty"] for r in rows), value=sum(r["value"] for r in rows), sale=sum(r["sale"] for r in rows),
+               c_qty=sum(g["qty"] for g in groups if g["ptype"] == "عميل"), p_qty=sum(g["qty"] for g in groups if g["ptype"] == "مشروع"),
+               c_val=sum(g["value"] for g in groups if g["ptype"] == "عميل"), p_val=sum(g["value"] for g in groups if g["ptype"] == "مشروع"),
+               c_n=sum(len(g["parties"]) for g in groups if g["ptype"] == "عميل"), p_n=sum(len(g["parties"]) for g in groups if g["ptype"] == "مشروع"))
+    return render(request, "crusher_sales.html", user, sites=sites, sel=sel, all_sites=all_sites, site_q="all" if all_sites else sel.id,
+                  d_from=f, d_to=t, ptype=ptype, q=q, items=items, groups=groups, by_item=by_item, tot=tot,
+                  months=sorted(months.items()), rows=rows)
+
+
+@app.get("/export/crusher-sales.xlsx")
+def export_crusher_sales(site: str | None = None, d_from: str | None = Query(None, alias="from"),
+                         d_to: str | None = Query(None, alias="to"), ptype: str = "", q: str = "",
+                         db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from collections import defaultdict
+    from openpyxl.styles import Font
+    sites, sel, all_sites, f, t, rows = _crusher_sales(db, user, site, d_from, d_to, ptype, q)
+    items = sorted({r["item"].id: r["item"] for r in rows}.values(), key=_item_key)
+    # الشيت الأول: ملخص لكل جهة بالأصناف
+    agg = {}
+    for r in rows:
+        k = (r["ptype"], r["party"], r["site"])
+        a = agg.setdefault(k, dict(by=defaultdict(float), qty=0.0, value=0.0))
+        a["by"][r["item"].id] += r["qty"]; a["qty"] += r["qty"]; a["value"] += r["value"]
+    head = ["النوع", "الجهة", "الموقع", *[i.name for i in items], "إجمالي الكمية (طن)", "القيمة بسعر المستودع"]
+    srows = [[k[0], k[1], k[2], *[round(a["by"].get(i.id, 0), 3) for i in items], round(a["qty"], 3), round(a["value"], 2)]
+             for k, a in sorted(agg.items(), key=lambda x: (x[0][0] != "عميل", -x[1]["qty"]))]
+    if srows:
+        srows.append(["الإجمالي", "", "", *[round(sum(r["qty"] for r in rows if r["item"].id == i.id), 3) for i in items],
+                      round(sum(r["qty"] for r in rows), 3), round(sum(r["value"] for r in rows), 2)])
+    buf = _xlsx(head, srows, "ملخص العملاء والمشاريع")
+    from openpyxl import load_workbook
+    wb = load_workbook(buf)
+    if srows:
+        for c in wb.active[wb.active.max_row]:
+            c.font = Font(bold=True)
+    # الشيت الثاني: الحركات
+    ws = wb.create_sheet("الحركات")
+    ws.sheet_view.rightToLeft = True
+    ws.append(["التاريخ", "الشهر", "رقم الطلب", "الموقع", "النوع", "الجهة", "الكود", "الصنف", "الكمية (طن)", "سعر المستودع",
+               "القيمة", "سعر البيع", "قيمة البيع"])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for r in rows:
+        l = r["line"]
+        ws.append([r["date"], f"{r['date']:%Y-%m}", r["req"].req_no, r["site"], r["ptype"], r["party"], r["item"].code, r["item"].name,
+                   r["qty"], l.unit_cost, r["value"], l.sale_price, r["sale"] or None])
+    for col, w in zip("ABCDEFGHIJKLM", (12, 9, 22, 14, 8, 30, 12, 22, 12, 12, 14, 10, 12)):
+        ws.column_dimensions[col].width = w
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    name = "كل_الفروع" if all_sites else sel.name.replace(" ", "_")
+    return _send_xlsx(out, f"مبيعات_الكسارة_{name}.xlsx")
+
+
 # ---------------- الموردين ----------------
 def _supplier_receipts(db, user, site, d_from, d_to):
     sites = user_sites(db, user)

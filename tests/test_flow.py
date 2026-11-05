@@ -1,4 +1,5 @@
 """اختبار شامل للدورة: طلب → 3 مراحل اعتماد لكل صنف → خصم الرصيد → إشعارات."""
+import io
 import os
 import tempfile
 
@@ -2166,3 +2167,39 @@ def test_receipts_all_sites_filter(env):
     assert 'value="all"' in page and "ALL-A" in page and "ALL-B" not in page
     page = c.get("/receipts?site=all").text
     assert "كل الفروع" in page and "ALL-A" in page and "ALL-B" in page and s2.name in page
+
+
+def test_crusher_sales_report(env, sale_on):
+    """تقرير مبيعات الكسارة: العملاء والمشاريع منفصلين، بالأصناف والشهور، والتصدير Excel."""
+    c = TestClient(app)
+    db = SessionLocal()
+    gid = db.query(Item).filter_by(code="RM-G34").one().id
+    db.close()
+    login(c, env, "requester@example.com")
+    rids = []
+    for data in ({"dest": "sale", "customer": "عميل تقرير الكسارة", "item_id": [gid], "qty": ["12"], "sale_price": ["30"]},
+                 {"dest": "project", "customer": "مشروع تقرير الكسارة", "item_id": [gid], "qty": ["7"]}):
+        r = c.post("/requests/new/raw", data={"site_id": env["site"], **data}, follow_redirects=False)
+        assert r.status_code == 303, r.text
+        rids.append(int(r.headers["location"].rsplit("/", 1)[1]))
+    for rid in rids:
+        db = SessionLocal()
+        ids = [l.id for l in db.get(Request, rid).lines]
+        db.close()
+        for who in ("prod.manager@example.com", "final@example.com"):
+            login(c, env, who)
+            c.post(f"/approvals/{rid}", data={"action": "approve", "line": ids})
+    login(c, env, "admin@example.com")
+    page = c.get(f"/crusher-sales?site={env['site']}").text
+    assert "عميل تقرير الكسارة" in page and "مشروع تقرير الكسارة" in page and "مشاريع الشركة" in page and "حسب الشهر" in page
+    only_p = c.get(f"/crusher-sales?site={env['site']}&ptype=مشروع").text
+    assert "مشروع تقرير الكسارة" in only_p and "عميل تقرير الكسارة" not in only_p
+    assert c.get("/crusher-sales?site=all").status_code == 200
+    x = c.get(f"/export/crusher-sales.xlsx?site={env['site']}&q=تقرير الكسارة")
+    assert x.status_code == 200
+    from openpyxl import load_workbook
+    wb = load_workbook(io.BytesIO(x.content))
+    assert wb.sheetnames == ["ملخص العملاء والمشاريع", "الحركات"]
+    names = [r[1] for r in wb.worksheets[0].iter_rows(min_row=2, values_only=True)]
+    assert names[:2] == ["عميل تقرير الكسارة", "مشروع تقرير الكسارة"] and names[-1] is None
+    assert wb.worksheets[1].max_row == 3

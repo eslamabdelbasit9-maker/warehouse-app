@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block body %}
+{% set show_sale = tot.sale > 0 %}
+{% set qs = 'site=' ~ site_q ~ '&from=' ~ (d_from or '') ~ '&to=' ~ (d_to or '') ~ '&ptype=' ~ ptype ~ '&q=' ~ (q|urlencode) %}
+<h1>مبيعات الكسارة — العملاء والمشاريع — {{ 'كل الفروع' if all_sites else sel.name }}</h1>
+<form class="filters card noprint" method="get">
+  <div class="f"><label>الموقع</label><select name="site" onchange="this.form.submit()">
+    {% if sites|length > 1 %}<option value="all" {{ 'selected' if all_sites }}>الكل</option>{% endif %}
+    {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id==sel.id and not all_sites }}>{{ s.name }}</option>{% endfor %}</select></div>
+  <div class="f"><label>من</label><input type="date" name="from" value="{{ d_from or '' }}"></div>
+  <div class="f"><label>إلى</label><input type="date" name="to" value="{{ d_to or '' }}"></div>
+  <div class="f"><label>الجهة</label><select name="ptype"><option value="">العملاء والمشاريع</option>
+    <option value="عميل" {{ 'selected' if ptype=='عميل' }}>العملاء فقط</option><option value="مشروع" {{ 'selected' if ptype=='مشروع' }}>المشاريع فقط</option></select></div>
+  <div class="f"><label>بحث باسم الجهة</label><input name="q" value="{{ q }}"></div>
+  <button class="btn">عرض</button>{% if d_from or d_to or ptype or q %} <a class="btn sec" href="/crusher-sales?site={{ site_q }}">إلغاء الفلتر</a>{% endif %}
+  <span class="right"></span><a class="btn sec" href="/export/crusher-sales.xlsx?{{ qs }}">تصدير Excel</a>
+</form>
+
+<div class="grid g4 kpis">
+  <div class="card kpi"><div class="v">{{ fmt(tot.qty) }}</div><div class="l">إجمالي المصروف (طن)</div><div class="s">{{ fmt(tot.value) }} ريال بسعر المستودع</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(tot.c_qty) }}</div><div class="l">العملاء (طن)</div><div class="s">{{ tot.c_n }} عميل — {{ fmt(tot.c_val) }} ريال</div></div>
+  <div class="card kpi"><div class="v">{{ fmt(tot.p_qty) }}</div><div class="l">مشاريع الشركة (طن)</div><div class="s">{{ tot.p_n }} مشروع — {{ fmt(tot.p_val) }} ريال</div></div>
+  {% if show_sale %}<div class="card kpi"><div class="v">{{ fmt(tot.sale) }}</div><div class="l">قيمة البيع (ريال)</div><div class="s">للسطور المسجّل عليها سعر بيع</div></div>{% endif %}
+</div>
+
+{% if not rows %}<div class="card muted">لا يوجد صرف للعملاء أو المشاريع في هذه الفترة.</div>{% else %}
+<h2>حسب الجهة والصنف (طن)</h2>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الجهة</th>{% if all_sites %}<th>الموقع</th>{% endif %}{% for i in items %}<th class="n">{{ i.name }}</th>{% endfor %}<th class="n">الإجمالي (طن)</th><th class="n">القيمة بسعر المستودع</th>{% if show_sale %}<th class="n">قيمة البيع</th>{% endif %}<th>آخر صرف</th></tr>
+{% for g in groups %}
+<tr><td colspan="{{ items|length + (6 if all_sites else 5) + (1 if show_sale else 0) - 1 }}" style="background:rgba(var(--brand-rgb),.09)"><b>{{ g.label }} ({{ g.parties|length }})</b></td></tr>
+{% for p in g.parties %}<tr><td>{{ p.party }}</td>{% if all_sites %}<td>{{ p.site }}</td>{% endif %}
+{% for i in items %}<td class="n">{{ fmt(p.by_item[i.id]) if p.by_item[i.id] else '' }}</td>{% endfor %}
+<td class="n"><b>{{ fmt(p.qty) }}</b></td><td class="n">{{ fmt(p.value) }}</td>{% if show_sale %}<td class="n">{{ fmt(p.sale) if p.sale else '' }}</td>{% endif %}<td>{{ p.last }}</td></tr>{% endfor %}
+<tr class="total"><td>إجمالي {{ g.label }}</td>{% if all_sites %}<td></td>{% endif %}{% for i in items %}<td class="n">{{ fmt(g.by_item[i.id]) if g.by_item[i.id] else '' }}</td>{% endfor %}
+<td class="n">{{ fmt(g.qty) }}</td><td class="n">{{ fmt(g.value) }}</td>{% if show_sale %}<td class="n">{{ fmt(g.sale) }}</td>{% endif %}<td></td></tr>
+{% endfor %}
+{% if groups|length > 1 %}<tr class="total"><td>الإجمالي العام</td>{% if all_sites %}<td></td>{% endif %}{% for i in items %}<td class="n">{{ fmt(by_item[i.id]) }}</td>{% endfor %}
+<td class="n">{{ fmt(tot.qty) }}</td><td class="n">{{ fmt(tot.value) }}</td>{% if show_sale %}<td class="n">{{ fmt(tot.sale) }}</td>{% endif %}<td></td></tr>{% endif %}
+</table></div></div>
+
+<h2>حسب الشهر</h2>
+<div class="card"><div class="tw"><table class="t">
+<tr><th>الشهر</th><th class="n">العملاء (طن)</th><th class="n">عدد العملاء</th><th class="n">المشاريع (طن)</th><th class="n">عدد المشاريع</th><th class="n">الإجمالي (طن)</th><th class="n">القيمة بسعر المستودع</th></tr>
+{% for (y, m), v in months %}<tr><td>{{ MONTHS_AR[m-1] }} {{ y }}</td><td class="n">{{ fmt(v.c_qty) }}</td><td class="n">{{ v.c_n|length }}</td>
+<td class="n">{{ fmt(v.p_qty) }}</td><td class="n">{{ v.p_n|length }}</td><td class="n"><b>{{ fmt(v.c_qty + v.p_qty) }}</b></td><td class="n">{{ fmt(v.c_val + v.p_val) }}</td></tr>{% endfor %}
+<tr class="total"><td>الإجمالي</td><td class="n">{{ fmt(tot.c_qty) }}</td><td class="n">{{ tot.c_n }}</td><td class="n">{{ fmt(tot.p_qty) }}</td><td class="n">{{ tot.p_n }}</td><td class="n">{{ fmt(tot.qty) }}</td><td class="n">{{ fmt(tot.value) }}</td></tr>
+</table></div></div>
+<p class="muted">المصدر: طلبات صرف المواد الخام المعتمدة من نواتج الكسارة للعملاء ومشاريع الشركة. القيمة محسوبة بسعر المستودع (متوسط التكلفة)، ولا يشمل التقرير الصرف لخلاطات الأسفلت ومحطات الخرسانة ولا التحويلات بين الفروع.</p>
+{% endif %}
+{% endblock %}

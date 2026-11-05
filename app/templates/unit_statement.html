@@ -28,7 +28,7 @@
 <td class="n"><b>{{ fmt(o) }}</b></td><td class="n curb {{ 'low' if r.close < 0 }}"><b>{{ fmt(r.close) }}</b></td></tr>
 {% else %}<tr><td colspan="11" class="muted">لا توجد حركة في الفترة</td></tr>{% endfor %}
 </table></div></div>
-{% if parties %}<h2>المصروف حسب الجهة</h2>
+{% if parties %}<h2>المصروف حسب الجهة <a class="btn sec noprint" style="font-size:13px" href="/crusher-sales?site={{ sel.id }}&from={{ d_from or '' }}&to={{ d_to or '' }}">تقرير العملاء والمشاريع</a></h2>
 <div class="card"><div class="tw"><table class="t"><tr><th>الجهة</th><th class="n">الكمية (طن)</th><th class="n">القيمة</th></tr>
 {% for k, v in parties %}<tr><td>{{ k }}</td><td class="n">{{ fmt(v[0]) }}</td><td class="n">{{ fmt(v[1]) }}</td></tr>{% endfor %}
 </table></div></div>{% endif %}
